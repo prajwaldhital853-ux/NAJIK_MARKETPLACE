@@ -1,0 +1,66 @@
+# Secrets
+.env
+.env.local
+.env.*.local
+!.env.example
+backend/.env
+apps/admin/.env.local
+apps/mobile/.env
+
+# Python
+backend/venv/
+.venv/
+**/__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.sqlite3
+backend/db.sqlite3
+backend/.pg_tmp
+backend/media/
+
+# Node
+**/node_modules/
+**/.pnp.*
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Next.js
+apps/admin/.next/
+apps/admin/out/
+
+# Expo / React Native
+apps/mobile/.expo/
+apps/mobile/dist/
+apps/mobile/ios/
+apps/mobile/android/
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+*.orig.*
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+Desktop.ini
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Logs & coverage
+*.log
+coverage/
+htmlcov/
+.coverage
+
+# Build
+dist/
+build/
+*.tsbuildinfo

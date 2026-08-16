@@ -1,0 +1,19 @@
+# Keep Cursor fast and avoid indexing generated / secret files
+backend/venv/
+**/.venv/
+**/node_modules/
+**/.next/
+**/.expo/
+**/__pycache__/
+**/*.pyc
+**/*.sqlite3
+backend/db.sqlite3
+backend/media/
+apps/admin/out/
+apps/mobile/dist/
+apps/mobile/ios/
+apps/mobile/android/
+coverage/
+htmlcov/
+*.log
+.git/

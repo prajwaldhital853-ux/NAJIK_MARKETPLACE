@@ -1,33 +1,123 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
-  --background: #07090c;
-  --foreground: #ffffff;
-  --muted: #9ca3af;
-  --card: #12151a;
-  --green: #22c55e;
-  --green-dark: #16a34a;
-  --border: #1f2933;
+  --surface: #f4f5f4;
+  --sidebar: #ffffff;
+  --card: #ffffff;
+  --elevated: #f7f8f7;
+  --line: #e4e7e4;
+  --line-strong: #cfd4cf;
+  --ink: #1c1c1c;
+  --muted: #5f6368;
+  --faint: #8a8f98;
+  --brand: #1b7d2c;
+  --brand-2: #167a38;
+  --brand-soft: #e7f6ec;
+  --green: #1b7d2c;
+  --green-soft: #e7f6ec;
+  --amber: #b45309;
+  --amber-soft: #fff1e0;
+  --red: #c62828;
+  --red-soft: #fdecec;
+  --cyan: #3d6b5a;
+  --purple: #4a5c4e;
+  --shadow: none;
+  --glow: none;
+  --topbar-h: 52px;
+  --sidebar-w: 240px;
+}
+
+.dark {
+  --surface: #121414;
+  --sidebar: #161818;
+  --card: #1c1e1d;
+  --elevated: #232625;
+  --line: #2c302e;
+  --line-strong: #3d4340;
+  --ink: #eceeed;
+  --muted: #9aa09c;
+  --faint: #6f7571;
+  --brand: #2f9e45;
+  --brand-2: #1b7d2c;
+  --brand-soft: rgba(47, 158, 69, 0.14);
+  --green: #3cb85a;
+  --green-soft: rgba(47, 158, 69, 0.14);
+  --amber: #d97706;
+  --amber-soft: rgba(217, 119, 6, 0.14);
+  --red: #e25555;
+  --red-soft: rgba(226, 85, 85, 0.14);
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --color-muted: var(--muted);
+  --color-surface: var(--surface);
+  --color-sidebar: var(--sidebar);
   --color-card: var(--card);
+  --color-elevated: var(--elevated);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-faint: var(--faint);
+  --color-brand: var(--brand);
+  --color-brand-2: var(--brand-2);
+  --color-brand-soft: var(--brand-soft);
   --color-green: var(--green);
-  --color-green-dark: var(--green-dark);
-  --color-border: var(--border);
-  --font-sans: var(--font-geist-sans);
+  --color-green-soft: var(--green-soft);
+  --color-amber: var(--amber);
+  --color-amber-soft: var(--amber-soft);
+  --color-red: var(--red);
+  --color-red-soft: var(--red-soft);
+  --color-cyan: var(--cyan);
+  --color-purple: var(--purple);
+  --font-sans: var(--font-inter);
+}
+
+html {
+  font-size: 13px;
 }
 
 html,
 body {
-  background: var(--background);
-  color: var(--foreground);
-  min-height: 100%;
+  background: var(--surface);
+  color: var(--ink);
+  height: 100%;
+  overflow: hidden;
 }
 
 body {
-  font-family: var(--font-geist-sans), system-ui, sans-serif;
+  font-family: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+}
+
+.admin-scroll::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.admin-scroll::-webkit-scrollbar-thumb {
+  background: var(--line-strong);
+  border-radius: 99px;
+}
+
+.brand-grad {
+  background: var(--brand);
+}
+
+.nav-active {
+  background: var(--brand);
+  color: #fff;
+}
+
+.card-glow {
+  box-shadow: none;
+}
+
+.pulse-dot {
+  animation: none;
 }

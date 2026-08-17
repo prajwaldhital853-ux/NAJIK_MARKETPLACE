@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { PageHeader, SummaryStrip } from "@/components/admin/page-frame";
+import { Btn, StatusBadge } from "@/components/admin/ui";
 
 type Application = {
   id: string;
@@ -36,7 +38,7 @@ export default function ProviderVerificationPage() {
     void load();
   }, []);
 
-  async function setStatus(id: string, status: "verified" | "rejected") {
+  async function setStatus(id: string, status: "verified" | "rejected" | "pending") {
     await fetch(`/api/provider-applications/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -45,37 +47,43 @@ export default function ProviderVerificationPage() {
     await load();
   }
 
+  const pending = items.filter((i) => i.status === "pending").length;
+
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-4xl flex-col px-6 py-10">
-      <header className="flex items-center justify-between gap-4">
-        <div>
-          <p className="text-sm font-semibold tracking-widest text-green">NAJIK</p>
-          <h1 className="text-2xl font-semibold">Provider verification</h1>
-          <p className="mt-1 text-sm text-muted">Review nagrita, photo and service type. Verify before they can post.</p>
-        </div>
-        <Link href="/admin" className="rounded-xl border border-border px-4 py-2 text-sm hover:border-green">
-          Dashboard
-        </Link>
-      </header>
-
-      {error ? <p className="mt-4 text-sm text-red-400">{error}</p> : null}
-
-      <div className="mt-8 space-y-4">
-        {items.length === 0 ? (
-          <section className="rounded-2xl border border-border bg-card p-6 text-muted">
-            No applications yet. Service providers submit from the mobile app.
-          </section>
-        ) : (
-          items.map((item) => (
-            <section key={item.id} className="rounded-2xl border border-border bg-card p-6">
+    <div>
+      <PageHeader
+        title="Provider queue"
+        crumb="Dashboard / KYC / Provider applications"
+        summary="Live submissions from the NAJIK mobile apply form: name, address, contact, phone, email, nagrita, photo and service type. Status stays pending until staff verify. They cannot post until verified. Demo KYC rows live on the User KYC page."
+        extra={
+          <Link href="/admin/kyc" className="rounded-xl border border-line px-3 py-2 text-sm font-semibold text-ink">
+            User KYC
+          </Link>
+        }
+      />
+      <SummaryStrip
+        items={[
+          { label: "Applications", value: items.length, tone: "brand" },
+          { label: "Pending", value: pending, tone: "amber" },
+          { label: "Verified", value: items.filter((i) => i.status === "verified").length, tone: "green" },
+          { label: "Rejected", value: items.filter((i) => i.status === "rejected").length, tone: "red" },
+        ]}
+      />
+      {error ? <p className="mb-4 text-sm text-red">{error}</p> : null}
+      {items.length === 0 ? (
+        <section className="card-glow rounded-2xl border border-line bg-card p-6 text-sm text-muted">
+          No mobile applications yet. Service providers submit from Continue as Service Provider → apply form.
+        </section>
+      ) : (
+        <div className="space-y-4">
+          {items.map((item) => (
+            <section key={item.id} className="card-glow rounded-2xl border border-line bg-card p-5">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <p className="text-lg font-medium">{item.full_name}</p>
+                  <p className="text-lg font-medium text-ink">{item.full_name}</p>
                   <p className="text-sm text-muted">{item.service_type}</p>
                 </div>
-                <span className="rounded-full border border-border px-3 py-1 text-xs uppercase tracking-wide">
-                  {item.status}
-                </span>
+                <StatusBadge status={item.status} />
               </div>
               <dl className="mt-4 grid gap-2 text-sm sm:grid-cols-2">
                 <div>
@@ -100,33 +108,31 @@ export default function ProviderVerificationPage() {
                 <DocPreview label="Nagrita / Citizenship" src={item.nagrita_uri} />
               </div>
               {item.status === "pending" ? (
-                <div className="mt-5 flex gap-3">
-                  <button
-                    onClick={() => void setStatus(item.id, "verified")}
-                    className="rounded-xl bg-green px-4 py-2 text-sm font-semibold text-black"
-                  >
-                    Verify
-                  </button>
-                  <button
-                    onClick={() => void setStatus(item.id, "rejected")}
-                    className="rounded-xl border border-border px-4 py-2 text-sm hover:border-red-400"
-                  >
+                <div className="mt-5 flex gap-2">
+                  <Btn onClick={() => void setStatus(item.id, "verified")}>Verify</Btn>
+                  <Btn kind="danger" onClick={() => void setStatus(item.id, "rejected")}>
                     Reject
-                  </button>
+                  </Btn>
                 </div>
-              ) : null}
+              ) : (
+                <div className="mt-5">
+                  <Btn kind="ghost" onClick={() => void setStatus(item.id, "pending")}>
+                    Reopen
+                  </Btn>
+                </div>
+              )}
             </section>
-          ))
-        )}
-      </div>
-    </main>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
 function DocPreview({ label, src }: { label: string; src?: string }) {
   return (
-    <figure className="overflow-hidden rounded-xl border border-border bg-background">
-      <figcaption className="px-3 py-2 text-xs font-semibold uppercase tracking-wide text-muted">{label}</figcaption>
+    <figure className="overflow-hidden rounded-xl border border-line bg-elevated">
+      <figcaption className="px-3 py-2 text-xs font-semibold tracking-wide text-muted uppercase">{label}</figcaption>
       {src ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img src={src} alt={label} className="h-48 w-full object-cover" />

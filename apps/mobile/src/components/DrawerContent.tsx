@@ -4,7 +4,10 @@ import { Image, Pressable, ScrollView, Text, View } from "react-native";
 import Svg, { Path } from "react-native-svg";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "../context/AuthContext";
+import type { CatalogKey } from "../data/catalog";
+import type { SellerPage } from "../data/sellerHub";
 import { isPendingProvider, isProvider, isRejectedProvider, isVerifiedProvider } from "../demo";
+import { openCategory, openSellerPage } from "../navigation/browse";
 import { NajikLogo } from "./NajikLogo";
 import { PressScale } from "./PressScale";
 import { shadow } from "../theme";
@@ -28,7 +31,8 @@ const PROMO_GREEN = "#018821";
 type Item = {
   icon: keyof typeof Ionicons.glyphMap;
   title: string;
-  tab: string;
+  tab?: string;
+  page?: SellerPage;
   badge?: number;
   tag?: string;
 };
@@ -37,18 +41,18 @@ const sellerMenu: Item[] = [
   { icon: "home", title: "Home", tab: "Home" },
   { icon: "business-outline", title: "My Listings", tab: "Listings" },
   { icon: "chatbubble-outline", title: "Inquiries", tab: "Inquiries", badge: 12 },
-  { icon: "calendar-outline", title: "Bookings", tab: "Profile" },
-  { icon: "star-outline", title: "Reviews", tab: "Profile" },
-  { icon: "card-outline", title: "Earnings", tab: "Profile" },
-  { icon: "megaphone-outline", title: "Promotions", tab: "Post", tag: "New" },
-  { icon: "briefcase-outline", title: "Services", tab: "Listings" },
-  { icon: "bookmark-outline", title: "Saved Listings", tab: "Listings" },
-  { icon: "shield-checkmark-outline", title: "Verification & KYC", tab: "Profile" },
-  { icon: "notifications-outline", title: "Notification", tab: "Home", badge: 5 },
-  { icon: "mail-outline", title: "Messages", tab: "Inquiries" },
-  { icon: "settings-outline", title: "Settings", tab: "Profile" },
-  { icon: "headset-outline", title: "Help & Support", tab: "Profile" },
-  { icon: "gift-outline", title: "Invite & Earn", tab: "Profile" },
+  { icon: "calendar-outline", title: "Bookings", page: "bookings" },
+  { icon: "star-outline", title: "Reviews", page: "reviews" },
+  { icon: "card-outline", title: "Earnings", page: "earnings" },
+  { icon: "megaphone-outline", title: "Promotions", page: "promotions", tag: "New" },
+  { icon: "briefcase-outline", title: "Services", page: "services" },
+  { icon: "bookmark-outline", title: "Saved Listings", page: "saved" },
+  { icon: "shield-checkmark-outline", title: "Verification & KYC", page: "kyc" },
+  { icon: "notifications-outline", title: "Notification", page: "notifications", badge: 5 },
+  { icon: "mail-outline", title: "Messages", page: "messages" },
+  { icon: "settings-outline", title: "Settings", page: "settings" },
+  { icon: "headset-outline", title: "Help & Support", page: "help" },
+  { icon: "gift-outline", title: "Invite & Earn", page: "invite" },
 ];
 
 type BuyerItem = {
@@ -56,6 +60,7 @@ type BuyerItem = {
   title: string;
   sub?: string;
   tab: string;
+  catalog?: CatalogKey;
   color: string;
   bg: string;
   badge?: number;
@@ -64,14 +69,14 @@ type BuyerItem = {
 
 const buyerPrimary: BuyerItem[] = [
   { icon: "home", title: "Home", sub: "Browse nearby", tab: "Home", color: "#1B7D2C", bg: "#E4F6EA" },
-  { icon: "home", title: "Property", sub: "Buy, Sell, Rent", tab: "Explore", color: "#1B7D2C", bg: "#E4F6EA" },
-  { icon: "car", title: "Vehicles", sub: "Cars, Bikes and more", tab: "Explore", color: "#2563EB", bg: "#E8F1FE" },
-  { icon: "briefcase", title: "Jobs", sub: "Find jobs near you", tab: "Explore", color: "#EA580C", bg: "#FFF1E0" },
-  { icon: "construct", title: "Services", sub: "All services", tab: "Explore", color: "#7C3AED", bg: "#F1E9FF" },
-  { icon: "storefront", title: "Shops", sub: "Local shops", tab: "Explore", color: "#E53935", bg: "#FDECEC" },
-  { icon: "phone-portrait", title: "Electronics", sub: "Mobiles, Gadgets", tab: "Explore", color: "#2563EB", bg: "#E8F1FE" },
-  { icon: "bed", title: "Used Items", sub: "Buy and Sell", tab: "Explore", color: "#16A34A", bg: "#E7F6EC" },
-  { icon: "grid", title: "Others", sub: "More categories", tab: "Explore", color: "#7C3AED", bg: "#F1E9FF" },
+  { icon: "home", title: "Property", sub: "Buy, Sell, Rent", tab: "Explore", catalog: "property", color: "#1B7D2C", bg: "#E4F6EA" },
+  { icon: "car", title: "Vehicles", sub: "Cars, Bikes and more", tab: "Explore", catalog: "vehicles", color: "#2563EB", bg: "#E8F1FE" },
+  { icon: "briefcase", title: "Jobs", sub: "Find jobs near you", tab: "Explore", catalog: "jobs", color: "#EA580C", bg: "#FFF1E0" },
+  { icon: "construct", title: "Services", sub: "All services", tab: "Explore", catalog: "services", color: "#7C3AED", bg: "#F1E9FF" },
+  { icon: "storefront", title: "Shops", sub: "Local shops", tab: "Explore", catalog: "shops", color: "#E53935", bg: "#FDECEC" },
+  { icon: "phone-portrait", title: "Electronics", sub: "Mobiles, Gadgets", tab: "Explore", catalog: "electronics", color: "#2563EB", bg: "#E8F1FE" },
+  { icon: "bed", title: "Used Items", sub: "Buy and Sell", tab: "Explore", catalog: "used", color: "#16A34A", bg: "#E7F6EC" },
+  { icon: "grid", title: "Others", sub: "More categories", tab: "Explore", catalog: "others", color: "#7C3AED", bg: "#F1E9FF" },
 ];
 
 const buyerSecondary: BuyerItem[] = [
@@ -112,6 +117,22 @@ export function DrawerContent({ navigation }: DrawerContentComponentProps) {
     navigation.navigate("Tabs", { screen: tab } as never);
     navigation.closeDrawer();
   }
+
+  function goItem(item: Item) {
+    if (item.page) {
+      openSellerPage(navigation, item.page);
+      navigation.closeDrawer();
+      return;
+    }
+    if (item.tab) goTab(item.tab);
+  }
+
+  const drawer = navigation.getState();
+  const current = drawer.routes[drawer.index];
+  const hubPage = current.name === "SellerHub" ? (current.params as { page?: SellerPage } | undefined)?.page : undefined;
+  const onTabs = current.name === "Tabs";
+  const tabState = current.state as { index?: number; routes?: { name: string }[] } | undefined;
+  const tabName = onTabs && tabState?.routes && typeof tabState.index === "number" ? tabState.routes[tabState.index]?.name : undefined;
 
   return (
     <View style={{ flex: 1, backgroundColor: "#fff" }}>
@@ -166,12 +187,12 @@ export function DrawerContent({ navigation }: DrawerContentComponentProps) {
       </View>
 
       <ScrollView contentContainerStyle={{ paddingTop: k(8), paddingBottom: k(16) }} showsVerticalScrollIndicator={false}>
-        {menu.map((item, index) => {
-          const active = index === 0;
+        {menu.map((item) => {
+          const active = item.page ? item.page === hubPage : Boolean(item.tab && item.tab === (tabName ?? "Home") && onTabs);
           return (
             <PressScale
               key={item.title}
-              onPress={() => goTab(item.tab)}
+              onPress={() => goItem(item)}
               style={{
                 marginHorizontal: k(12),
                 borderRadius: k(9),
@@ -340,9 +361,18 @@ function BuyerDrawer({ navigation }: { navigation: DrawerContentComponentProps["
   const phone = user?.phone ? `+977 ${user.phone}` : "+977 9812345678";
   const email = user?.email || "sunilksah@example.com";
   const photo = user?.photo_uri || "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&q=80";
+  const drawer = navigation.getState();
+  const current = drawer.routes[drawer.index];
+  const activeCatalog = current.name === "CategoryBrowse" ? (current.params as { key?: CatalogKey } | undefined)?.key : undefined;
+  const onHome = current.name === "Tabs";
 
   function goTab(tab: string) {
     navigation.navigate("Tabs", { screen: tab } as never);
+    navigation.closeDrawer();
+  }
+
+  function goCategory(key: CatalogKey) {
+    openCategory(navigation, key);
     navigation.closeDrawer();
   }
 
@@ -408,12 +438,12 @@ function BuyerDrawer({ navigation }: { navigation: DrawerContentComponentProps["
       </Pressable>
 
       <ScrollView contentContainerStyle={{ paddingTop: 2, paddingBottom: 20 }} showsVerticalScrollIndicator={false}>
-        {buyerPrimary.map((item, index) => {
-          const active = index === 0;
+        {buyerPrimary.map((item) => {
+          const active = item.catalog ? item.catalog === activeCatalog : item.title === "Home" && onHome && !activeCatalog;
           return (
             <Pressable
               key={item.title}
-              onPress={() => goTab(item.tab)}
+              onPress={() => (item.catalog ? goCategory(item.catalog) : goTab(item.tab))}
               style={{
                 marginHorizontal: 12,
                 borderRadius: 14,

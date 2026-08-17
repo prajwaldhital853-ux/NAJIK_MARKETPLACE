@@ -6,6 +6,7 @@ import { PressScale } from "../components/PressScale";
 import { SellerHeroBanner } from "../components/SellerHeroBanner";
 import { useAuth } from "../context/AuthContext";
 import { isPendingProvider, isProvider, isRejectedProvider, isVerifiedProvider } from "../demo";
+import { openSellerPage } from "../navigation/browse";
 import { colors, shadow } from "../theme";
 
 const skyline = require("../../assets/login-skyline.png");
@@ -29,11 +30,12 @@ const services: {
   count: string;
   badge?: number;
   tab?: string;
+  page?: "bookings" | "reviews";
 }[] = [
   { icon: "home", color: "#1B7D2C", bg: "#E4F6EA", title: "My Listings", count: "42", tab: "Listings" },
   { icon: "chatbubbles", color: "#1B7D2C", bg: "#E4F6EA", title: "Inquiries", count: "128", badge: 12, tab: "Inquiries" },
-  { icon: "calendar", color: "#2563EB", bg: "#E8F1FE", title: "Bookings", count: "18" },
-  { icon: "star", color: "#EA580C", bg: "#FFF1E0", title: "Reviews", count: "24" },
+  { icon: "calendar", color: "#2563EB", bg: "#E8F1FE", title: "Bookings", count: "18", page: "bookings" },
+  { icon: "star", color: "#EA580C", bg: "#FFF1E0", title: "Reviews", count: "24", page: "reviews" },
 ];
 
 const actions: {
@@ -43,15 +45,16 @@ const actions: {
   title: string;
   badge?: number;
   tab?: string;
+  page?: "promotions" | "services" | "earnings" | "messages" | "kyc" | "settings";
 }[] = [
   { icon: "add", color: "#fff", bg: "#1B7D2C", title: "Add New Listing", tab: "Post" },
-  { icon: "settings", color: "#7C3AED", bg: "#F1E9FF", title: "Manage Services" },
-  { icon: "megaphone", color: "#EA580C", bg: "#FFF1E0", title: "Promote Listing" },
-  { icon: "stats-chart", color: "#1B7D2C", bg: "#E4F6EA", title: "Earnings Report" },
-  { icon: "chatbubble-ellipses", color: "#2563EB", bg: "#E8F1FE", title: "Inbox", badge: 8 },
-  { icon: "wallet", color: "#7C3AED", bg: "#F1E9FF", title: "Wallet" },
-  { icon: "shield-checkmark", color: "#1B7D2C", bg: "#E4F6EA", title: "Verification & KYC" },
-  { icon: "settings-outline", color: "#64748B", bg: "#EEF2F6", title: "Settings" },
+  { icon: "settings", color: "#7C3AED", bg: "#F1E9FF", title: "Manage Services", page: "services" },
+  { icon: "megaphone", color: "#EA580C", bg: "#FFF1E0", title: "Promote Listing", page: "promotions" },
+  { icon: "stats-chart", color: "#1B7D2C", bg: "#E4F6EA", title: "Earnings Report", page: "earnings" },
+  { icon: "chatbubble-ellipses", color: "#2563EB", bg: "#E8F1FE", title: "Inbox", badge: 8, page: "messages" },
+  { icon: "wallet", color: "#7C3AED", bg: "#F1E9FF", title: "Wallet", page: "earnings" },
+  { icon: "shield-checkmark", color: "#1B7D2C", bg: "#E4F6EA", title: "Verification & KYC", page: "kyc" },
+  { icon: "settings-outline", color: "#64748B", bg: "#EEF2F6", title: "Settings", page: "settings" },
 ];
 
 export function ProfileScreen() {
@@ -123,7 +126,10 @@ export function ProfileScreen() {
           {services.map((item) => (
             <PressScale
               key={item.title}
-              onPress={() => item.tab && navigation.jumpTo(item.tab)}
+              onPress={() => {
+                if (item.page) openSellerPage(navigation, item.page);
+                else if (item.tab) navigation.jumpTo(item.tab);
+              }}
               style={{
                 flex: 1,
                 backgroundColor: "#fff",
@@ -172,7 +178,10 @@ export function ProfileScreen() {
           {actions.map((item) => (
             <PressScale
               key={item.title}
-              onPress={() => item.tab && navigation.jumpTo(item.tab)}
+              onPress={() => {
+                if (item.page) openSellerPage(navigation, item.page);
+                else if (item.tab) navigation.jumpTo(item.tab);
+              }}
               style={{
                 width: CARD_W,
                 backgroundColor: "#fff",

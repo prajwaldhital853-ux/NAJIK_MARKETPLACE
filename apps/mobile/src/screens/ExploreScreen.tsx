@@ -6,6 +6,8 @@ import { Dimensions, Image, Pressable, Text, TextInput, View } from "react-nativ
 import { AppHeader } from "../components/AppHeader";
 import { KeyboardScreen, useKeyboardScroll } from "../components/KeyboardScreen";
 import { PressScale } from "../components/PressScale";
+import { exploreBrowseKey } from "../data/catalog";
+import { openCategory } from "../navigation/browse";
 import { colors, shadow } from "../theme";
 
 const { width: SCREEN_W } = Dimensions.get("window");
@@ -39,9 +41,9 @@ const browse = [
 ];
 
 const popular = [
-  { label: "House for Rent", icon: "home-outline" as const, color: GREEN, bg: "#E7F6EC" },
-  { label: "Land for Sale", icon: "map-outline" as const, color: "#2563EB", bg: "#E8F1FE" },
-  { label: "IT Jobs", icon: "briefcase-outline" as const, color: "#EA580C", bg: "#FFF1E0" },
+  { label: "House for Rent", icon: "home-outline" as const, color: GREEN, bg: "#E7F6EC", key: "property" as const, filter: "For Rent" },
+  { label: "Land for Sale", icon: "map-outline" as const, color: "#2563EB", bg: "#E8F1FE", key: "property" as const, filter: "Land" },
+  { label: "IT Jobs", icon: "briefcase-outline" as const, color: "#EA580C", bg: "#FFF1E0", key: "jobs" as const, filter: "Full Time" },
 ];
 
 const faces = [
@@ -137,7 +139,19 @@ function ExploreBody({
         {chips.map((chip) => {
           const on = chip.key === activeChip;
           return (
-            <PressScale key={chip.key} onPress={() => setActiveChip(chip.key)} style={{ width: CHIP_W, alignItems: "center" }}>
+            <PressScale
+              key={chip.key}
+              onPress={() => {
+                setActiveChip(chip.key);
+                if (chip.key === "all") return;
+                if (chip.key === "more") {
+                  openCategory(navigation, "others");
+                  return;
+                }
+                openCategory(navigation, chip.key as "property" | "vehicles" | "jobs" | "services" | "shops");
+              }}
+              style={{ width: CHIP_W, alignItems: "center" }}
+            >
               <View
                 style={{
                   width: BOX,
@@ -191,7 +205,7 @@ function ExploreBody({
             Homes, Jobs, Services and more — all in one place.
           </Text>
           <PressScale
-            onPress={() => setActiveChip("all")}
+            onPress={() => openCategory(navigation, "property")}
             style={{
               marginTop: 12,
               alignSelf: "flex-start",
@@ -233,16 +247,20 @@ function ExploreBody({
       <View>
       <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 20, marginBottom: 12 }}>
         <Text style={{ fontSize: 18, fontWeight: "800", color: "#111827" }}>Browse by Category</Text>
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 2 }}>
+        <PressScale onPress={() => openCategory(navigation, "property")} style={{ flexDirection: "row", alignItems: "center", gap: 2 }}>
           <Text style={{ color: GREEN, fontWeight: "700", fontSize: 13 }}>View all</Text>
           <Ionicons name="chevron-forward" size={14} color={GREEN} />
-        </View>
+        </PressScale>
       </View>
 
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: GAP }}>
         {browse.map((item) => (
-          <View
+          <PressScale
             key={item.id}
+            onPress={() => {
+              const target = exploreBrowseKey[item.id];
+              openCategory(navigation, target?.key ?? "property", target?.filter);
+            }}
             style={{
               width: CARD_W,
               backgroundColor: "#fff",
@@ -293,7 +311,7 @@ function ExploreBody({
                 <Ionicons name="arrow-forward" size={11} color="#4B5563" />
               </View>
             </View>
-          </View>
+          </PressScale>
         ))}
       </View>
       </View>
@@ -374,8 +392,9 @@ function ExploreBody({
       <Text style={{ fontSize: 16, fontWeight: "800", color: "#111827", marginTop: 20, marginBottom: 10 }}>Popular Searches</Text>
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
         {popular.map((item) => (
-          <View
+          <PressScale
             key={item.label}
+            onPress={() => openCategory(navigation, item.key, item.filter)}
             style={{
               flexDirection: "row",
               alignItems: "center",
@@ -390,7 +409,7 @@ function ExploreBody({
           >
             <Ionicons name={item.icon} size={14} color={item.color} />
             <Text style={{ fontWeight: "700", fontSize: 12, color: item.color }}>{item.label}</Text>
-          </View>
+          </PressScale>
         ))}
       </View>
 
@@ -399,8 +418,9 @@ function ExploreBody({
           <Text style={{ fontSize: 16, fontWeight: "800", color: "#111827", marginTop: 18, marginBottom: 10 }}>Recent Searches</Text>
           <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
             {recent.map((item) => (
-              <View
+              <PressScale
                 key={item}
+                onPress={() => openCategory(navigation, "property", item.includes("Land") ? "Land" : "House")}
                 style={{
                   flexDirection: "row",
                   alignItems: "center",
@@ -416,7 +436,7 @@ function ExploreBody({
                 <Pressable onPress={() => setRecent(recent.filter((r) => r !== item))} hitSlop={6}>
                   <Ionicons name="close" size={14} color="#9AA0A6" />
                 </Pressable>
-              </View>
+              </PressScale>
             ))}
           </View>
         </>

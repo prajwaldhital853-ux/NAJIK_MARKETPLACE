@@ -35,7 +35,10 @@
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -49,6 +52,12 @@
           "photosPermission": "NAJIK needs photos so sellers can upload nagrita and a profile photo."
         }
       ]
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "49a60495-121d-4c8d-92e7-a12340bcc4f6"
+      }
+    },
+    "owner": "prajwal851"
   }
 }

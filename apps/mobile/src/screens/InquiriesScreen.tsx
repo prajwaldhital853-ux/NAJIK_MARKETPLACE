@@ -1,11 +1,13 @@
 import { Ionicons } from "@expo/vector-icons";
+import { useNavigation } from "@react-navigation/native";
 import { useState } from "react";
-import { Image, ScrollView, Text, TextInput, View } from "react-native";
+import { Alert, Image, Linking, ScrollView, Text, TextInput, View } from "react-native";
 import Svg, { Path } from "react-native-svg";
 import { AppHeader } from "../components/AppHeader";
 import { KeyboardScreen, useKeyboardScroll } from "../components/KeyboardScreen";
 import { PressScale } from "../components/PressScale";
 import { inquiries } from "../data/mock";
+import { openSellerPage } from "../navigation/browse";
 import { colors, shadow } from "../theme";
 import type { Inquiry } from "../types";
 
@@ -42,6 +44,7 @@ const activityDot: Record<Inquiry["status"], string> = {
 
 export function InquiriesScreen() {
   const [pill, setPill] = useState(pills[0]);
+  const navigation = useNavigation<any>();
 
   return (
     <View style={{ flex: 1, backgroundColor: "#F7F8FA" }}>
@@ -51,6 +54,7 @@ export function InquiriesScreen() {
       </KeyboardScreen>
 
       <PressScale
+        onPress={() => openSellerPage(navigation, "messages")}
         style={{
           position: "absolute",
           right: 16,
@@ -74,6 +78,21 @@ export function InquiriesScreen() {
 
 function InquiriesBody({ pill, setPill }: { pill: string; setPill: (value: string) => void }) {
   const { onInputFocus } = useKeyboardScroll();
+  const [query, setQuery] = useState("");
+  const status = pill.startsWith("New")
+    ? "New"
+    : pill.startsWith("In Progress")
+      ? "In Progress"
+      : pill.startsWith("Responded")
+        ? "Responded"
+        : pill.startsWith("Closed")
+          ? "Closed"
+          : "All";
+  const list = inquiries.filter((item) => {
+    if (status !== "All" && item.status !== status) return false;
+    const hay = `${item.name} ${item.listingTitle} ${item.message}`.toLowerCase();
+    return !query.trim() || hay.includes(query.trim().toLowerCase());
+  });
 
   return (
     <>
@@ -103,6 +122,8 @@ function InquiriesBody({ pill, setPill }: { pill: string; setPill: (value: strin
         >
           <Ionicons name="search" size={15} color="#9AA0A6" />
           <TextInput
+            value={query}
+            onChangeText={setQuery}
             placeholder="Search by name, listing or inquiry ID..."
             placeholderTextColor="#9AA0A6"
             onFocus={onInputFocus}
@@ -216,7 +237,7 @@ function InquiriesBody({ pill, setPill }: { pill: string; setPill: (value: strin
         </View>
       </View>
 
-      {inquiries.map((item) => (
+      {list.map((item) => (
         <InquiryCard key={item.id} item={item} />
       ))}
     </>
@@ -237,6 +258,11 @@ function InquiryCard({ item }: { item: Inquiry }) {
   const dot = activityDot[item.status];
   const actionIcon =
     item.action === "Reply" ? "chatbubble-outline" : item.action === "View Chat" ? "chatbubbles-outline" : "eye-outline";
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState("");
+  const [sent, setSent] = useState("");
+  const { onInputFocus } = useKeyboardScroll();
+  const navigation = useNavigation<any>();
 
   return (
     <View
@@ -304,7 +330,12 @@ function InquiryCard({ item }: { item: Inquiry }) {
             <Text style={{ color: "#1B7D2C", fontWeight: "800", fontSize: 11 }}>{item.listingPrice}</Text>
           </View>
         </View>
-        <View
+        <PressScale
+          onPress={() => {
+            if (item.action === "Reply") setOpen((v) => !v);
+            else if (item.action === "View Chat") openSellerPage(navigation, "messages");
+            else Alert.alert(item.listingTitle, item.message);
+          }}
           style={{
             borderWidth: 1.5,
             borderColor: "#1B7D2C",
@@ -318,8 +349,36 @@ function InquiryCard({ item }: { item: Inquiry }) {
         >
           <Ionicons name={actionIcon} size={12} color="#1B7D2C" />
           <Text style={{ color: "#1B7D2C", fontWeight: "800", fontSize: 11 }}>{item.action}</Text>
-        </View>
+        </PressScale>
       </View>
+      {open ? (
+        <View style={{ marginTop: 10 }}>
+          {sent ? <Text style={{ color: "#1B7D2C", fontSize: 12, marginBottom: 6 }}>Sent: {sent}</Text> : null}
+          <View style={{ flexDirection: "row", gap: 8 }}>
+            <TextInput
+              value={draft}
+              onChangeText={setDraft}
+              onFocus={onInputFocus}
+              placeholder="Write a reply..."
+              placeholderTextColor="#9AA0A6"
+              style={{ flex: 1, backgroundColor: "#F7F8FA", borderRadius: 12, paddingHorizontal: 10, height: 40, fontSize: 12 }}
+            />
+            <PressScale
+              onPress={() => {
+                if (!draft.trim()) return;
+                setSent(draft.trim());
+                setDraft("");
+              }}
+              style={{ backgroundColor: "#1B7D2C", borderRadius: 12, paddingHorizontal: 12, justifyContent: "center" }}
+            >
+              <Text style={{ color: "#fff", fontWeight: "800", fontSize: 12 }}>Send</Text>
+            </PressScale>
+          </View>
+          <PressScale onPress={() => Linking.openURL("tel:+9779812345678")} style={{ marginTop: 8 }}>
+            <Text style={{ color: "#1B7D2C", fontWeight: "800", fontSize: 12 }}>Call {item.phone}</Text>
+          </PressScale>
+        </View>
+      ) : null}
     </View>
   );
 }

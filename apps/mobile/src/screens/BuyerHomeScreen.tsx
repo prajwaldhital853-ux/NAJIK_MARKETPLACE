@@ -3,30 +3,19 @@ import { useNavigation } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Dimensions, Image, ScrollView, Text, View } from "react-native";
 import { AppHeader } from "../components/AppHeader";
+import { ListingGrid } from "../components/ClassifiedCard";
 import { PressScale } from "../components/PressScale";
+import { homeCategoryKey, listingById, nearbyCatalogId } from "../data/catalog";
 import { buyerNearbyListings } from "../data/mock";
+import { openCategory } from "../navigation/browse";
 import { colors, shadow } from "../theme";
-import type { Listing } from "../types";
 
 const housePhoto = require("../../assets/listings/house.jpg");
-const listingPhotos: Record<string, number> = {
-  b1: require("../../assets/listings/flat.jpg"),
-  b2: require("../../assets/listings/land.jpg"),
-  b3: require("../../assets/listings/house.jpg"),
-  b4: require("../../assets/listings/apartment.jpg"),
-  b5: require("../../assets/listings/modern.jpg"),
-  b6: require("../../assets/listings/shop.jpg"),
-  b7: require("../../assets/listings/car.jpg"),
-  b8: require("../../assets/listings/office.jpg"),
-  b9: require("../../assets/listings/phone.jpg"),
-  b10: require("../../assets/listings/tools.jpg"),
-};
 
 const { width: SCREEN_W } = Dimensions.get("window");
 const PAD = 16;
 const GAP = 11;
 const TILE = (SCREEN_W - PAD * 2 - GAP * 3) / 4;
-const CARD_W = (SCREEN_W - PAD * 2 - GAP) / 2;
 const FOREST = "#0E4A3C";
 
 const categories: { label: string; icon: keyof typeof Ionicons.glyphMap; bg: string; color: string }[] = [
@@ -89,7 +78,7 @@ function BuyerHomeBody() {
         {categories.map((item) => (
           <PressScale
             key={item.label}
-            onPress={() => navigation.jumpTo("Explore")}
+            onPress={() => openCategory(navigation, homeCategoryKey[item.label] ?? "property")}
             style={{
               width: TILE,
               backgroundColor: item.bg,
@@ -123,7 +112,7 @@ function BuyerHomeBody() {
           </Text>
           <Text style={{ color: "#D5EDE4", marginTop: 4, fontSize: 12 }}>Trusted. Local. Easy.</Text>
           <PressScale
-            onPress={() => navigation.jumpTo("Explore")}
+            onPress={() => openCategory(navigation, "property")}
             style={{
               marginTop: 12,
               alignSelf: "flex-start",
@@ -160,63 +149,19 @@ function BuyerHomeBody() {
 
       <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 20, marginBottom: 10 }}>
         <Text style={{ fontSize: 18, fontWeight: "800", color: colors.navy }}>Nearby Listings</Text>
-        <Text style={{ color: "#1B7D2C", fontWeight: "700" }}>View all ›</Text>
+        <PressScale onPress={() => openCategory(navigation, "property")}>
+          <Text style={{ color: "#1B7D2C", fontWeight: "700" }}>View all ›</Text>
+        </PressScale>
       </View>
-
-      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: GAP }}>
-        {buyerNearbyListings.map((item) => (
-          <ListingCard key={item.id} item={item} />
-        ))}
-      </View>
+      <NearbyAds />
     </>
   );
 }
 
-function ListingCard({ item }: { item: Listing }) {
-  return (
-    <View style={{ width: CARD_W, backgroundColor: "#fff", borderRadius: 16, overflow: "hidden", ...shadow.card }}>
-      <View>
-        <Image source={listingPhotos[item.id] ?? { uri: item.image }} style={{ width: "100%", height: 110, backgroundColor: "#E8EEF0" }} />
-        {item.badge ? (
-          <View style={{ position: "absolute", top: 8, left: 8, backgroundColor: "#1B7D2C", paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 }}>
-            <Text style={{ color: "#fff", fontSize: 9, fontWeight: "800" }}>{item.badge}</Text>
-          </View>
-        ) : null}
-        <View
-          style={{
-            position: "absolute",
-            top: 8,
-            right: 8,
-            width: 26,
-            height: 26,
-            borderRadius: 13,
-            backgroundColor: "rgba(255,255,255,0.95)",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
-          <Ionicons name="heart-outline" size={14} color="#374151" />
-        </View>
-      </View>
-      <View style={{ padding: 10 }}>
-        <Text style={{ fontWeight: "800", fontSize: 13, color: colors.navy }} numberOfLines={1}>
-          {item.title}
-        </Text>
-        <Text style={{ color: "#1B7D2C", fontWeight: "800", marginTop: 4, fontSize: 13 }}>{item.price}</Text>
-        <View style={{ flexDirection: "row", alignItems: "center", marginTop: 6, gap: 8 }}>
-          <View style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: 3 }}>
-            <Ionicons name="location-outline" size={11} color="#9AA0A6" />
-            <Text style={{ color: "#8A8F98", fontSize: 10 }} numberOfLines={1}>
-              {item.location}
-            </Text>
-          </View>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 3 }}>
-            <Ionicons name="time-outline" size={11} color="#9AA0A6" />
-            <Text style={{ color: "#8A8F98", fontSize: 10 }}>{item.time}</Text>
-          </View>
-        </View>
-      </View>
-    </View>
-  );
+function NearbyAds() {
+  const ads = buyerNearbyListings
+    .map((item) => listingById(nearbyCatalogId[item.id] ?? "p1"))
+    .filter((ad): ad is NonNullable<typeof ad> => Boolean(ad));
+  return <ListingGrid items={ads} />;
 }
 

@@ -16,8 +16,11 @@ import { PostScreen } from "../screens/PostScreen";
 import { ProfileScreen } from "../screens/ProfileScreen";
 import { RegisterScreen } from "../screens/RegisterScreen";
 import { RoleWelcomeScreen } from "../screens/RoleWelcomeScreen";
+import { CategoryBrowseScreen } from "../screens/CategoryBrowseScreen";
+import { ListingDetailScreen } from "../screens/ListingDetailScreen";
 import { SavedScreen } from "../screens/SavedScreen";
 import { SellerApplyScreen } from "../screens/SellerApplyScreen";
+import { SellerHubScreen } from "../screens/SellerHubScreen";
 import { colors } from "../theme";
 import { createInstantTabNavigator } from "./InstantTabs";
 
@@ -59,6 +62,9 @@ function MainDrawer() {
       }}
     >
       <Drawer.Screen name="Tabs" component={MainTabs} />
+      <Drawer.Screen name="CategoryBrowse" component={CategoryBrowseScreen} />
+      <Drawer.Screen name="ListingDetail" component={ListingDetailScreen} />
+      <Drawer.Screen name="SellerHub" component={SellerHubScreen} />
     </Drawer.Navigator>
   );
 }

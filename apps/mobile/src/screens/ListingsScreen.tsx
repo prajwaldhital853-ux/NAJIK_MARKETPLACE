@@ -8,6 +8,7 @@ import { PressScale } from "../components/PressScale";
 import { useAuth } from "../context/AuthContext";
 import { myListings } from "../data/mock";
 import { canPostServices, isPendingProvider } from "../demo";
+import { openListing, openSellerPage } from "../navigation/browse";
 import { colors, shadow } from "../theme";
 import type { Listing } from "../types";
 
@@ -107,6 +108,24 @@ export function ListingsScreen() {
 
 function VerifiedBody({ pill, setPill }: { pill: string; setPill: (value: string) => void }) {
   const { onInputFocus } = useKeyboardScroll();
+  const navigation = useNavigation<any>();
+  const [query, setQuery] = useState("");
+  const [grid, setGrid] = useState(false);
+  const status = pill.startsWith("Active")
+    ? "Active"
+    : pill.startsWith("Pending")
+      ? "Pending"
+      : pill.startsWith("Sold")
+        ? "Sold"
+        : pill.startsWith("Expired")
+          ? "Expired"
+          : "All";
+  const list = myListings.filter((item) => {
+    if (status !== "All" && item.status !== status) return false;
+    const hay = `${item.title} ${item.location} ${item.dealType}`.toLowerCase();
+    return !query.trim() || hay.includes(query.trim().toLowerCase());
+  });
+  const catalogId: Record<string, string> = { l1: "p4", l2: "p3", l3: "p5", l4: "p8" };
 
   return (
     <>
@@ -126,6 +145,8 @@ function VerifiedBody({ pill, setPill }: { pill: string; setPill: (value: string
         >
           <Ionicons name="search" size={16} color="#9AA0A6" />
           <TextInput
+            value={query}
+            onChangeText={setQuery}
             placeholder="Search by title, location or type..."
             placeholderTextColor="#9AA0A6"
             onFocus={onInputFocus}
@@ -202,18 +223,30 @@ function VerifiedBody({ pill, setPill }: { pill: string; setPill: (value: string
       <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 18, marginBottom: 10 }}>
         <Text style={{ fontSize: 16, fontWeight: "800", color: colors.navy }}>Your Listings</Text>
         <View style={{ flexDirection: "row", backgroundColor: "#EEF2F4", borderRadius: 10, padding: 3 }}>
-          <View style={{ padding: 6, borderRadius: 8 }}>
-            <Ionicons name="grid-outline" size={15} color="#9AA0A6" />
-          </View>
-          <View style={{ padding: 6, borderRadius: 8, backgroundColor: "#1B7D2C" }}>
-            <Ionicons name="list" size={15} color="#fff" />
-          </View>
+        <PressScale onPress={() => setGrid(false)} style={{ padding: 6, borderRadius: 8, backgroundColor: !grid ? "#1B7D2C" : "transparent" }}>
+            <Ionicons name="list" size={15} color={!grid ? "#fff" : "#9AA0A6"} />
+          </PressScale>
+          <PressScale onPress={() => setGrid(true)} style={{ padding: 6, borderRadius: 8, backgroundColor: grid ? "#1B7D2C" : "transparent" }}>
+            <Ionicons name="grid-outline" size={15} color={grid ? "#fff" : "#9AA0A6"} />
+          </PressScale>
         </View>
       </View>
 
-      {myListings.map((item) => (
-        <ListingManageCard key={item.id} item={item} />
-      ))}
+      {list.length ? (
+        list.map((item) => (
+          <ListingManageCard
+            key={item.id}
+            item={item}
+            onOpen={() => openListing(navigation, catalogId[item.id] ?? "p1")}
+            onPromote={() => openSellerPage(navigation, "promotions")}
+          />
+        ))
+      ) : (
+        <View style={{ backgroundColor: "#fff", borderRadius: 16, padding: 20, alignItems: "center", marginTop: 8 }}>
+          <Text style={{ fontWeight: "800", color: colors.navy }}>No listings in this filter</Text>
+          <Text style={{ color: "#8A8F98", marginTop: 4, fontSize: 12 }}>{grid ? "Try list view or All Listings." : "Try All Listings or another search."}</Text>
+        </View>
+      )}
 
       <View
         style={{
@@ -233,9 +266,9 @@ function VerifiedBody({ pill, setPill }: { pill: string; setPill: (value: string
         <Text style={{ flex: 1, fontWeight: "700", color: colors.navy, fontSize: 12, lineHeight: 17 }}>
           Want to sell or rent faster? Promote your listing to reach more buyers.
         </Text>
-        <View style={{ backgroundColor: "#fff", borderWidth: 1.5, borderColor: "#1B7D2C", paddingHorizontal: 10, paddingVertical: 7, borderRadius: 16 }}>
+        <PressScale onPress={() => openSellerPage(navigation, "promotions")} style={{ backgroundColor: "#fff", borderWidth: 1.5, borderColor: "#1B7D2C", paddingHorizontal: 10, paddingVertical: 7, borderRadius: 16 }}>
           <Text style={{ color: "#1B7D2C", fontWeight: "800", fontSize: 11 }}>Promote Listing</Text>
-        </View>
+        </PressScale>
       </View>
     </>
   );
@@ -263,7 +296,7 @@ function Tool({ icon, label }: { icon: keyof typeof Ionicons.glyphMap; label: st
   );
 }
 
-function ListingManageCard({ item }: { item: Listing }) {
+function ListingManageCard({ item, onOpen, onPromote }: { item: Listing; onOpen: () => void; onPromote: () => void }) {
   const pending = item.status === "Pending";
   const badgeColor = item.badge === "FEATURED" ? "#1B7D2C" : item.badge === "VERIFIED" ? "#2563EB" : "#1B7D2C";
   const metaItems =
@@ -274,7 +307,8 @@ function ListingManageCard({ item }: { item: Listing }) {
         : [];
 
   return (
-    <View
+    <PressScale
+      onPress={onOpen}
       style={{ backgroundColor: "#fff", borderRadius: 16, padding: 10, marginBottom: 12, flexDirection: "row", ...shadow.card }}
     >
       <View>
@@ -363,14 +397,16 @@ function ListingManageCard({ item }: { item: Listing }) {
         <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 10 }}>
           <Text style={{ color: "#9AA0A6", fontSize: 10 }}>Posted on {item.postedOn}</Text>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-            <View style={{ borderWidth: 1.5, borderColor: "#1B7D2C", paddingHorizontal: 10, paddingVertical: 4, borderRadius: 14 }}>
+            <PressScale onPress={onOpen} style={{ borderWidth: 1.5, borderColor: "#1B7D2C", paddingHorizontal: 10, paddingVertical: 4, borderRadius: 14 }}>
               <Text style={{ color: "#1B7D2C", fontWeight: "800", fontSize: 10.5 }}>Manage</Text>
-            </View>
-            <Ionicons name="ellipsis-vertical" size={14} color="#9AA0A6" />
+            </PressScale>
+            <PressScale onPress={onPromote}>
+              <Ionicons name="megaphone-outline" size={14} color="#1B7D2C" />
+            </PressScale>
           </View>
         </View>
       </View>
-    </View>
+    </PressScale>
   );
 }
 

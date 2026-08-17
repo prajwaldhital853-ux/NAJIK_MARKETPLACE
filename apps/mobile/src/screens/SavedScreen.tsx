@@ -1,8 +1,12 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useState } from "react";
+import { useNavigation } from "@react-navigation/native";
+import { useMemo, useState } from "react";
 import { Image, Pressable, ScrollView, Text, View } from "react-native";
 import { AppHeader } from "../components/AppHeader";
 import { PressScale } from "../components/PressScale";
+import { useSavedListings } from "../context/SavedListings";
+import { catalogItems, type CatalogItem } from "../data/catalog";
+import { openListing } from "../navigation/browse";
 import { colors, shadow } from "../theme";
 
 const GREEN = "#1B7D2C";
@@ -93,12 +97,54 @@ const tabMap: Record<string, SavedItem["category"] | "All"> = {
   Services: "Service",
 };
 
+const catalogCategory: Record<CatalogItem["key"], SavedItem["category"]> = {
+  property: "Property",
+  vehicles: "Vehicle",
+  jobs: "Job",
+  services: "Service",
+  shops: "Service",
+  electronics: "Service",
+  used: "Property",
+  others: "Service",
+};
+
+const demoToCatalog: Record<string, string> = {
+  s1: "p1",
+  s2: "v1",
+  s3: "j1",
+  s4: "s1",
+};
+
+function fromCatalog(item: CatalogItem): SavedItem {
+  return {
+    id: item.id,
+    category: catalogCategory[item.key],
+    title: item.title,
+    company: item.company,
+    location: item.location,
+    price: item.price,
+    savedOn: "Today",
+    photo: item.photo,
+    tags: item.tags,
+  };
+}
+
 export function SavedScreen() {
+  const navigation = useNavigation<any>();
+  const { ids, remove } = useSavedListings();
   const [tab, setTab] = useState("All");
   const [saved, setSaved] = useState(items);
   const [banner, setBanner] = useState(true);
   const filter = tabMap[tab];
-  const list = filter === "All" ? saved : saved.filter((item) => item.category === filter);
+  const extras = useMemo(
+    () => catalogItems.filter((item) => ids.includes(item.id)).map(fromCatalog),
+    [ids],
+  );
+  const merged = useMemo(() => {
+    const demoRows = saved.filter((row) => !ids.includes(demoToCatalog[row.id] ?? ""));
+    return [...extras, ...demoRows];
+  }, [extras, saved, ids]);
+  const list = filter === "All" ? merged : merged.filter((item) => item.category === filter);
 
   return (
     <View style={{ flex: 1, backgroundColor: "#fff" }}>
@@ -162,7 +208,15 @@ export function SavedScreen() {
         </View>
 
         {list.map((item) => (
-          <SavedCard key={item.id} item={item} onRemove={() => setSaved((prev) => prev.filter((row) => row.id !== item.id))} />
+          <SavedCard
+            key={item.id}
+            item={item}
+            onOpen={() => openListing(navigation, demoToCatalog[item.id] ?? item.id)}
+            onRemove={() => {
+              if (ids.includes(item.id)) remove(item.id);
+              else setSaved((prev) => prev.filter((row) => row.id !== item.id));
+            }}
+          />
         ))}
 
         {banner ? (
@@ -202,9 +256,9 @@ export function SavedScreen() {
   );
 }
 
-function SavedCard({ item, onRemove }: { item: SavedItem; onRemove: () => void }) {
+function SavedCard({ item, onRemove, onOpen }: { item: SavedItem; onRemove: () => void; onOpen: () => void }) {
   return (
-    <View style={{ flexDirection: "row", backgroundColor: "#fff", borderRadius: 16, padding: 10, marginBottom: 12, ...shadow.card }}>
+    <PressScale onPress={onOpen} style={{ flexDirection: "row", backgroundColor: "#fff", borderRadius: 16, padding: 10, marginBottom: 12, ...shadow.card }}>
       <View style={{ width: 104, height: 104, borderRadius: 12, overflow: "hidden" }}>
         <Image source={item.photo} style={{ width: "100%", height: "100%" }} />
         <View
@@ -295,7 +349,7 @@ function SavedCard({ item, onRemove }: { item: SavedItem; onRemove: () => void }
           <Ionicons name="trash-outline" size={18} color={colors.red} />
         </Pressable>
       </View>
-    </View>
+    </PressScale>
   );
 }
 

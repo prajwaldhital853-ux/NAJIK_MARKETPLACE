@@ -39,11 +39,20 @@ export default function StaffLoginPage() {
   return (
     <main className="flex min-h-screen items-center justify-center px-4">
       <div className="w-full max-w-md rounded-2xl border border-border bg-card p-8 shadow-xl">
-        <p className="text-sm font-semibold tracking-widest text-green">NAJIK</p>
+        <div className="flex items-center gap-3">
+          <img src="/logo.png" alt="NAJIK" className="h-12 w-auto" />
+          <div>
+            <p className="text-sm font-semibold tracking-widest text-green">NAJIK</p>
+            <p className="text-[10px] font-semibold tracking-[0.16em] text-green">EVERYTHING NEAR YOU</p>
+          </div>
+        </div>
         <h1 className="mt-2 text-2xl font-semibold">Staff login</h1>
         <p className="mt-1 text-sm text-muted">
           For owners and staff only. Buyers and sellers use the mobile app.
         </p>
+        <a href="/admin/providers" className="mt-4 inline-block text-sm font-semibold text-green">
+          Review provider applications →
+        </a>
         <form onSubmit={onSubmit} className="mt-8 space-y-4">
           <label className="block text-sm">
             Email

@@ -59,6 +59,7 @@ Desktop.ini
 coverage/
 htmlcov/
 .coverage
+apps/admin/data/
 
 # Build
 dist/

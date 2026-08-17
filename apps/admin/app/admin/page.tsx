@@ -63,9 +63,12 @@ export default function AdminDashboardPage() {
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-3xl flex-col px-6 py-10">
       <header className="flex items-center justify-between">
-        <div>
-          <p className="text-sm font-semibold tracking-widest text-green">NAJIK</p>
-          <h1 className="text-2xl font-semibold">Admin dashboard</h1>
+        <div className="flex items-center gap-3">
+          <img src="/logo.png" alt="NAJIK" className="h-10 w-auto" />
+          <div>
+            <p className="text-sm font-semibold tracking-widest text-green">NAJIK</p>
+            <h1 className="text-2xl font-semibold">Admin dashboard</h1>
+          </div>
         </div>
         <button
           onClick={logout}
@@ -79,9 +82,11 @@ export default function AdminDashboardPage() {
         <p className="mt-1 text-lg font-medium">{staff?.full_name || staff?.email}</p>
         <p className="text-sm text-muted">{staff?.email}</p>
         <p className="mt-4 text-sm text-muted">
-          Charts, listings, and moderation come in later features. This screen
-          only confirms staff auth is working.
+          Charts, listings, and moderation come in later features.
         </p>
+        <a href="/admin/providers" className="mt-4 inline-block rounded-xl bg-green px-4 py-2 text-sm font-semibold text-black">
+          Provider verification
+        </a>
         {error ? <p className="mt-3 text-sm text-red-400">{error}</p> : null}
       </section>
     </main>

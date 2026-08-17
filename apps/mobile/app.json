@@ -6,12 +6,15 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "dark",
-    "platforms": ["ios", "android"],
+    "userInterfaceStyle": "light",
+    "platforms": [
+      "ios",
+      "android"
+    ],
     "splash": {
-      "image": "./assets/icon.png",
+      "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#07090C"
+      "backgroundColor": "#F7FBF8"
     },
     "ios": {
       "supportsTablet": true,
@@ -24,10 +27,10 @@
       }
     },
     "android": {
+      "softwareKeyboardLayoutMode": "resize",
       "package": "com.najik.app",
-      "usesCleartextTraffic": true,
       "adaptiveIcon": {
-        "backgroundColor": "#07090C",
+        "backgroundColor": "#F7FBF8",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
@@ -37,6 +40,15 @@
     "web": {
       "favicon": "./assets/favicon.png"
     },
-    "plugins": ["expo-secure-store"]
+    "plugins": [
+      "expo-secure-store",
+      "expo-font",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "NAJIK needs photos so sellers can upload nagrita and a profile photo."
+        }
+      ]
+    ]
   }
 }

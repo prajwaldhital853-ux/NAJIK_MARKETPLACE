@@ -1,17 +1,19 @@
 import { Platform } from "react-native";
 import * as SecureStore from "expo-secure-store";
-import type { AppUser } from "./types";
 
 const ACCESS_KEY = "najik_app_access";
 const REFRESH_KEY = "najik_app_refresh";
-const DEMO_USER_KEY = "najik_demo_user";
+
+const STORE_OPTS: SecureStore.SecureStoreOptions = {
+  keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
+};
 
 async function setItem(key: string, value: string) {
   if (Platform.OS === "web") {
     sessionStorage.setItem(key, value);
     return;
   }
-  await SecureStore.setItemAsync(key, value);
+  await SecureStore.setItemAsync(key, value, STORE_OPTS);
 }
 
 async function getItem(key: string) {
@@ -45,19 +47,4 @@ export async function getAppRefreshToken() {
 export async function clearAppTokens() {
   await deleteItem(ACCESS_KEY);
   await deleteItem(REFRESH_KEY);
-  await deleteItem(DEMO_USER_KEY);
-}
-
-export async function saveDemoUser(user: AppUser) {
-  await setItem(DEMO_USER_KEY, JSON.stringify(user));
-}
-
-export async function getDemoUser(): Promise<AppUser | null> {
-  const raw = await getItem(DEMO_USER_KEY);
-  if (!raw) return null;
-  try {
-    return JSON.parse(raw) as AppUser;
-  } catch {
-    return null;
-  }
 }

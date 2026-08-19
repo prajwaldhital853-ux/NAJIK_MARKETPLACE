@@ -6,18 +6,23 @@ import { ActivityIndicator, Dimensions, View } from "react-native";
 import { DrawerContent } from "../components/DrawerContent";
 import { TabBar } from "../components/TabBar";
 import { useAuth } from "../context/AuthContext";
-import { isProvider } from "../demo";
+import { isProvider, needsContactVerify, needsSellerApplication } from "../demo";
 import { ExploreScreen } from "../screens/ExploreScreen";
+import { MapSearchScreen } from "../screens/MapSearchScreen";
 import { HomeScreen } from "../screens/HomeScreen";
 import { InquiriesScreen } from "../screens/InquiriesScreen";
 import { ListingsScreen } from "../screens/ListingsScreen";
 import { LoginScreen } from "../screens/LoginScreen";
+import { OtpScreen } from "../screens/OtpScreen";
+import { PasswordResetScreen } from "../screens/PasswordResetScreen";
 import { PostScreen } from "../screens/PostScreen";
 import { ProfileScreen } from "../screens/ProfileScreen";
 import { RegisterScreen } from "../screens/RegisterScreen";
 import { RoleWelcomeScreen } from "../screens/RoleWelcomeScreen";
 import { CategoryBrowseScreen } from "../screens/CategoryBrowseScreen";
 import { ListingDetailScreen } from "../screens/ListingDetailScreen";
+import { ChatInboxScreen } from "../screens/ChatInboxScreen";
+import { ChatThreadScreen } from "../screens/ChatThreadScreen";
 import { SavedScreen } from "../screens/SavedScreen";
 import { SellerApplyScreen } from "../screens/SellerApplyScreen";
 import { SellerHubScreen } from "../screens/SellerHubScreen";
@@ -63,14 +68,18 @@ function MainDrawer() {
     >
       <Drawer.Screen name="Tabs" component={MainTabs} />
       <Drawer.Screen name="CategoryBrowse" component={CategoryBrowseScreen} />
+      <Drawer.Screen name="MapSearch" component={MapSearchScreen} />
       <Drawer.Screen name="ListingDetail" component={ListingDetailScreen} />
+      <Drawer.Screen name="EditListing" component={PostScreen} />
       <Drawer.Screen name="SellerHub" component={SellerHubScreen} />
+      <Drawer.Screen name="ChatInbox" component={ChatInboxScreen} />
+      <Drawer.Screen name="ChatThread" component={ChatThreadScreen} />
     </Drawer.Navigator>
   );
 }
 
 export function RootNavigator() {
-  const { user, loading } = useAuth();
+  const { user, loading, awaitingSignupOtp } = useAuth();
 
   if (loading) {
     return (
@@ -80,19 +89,28 @@ export function RootNavigator() {
     );
   }
 
+  const gate = !user
+    ? "guest"
+    : awaitingSignupOtp || needsContactVerify(user)
+      ? "otp"
+      : needsSellerApplication(user)
+        ? "apply"
+        : "main";
+
   return (
     <NavigationContainer>
       <Stack.Navigator screenOptions={{ headerShown: false, animation: "none" }}>
-        {user ? (
-          <Stack.Screen name="Main" component={MainDrawer} />
-        ) : (
+        {gate === "main" ? <Stack.Screen name="Main" component={MainDrawer} /> : null}
+        {gate === "otp" ? <Stack.Screen name="Otp" component={OtpScreen} /> : null}
+        {gate === "apply" ? <Stack.Screen name="SellerApply" component={SellerApplyScreen} /> : null}
+        {gate === "guest" ? (
           <>
-            <Stack.Screen name="Welcome" component={RoleWelcomeScreen} />
             <Stack.Screen name="Login" component={LoginScreen} />
-            <Stack.Screen name="SellerApply" component={SellerApplyScreen} />
+            <Stack.Screen name="Welcome" component={RoleWelcomeScreen} />
             <Stack.Screen name="Register" component={RegisterScreen} />
+            <Stack.Screen name="PasswordReset" component={PasswordResetScreen} />
           </>
-        )}
+        ) : null}
       </Stack.Navigator>
     </NavigationContainer>
   );

@@ -22,7 +22,7 @@ export default function PaymentsPage() {
   return (
     <ResourcePage
       title="Payments & Transactions"
-      summary="15 eSewa, Khalti, IME Pay and bank rows: bookings, promo spend, provider payouts and refunds. Reconcile failed Khalti webhook TXN-88170 before Friday’s payout window. Pending promo for Kirana Store waits on seller KYC."
+      summary="Booking, promo, payout and refund rows. Reconcile pending or failed items before the payout window."
       kpis={[
         { label: "Transactions", value: payments.length, tone: "brand" },
         { label: "Completed", value: npr(payments.filter((p) => p.status === "completed").reduce((s, p) => s + p.amount, 0)), tone: "green" },

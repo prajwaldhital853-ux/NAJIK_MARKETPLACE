@@ -28,9 +28,18 @@ export async function api<T>(
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
     const detail =
-      data.detail ||
-      data.non_field_errors?.[0] ||
-      "Something went wrong. Please try again.";
+      typeof data.detail === "string"
+        ? data.detail
+        : data.detail?.detail ||
+          data.reason?.[0] ||
+          data.non_field_errors?.[0] ||
+          data.phone?.[0] ||
+          data.email?.[0] ||
+          data.identifier?.[0] ||
+          (typeof data.detail === "object" && data.detail
+            ? String(Object.values(data.detail as object).flat?.()[0] || "")
+            : "") ||
+          "Something went wrong. Please try again.";
     throw new ApiError(String(detail), response.status);
   }
   return data as T;

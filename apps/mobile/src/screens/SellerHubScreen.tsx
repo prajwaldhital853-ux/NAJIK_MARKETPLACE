@@ -5,6 +5,7 @@ import { Alert, Image, Linking, Pressable, ScrollView, Share, Switch, Text, Text
 import { AppHeader } from "../components/AppHeader";
 import { KeyboardScreen, useKeyboardScroll } from "../components/KeyboardScreen";
 import { PressScale } from "../components/PressScale";
+import { SellerProfileEditModal } from "../components/SellerProfileEditModal";
 import { useAuth } from "../context/AuthContext";
 import {
   helpFaqs,
@@ -17,11 +18,11 @@ import {
   sellerReviews,
   sellerSaved,
   sellerServices,
-  sellerThreads,
   weekBars,
   type SellerPage,
 } from "../data/sellerHub";
-import { openListing } from "../navigation/browse";
+import { ChatInboxList } from "./ChatInboxScreen";
+import { openChatThread, openListing } from "../navigation/browse";
 import { colors, shadow } from "../theme";
 
 const GREEN = "#1B7D2C";
@@ -48,8 +49,8 @@ export function SellerHubScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: "#F7F8FA" }}>
-      <AppHeader onClose={() => navigation.goBack()} right="bell-chat" showPro bellCount={5} />
-      <KeyboardScreen contentStyle={{ paddingBottom: 28 }}>
+      <AppHeader onClose={() => navigation.goBack()} right="bell-chat" showPro />
+      <KeyboardScreen fill={false} contentStyle={{ paddingBottom: 28 }}>
         <PageHead meta={meta} />
         <PageBody page={page} />
       </KeyboardScreen>
@@ -249,13 +250,13 @@ function ReviewsBody() {
       />
       <View style={{ marginHorizontal: 16, marginTop: 12, backgroundColor: "#fff", borderRadius: 16, padding: 14, ...shadow.card }}>
         <View style={{ flexDirection: "row", alignItems: "center" }}>
-          <Text style={{ fontSize: 36, fontWeight: "800", color: "#111827" }}>4.9</Text>
+          <Text style={{ fontSize: 36, fontWeight: "800", color: "#111827" }}>0</Text>
           <View style={{ marginLeft: 12, flex: 1 }}>
             {[5, 4, 3, 2, 1].map((n) => (
               <View key={n} style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 3 }}>
                 <Text style={{ width: 10, fontSize: 10, color: "#6B7280" }}>{n}</Text>
                 <View style={{ flex: 1, height: 6, backgroundColor: "#EEF0F2", borderRadius: 4, overflow: "hidden" }}>
-                  <View style={{ width: `${n === 5 ? 78 : n === 4 ? 14 : 4}%`, height: "100%", backgroundColor: "#F5C518" }} />
+                  <View style={{ width: `${0}%`, height: "100%", backgroundColor: "#F5C518" }} />
                 </View>
               </View>
             ))}
@@ -521,7 +522,7 @@ function KycBody() {
       <QuickRow
         items={[
           { icon: "refresh-outline", label: "Refresh", onPress: () => void refreshVerification() },
-          { icon: "card-outline", label: "eSewa", onPress: () => Alert.alert("eSewa", "Demo: add 9812••••78") },
+          { icon: "card-outline", label: "eSewa", onPress: () => Alert.alert("eSewa", "Add your payout number in settings.") },
           { icon: "document-outline", label: "ID copy", onPress: () => Alert.alert("Nagrita", "Already on file with NAJIK admin.") },
           { icon: "help-circle-outline", label: "Why KYC", onPress: () => Alert.alert("KYC", "Verified sellers get more calls and can withdraw.") },
         ]}
@@ -531,9 +532,10 @@ function KycBody() {
           <Text style={{ fontWeight: "800", fontSize: 16 }}>{done}/{kycSteps.length}</Text>
         </View>
         <View style={{ flex: 1, marginLeft: 14 }}>
-          <Text style={{ fontWeight: "800", fontSize: 15 }}>You’re verified to post</Text>
+          <Text style={{ fontWeight: "800", fontSize: 15 }}>{user?.verification_status === "verified" ? "You’re verified to post" : "Verification checklist"}</Text>
           <Text style={{ color: "#4B5563", fontSize: 12, marginTop: 4, lineHeight: 18 }}>
-            {user?.full_name || "Sunil"} · {user?.service_type || "Local services"} · Lahan
+            {user?.full_name || "Account"} · {user?.service_type || "Service provider"}
+            {user?.verification_status === "pending" ? " · Updates automatically when admin approves" : ""}
           </Text>
           <Text style={{ color: GREEN, fontWeight: "800", fontSize: 12, marginTop: 6 }}>Add eSewa to unlock payouts</Text>
         </View>
@@ -552,7 +554,7 @@ function KycBody() {
             <Text style={{ fontWeight: "800" }}>{step.title}</Text>
             <Text style={{ color: "#6B7280", fontSize: 12, marginTop: 3 }}>{step.sub}</Text>
             {!step.done ? (
-              <MiniBtn label="Add now" fill onPress={() => Alert.alert("Bank / eSewa", "Demo: add 9812••••78 for payouts.")} />
+              <MiniBtn label="Add now" fill onPress={() => Alert.alert("Bank / eSewa", "Add your payout number in settings.")} />
             ) : null}
           </View>
         </View>
@@ -591,7 +593,14 @@ function NotesBody() {
       />
       <SearchBox value={q} onChange={setQ} placeholder="Search alerts..." />
       <Chips items={["All", "Unread"]} value={filter} onChange={setFilter} />
-      {list.map((row) => {
+      {list.length === 0 ? (
+        <View style={{ margin: 16, backgroundColor: "#fff", borderRadius: 18, paddingVertical: 40, paddingHorizontal: 20, alignItems: "center", ...shadow.card }}>
+          <Ionicons name="notifications-outline" size={28} color={GREEN} />
+          <Text style={{ fontWeight: "800", fontSize: 16, marginTop: 12 }}>No notifications yet</Text>
+          <Text style={{ color: "#6B7280", fontSize: 13, textAlign: "center", marginTop: 6 }}>Leads and account alerts will appear here.</Text>
+        </View>
+      ) : (
+      list.map((row) => {
         const unread = row.unread && !read.includes(row.id);
         return (
           <PressScale
@@ -620,112 +629,15 @@ function NotesBody() {
             </View>
           </PressScale>
         );
-      })}
+      })
+      )}
     </>
   );
 }
 
 function MessagesBody() {
-  const [open, setOpen] = useState<string | null>(sellerThreads[0].id);
-  const [draft, setDraft] = useState("");
-  const [sent, setSent] = useState<Record<string, string[]>>({});
-  const [q, setQ] = useState("");
-  const { onInputFocus } = useKeyboardScroll();
-  const thread = sellerThreads.find((t) => t.id === open);
-  const threads = sellerThreads.filter((row) => `${row.name} ${row.last}`.toLowerCase().includes(q.trim().toLowerCase()) || !q.trim());
-  const unread = sellerThreads.reduce((n, t) => n + t.unread, 0);
-
-  return (
-    <>
-      <QuickRow
-        items={[
-          { icon: "create-outline", label: "New chat", onPress: () => Alert.alert("New chat", "Pick a buyer from inquiries.") },
-          { icon: "call-outline", label: "Call", onPress: () => thread && Linking.openURL("tel:+9779812345678") },
-          { icon: "image-outline", label: "Photo", onPress: () => Alert.alert("Photo", "Demo: send a listing photo.") },
-          { icon: "ellipsis-horizontal", label: "More", onPress: () => Alert.alert("Chat", "Mute · Block · Report") },
-        ]}
-      />
-      <StatStrip
-        items={[
-          { n: String(sellerThreads.length), l: "Chats" },
-          { n: String(unread), l: "Unread" },
-          { n: "< 1h", l: "Reply" },
-        ]}
-      />
-      <SearchBox value={q} onChange={setQ} placeholder="Search chats..." />
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 14, gap: 10 }}>
-        {threads.map((row) => {
-          const on = row.id === open;
-          return (
-            <PressScale
-              key={row.id}
-              onPress={() => setOpen(row.id)}
-              style={{
-                width: 220,
-                backgroundColor: on ? "#E7F6EC" : "#fff",
-                borderRadius: 16,
-                padding: 12,
-                borderWidth: 1.5,
-                borderColor: on ? GREEN : "#E6E8EC",
-              }}
-            >
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                <Image source={{ uri: row.photo }} style={{ width: 36, height: 36, borderRadius: 18 }} />
-                <View style={{ flex: 1 }}>
-                  <Text style={{ fontWeight: "800", fontSize: 13 }} numberOfLines={1}>
-                    {row.name}
-                  </Text>
-                  <Text style={{ color: "#8A8F98", fontSize: 11 }}>{row.time}</Text>
-                </View>
-                {row.unread ? (
-                  <View style={{ backgroundColor: "#E53935", minWidth: 18, height: 18, borderRadius: 9, alignItems: "center", justifyContent: "center" }}>
-                    <Text style={{ color: "#fff", fontSize: 10, fontWeight: "800" }}>{row.unread}</Text>
-                  </View>
-                ) : null}
-              </View>
-              <Text style={{ color: "#4B5563", fontSize: 12, marginTop: 8 }} numberOfLines={2}>
-                {row.last}
-              </Text>
-            </PressScale>
-          );
-        })}
-      </ScrollView>
-
-      {thread ? (
-        <View style={{ margin: 16, backgroundColor: "#fff", borderRadius: 18, padding: 14, ...shadow.card }}>
-          <Text style={{ fontWeight: "800", fontSize: 15 }}>{thread.name}</Text>
-          <View style={{ backgroundColor: "#F3F4F6", borderRadius: 12, padding: 10, marginTop: 12, alignSelf: "flex-start", maxWidth: "88%" }}>
-            <Text style={{ color: "#374151", fontSize: 13, lineHeight: 19 }}>{thread.last}</Text>
-          </View>
-          {(sent[thread.id] ?? []).map((msg, i) => (
-            <View key={i} style={{ backgroundColor: GREEN, borderRadius: 12, padding: 10, marginTop: 8, alignSelf: "flex-end", maxWidth: "88%" }}>
-              <Text style={{ color: "#fff", fontSize: 13 }}>{msg}</Text>
-            </View>
-          ))}
-          <View style={{ flexDirection: "row", alignItems: "center", marginTop: 14, gap: 8 }}>
-            <TextInput
-              value={draft}
-              onChangeText={setDraft}
-              onFocus={onInputFocus}
-              placeholder="Reply…"
-              placeholderTextColor="#9AA0A6"
-              style={{ flex: 1, backgroundColor: "#F7F8FA", borderRadius: 12, paddingHorizontal: 12, height: 44, fontSize: 13 }}
-            />
-            <PressScale
-              onPress={() => {
-                if (!draft.trim()) return;
-                setSent((p) => ({ ...p, [thread.id]: [...(p[thread.id] ?? []), draft.trim()] }));
-                setDraft("");
-              }}
-              style={{ width: 44, height: 44, borderRadius: 12, backgroundColor: GREEN, alignItems: "center", justifyContent: "center" }}
-            >
-              <Ionicons name="send" size={16} color="#fff" />
-            </PressScale>
-          </View>
-        </View>
-      ) : null}
-    </>
-  );
+  const navigation = useNavigation<any>();
+  return <ChatInboxList onOpen={(id) => openChatThread(navigation, id)} />;
 }
 
 function SettingsBody() {
@@ -733,22 +645,24 @@ function SettingsBody() {
   const [call, setCall] = useState(true);
   const [lead, setLead] = useState(true);
   const [hide, setHide] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
 
   return (
     <>
+      <SellerProfileEditModal visible={editOpen} onClose={() => setEditOpen(false)} />
       <QuickRow
         items={[
-          { icon: "person-outline", label: "Profile", onPress: () => Alert.alert("Profile", user?.full_name || "Sunil") },
+          { icon: "person-outline", label: "Profile", onPress: () => setEditOpen(true) },
           { icon: "lock-closed-outline", label: "Security", onPress: () => Alert.alert("Security", "PIN / biometrics in a later build.") },
-          { icon: "card-outline", label: "Payouts", onPress: () => Alert.alert("Payouts", "eSewa · 9812••••78") },
-          { icon: "trash-outline", label: "Delete", onPress: () => Alert.alert("Delete account", "Demo only.") },
+          { icon: "card-outline", label: "Payouts", onPress: () => Alert.alert("Payouts", "Add eSewa or bank details.") },
+          { icon: "trash-outline", label: "Delete", onPress: () => Alert.alert("Delete account", "Contact NAJIK support to close this account.") },
         ]}
       />
       <Text style={{ fontWeight: "800", marginHorizontal: 16, marginTop: 16 }}>Account</Text>
       <View style={{ margin: 16, marginTop: 8, backgroundColor: "#fff", borderRadius: 18, padding: 6, ...shadow.card }}>
-        <SettingRow icon="person-outline" title="Name" value={user?.full_name || "Sunil K. Sah"} />
-        <SettingRow icon="call-outline" title="Phone" value={user?.phone || "9812••••78"} />
-        <SettingRow icon="mail-outline" title="Email" value={user?.email || "sunil@email.com"} last />
+        <SettingRow icon="person-outline" title="Name" value={user?.full_name || "—"} />
+        <SettingRow icon="call-outline" title="Phone" value={user?.phone || "—"} />
+        <SettingRow icon="mail-outline" title="Email" value={user?.email || "—"} last />
       </View>
       <Text style={{ fontWeight: "800", marginHorizontal: 16 }}>Alerts & privacy</Text>
       <View style={{ margin: 16, marginTop: 8, backgroundColor: "#fff", borderRadius: 18, padding: 6, ...shadow.card }}>
@@ -784,14 +698,14 @@ function HelpBody() {
       </View>
       <View style={{ flexDirection: "row", gap: 10, marginHorizontal: 16, marginTop: 12 }}>
         <PressScale
-          onPress={() => Linking.openURL("tel:+9779812345678")}
+          onPress={() => Alert.alert("Call NAJIK", "Use the email on this screen or your staff contact.")}
           style={{ flex: 1, backgroundColor: GREEN, borderRadius: 14, padding: 14, alignItems: "center" }}
         >
           <Ionicons name="call" size={18} color="#fff" />
           <Text style={{ color: "#fff", fontWeight: "800", marginTop: 6 }}>Call NAJIK</Text>
         </PressScale>
         <PressScale
-          onPress={() => Alert.alert("Chat support", "Demo help desk is online 8am–8pm.")}
+          onPress={() => Alert.alert("Chat support", "Help is available from the NAJIK team during business hours.")}
           style={{ flex: 1, backgroundColor: "#fff", borderRadius: 14, padding: 14, alignItems: "center", ...shadow.card }}
         >
           <Ionicons name="chatbubbles" size={18} color={GREEN} />

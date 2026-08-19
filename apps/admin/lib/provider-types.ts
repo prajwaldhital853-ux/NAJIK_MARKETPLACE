@@ -7,6 +7,7 @@ export type ProviderApplication = {
   email: string;
   service_type: string;
   nagrita_uri?: string;
+  nagrita_back_uri?: string;
   photo_uri?: string;
   status: "none" | "pending" | "verified" | "rejected";
   created_at: string;

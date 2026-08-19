@@ -1,20 +1,24 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Dimensions, Image, Pressable, Text, TextInput, View } from "react-native";
 import { AppHeader } from "../components/AppHeader";
 import { KeyboardScreen, useKeyboardScroll } from "../components/KeyboardScreen";
 import { PressScale } from "../components/PressScale";
-import { exploreBrowseKey } from "../data/catalog";
-import { openCategory } from "../navigation/browse";
+import { exploreBrowseKey, type CatalogItem } from "../data/catalog";
+import { listingsToCatalog } from "../data/liveListings";
+import { fetchListingFeed } from "../listingsApi";
+import { subscribeListingsChanged } from "../listingsRefresh";
+import { openCategory, openMapSearch } from "../navigation/browse";
+import { loadRecentSearches, removeRecentSearch, saveRecentSearch } from "../recentSearches";
 import { colors, shadow } from "../theme";
 
 const { width: SCREEN_W } = Dimensions.get("window");
 const PAD = 16;
 const GAP = 8;
 const CARD_W = Math.floor((SCREEN_W - PAD * 2 - GAP * 2) / 3);
-const CHIP_W = (SCREEN_W - PAD * 2) / 7;
+const CHIP_W = (SCREEN_W - PAD * 2) / 8;
 const BOX = Math.min(42, CHIP_W - 4);
 const GREEN = "#1B7D2C";
 
@@ -25,20 +29,48 @@ const chips: { key: string; label: string; icon: keyof typeof Ionicons.glyphMap;
   { key: "jobs", label: "Jobs", icon: "briefcase", color: "#9A3412", bg: "#FFF1E0" },
   { key: "services", label: "Services", icon: "construct", color: "#5B21B6", bg: "#F3EEFF" },
   { key: "shops", label: "Shops", icon: "storefront", color: "#B91C1C", bg: "#FDECEC" },
+  { key: "used", label: "Used", icon: "pricetag", color: "#166534", bg: "#E7F6EC" },
   { key: "more", label: "More", icon: "ellipsis-horizontal", color: "#4B5563", bg: "#F3F4F6" },
 ];
 
 const browse = [
-  { id: "houses", title: "Houses", count: "1,245", icon: "home" as const, tint: "#22A34A", photo: require("../../assets/listings/house.jpg") },
-  { id: "apartments", title: "Apartments", count: "856", icon: "business" as const, tint: "#2563EB", photo: require("../../assets/listings/building.jpg") },
-  { id: "land", title: "Land", count: "2,358", icon: "leaf" as const, tint: "#22A34A", photo: require("../../assets/listings/land.jpg") },
-  { id: "office", title: "Office Space", count: "325", icon: "storefront" as const, tint: "#EA580C", photo: require("../../assets/listings/office.jpg") },
-  { id: "cars", title: "Cars", count: "1,125", icon: "car" as const, tint: "#22A34A", photo: require("../../assets/listings/car.jpg") },
-  { id: "bikes", title: "Bikes", count: "862", icon: "construct" as const, tint: "#7C3AED", photo: require("../../assets/listings/bike.jpg") },
-  { id: "jobs", title: "Jobs", count: "1,986", icon: "briefcase" as const, tint: "#2563EB", photo: require("../../assets/listings/jobs.jpg") },
-  { id: "services", title: "Services", count: "1,532", icon: "construct" as const, tint: "#22A34A", photo: require("../../assets/listings/services.jpg") },
-  { id: "shops", title: "Shops", count: "744", icon: "storefront" as const, tint: "#E53935", photo: require("../../assets/listings/shop.jpg") },
+  { id: "houses", title: "Houses", icon: "home" as const, tint: "#22A34A", photo: require("../../assets/listings/house.jpg") },
+  { id: "apartments", title: "Apartments", icon: "business" as const, tint: "#2563EB", photo: require("../../assets/listings/building.jpg") },
+  { id: "land", title: "Land", icon: "leaf" as const, tint: "#22A34A", photo: require("../../assets/listings/land.jpg") },
+  { id: "office", title: "Office Space", icon: "storefront" as const, tint: "#EA580C", photo: require("../../assets/listings/office.jpg") },
+  { id: "cars", title: "Cars", icon: "car" as const, tint: "#22A34A", photo: require("../../assets/listings/car.jpg") },
+  { id: "bikes", title: "Bikes", icon: "construct" as const, tint: "#7C3AED", photo: require("../../assets/listings/bike.jpg") },
+  { id: "jobs", title: "Jobs", icon: "briefcase" as const, tint: "#2563EB", photo: require("../../assets/listings/jobs.jpg") },
+  { id: "services", title: "Services", icon: "construct" as const, tint: "#22A34A", photo: require("../../assets/listings/services.jpg") },
+  { id: "shops", title: "Shops", icon: "storefront" as const, tint: "#E53935", photo: require("../../assets/listings/shop.jpg") },
+  { id: "used", title: "Used Items", icon: "pricetag" as const, tint: "#16A34A", photo: require("../../assets/listings/shop.jpg") },
 ];
+
+function hay(item: CatalogItem) {
+  return `${item.title} ${item.tags.join(" ")} ${item.extra.join(" ")} ${item.key}`.toLowerCase();
+}
+
+function countBrowse(id: string, items: CatalogItem[]) {
+  if (id === "jobs") return items.filter((item) => item.key === "jobs").length;
+  if (id === "services") return items.filter((item) => item.key === "services").length;
+  if (id === "shops") return items.filter((item) => item.key === "shops").length;
+  if (id === "used") return items.filter((item) => item.key === "used" || item.key === "electronics").length;
+  const vehicles = items.filter((item) => item.key === "vehicles");
+  if (id === "bikes") return vehicles.filter((item) => /bike|scooter|motorcycle/.test(hay(item))).length;
+  if (id === "cars") {
+    const bikes = vehicles.filter((item) => /bike|scooter|motorcycle/.test(hay(item))).length;
+    return Math.max(0, vehicles.length - bikes) || vehicles.filter((item) => /car|suv|jeep/.test(hay(item))).length;
+  }
+  const props = items.filter((item) => item.key === "property");
+  if (id === "land") return props.filter((item) => /land|plot|aana|ropani/.test(hay(item))).length;
+  if (id === "office") return props.filter((item) => /office|workspace/.test(hay(item))).length;
+  if (id === "apartments") return props.filter((item) => /apartment|flat|room|bhk/.test(hay(item))).length;
+  if (id === "houses") {
+    const typed = props.filter((item) => /land|plot|office|apartment|flat|room/.test(hay(item))).length;
+    return Math.max(props.filter((item) => /house|home|villa|bungalow/.test(hay(item))).length, props.length - typed);
+  }
+  return 0;
+}
 
 const popular = [
   { label: "House for Rent", icon: "home-outline" as const, color: GREEN, bg: "#E7F6EC", key: "property" as const, filter: "For Rent" },
@@ -46,12 +78,7 @@ const popular = [
   { label: "IT Jobs", icon: "briefcase-outline" as const, color: "#EA580C", bg: "#FFF1E0", key: "jobs" as const, filter: "Full Time" },
 ];
 
-const faces = [
-  "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=80&q=80",
-  "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=80&q=80",
-  "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=80&q=80",
-  "https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=80&q=80",
-];
+const faces: string[] = [];
 
 const IMG_H = 72;
 
@@ -59,14 +86,21 @@ const houseHero = require("../../assets/listings/house.jpg");
 
 export function ExploreScreen() {
   const [activeChip, setActiveChip] = useState("all");
-  const [recent, setRecent] = useState(["Land in Lahan", "2 BHK Flat"]);
+  const [query, setQuery] = useState("");
+  const [recent, setRecent] = useState<string[]>([]);
   const [adOpen, setAdOpen] = useState(true);
+
+  useEffect(() => {
+    void loadRecentSearches().then(setRecent);
+  }, []);
 
   return (
     <View style={{ flex: 1, backgroundColor: "#F7F8FA" }}>
-      <AppHeader right="bell-filter" showLocation bellCount={3} pinColor="#22A34A" />
+      <AppHeader right="bell-filter" showLocation pinColor="#22A34A" />
       <KeyboardScreen adjustKeyboardInsets={false} contentStyle={{ padding: PAD, paddingTop: 8, paddingBottom: 28 }}>
         <ExploreBody
+          query={query}
+          setQuery={setQuery}
           activeChip={activeChip}
           setActiveChip={setActiveChip}
           recent={recent}
@@ -80,6 +114,8 @@ export function ExploreScreen() {
 }
 
 function ExploreBody({
+  query,
+  setQuery,
   activeChip,
   setActiveChip,
   recent,
@@ -87,6 +123,8 @@ function ExploreBody({
   adOpen,
   setAdOpen,
 }: {
+  query: string;
+  setQuery: (v: string) => void;
   activeChip: string;
   setActiveChip: (v: string) => void;
   recent: string[];
@@ -96,6 +134,30 @@ function ExploreBody({
 }) {
   const { onInputFocus } = useKeyboardScroll();
   const navigation = useNavigation<any>();
+  const [counts, setCounts] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    const load = () => {
+      void fetchListingFeed()
+        .then((rows) => {
+          const items = listingsToCatalog(rows);
+          const next: Record<string, number> = {};
+          browse.forEach((item) => {
+            next[item.id] = countBrowse(item.id, items);
+          });
+          setCounts(next);
+        })
+        .catch(() => setCounts({}));
+    };
+    load();
+    return subscribeListingsChanged(load);
+  }, []);
+
+  async function runSearch(term = query) {
+    const q = term.trim();
+    if (q) setRecent(await saveRecentSearch(q));
+    openMapSearch(navigation, { q });
+  }
 
   return (
     <>
@@ -114,12 +176,23 @@ function ExploreBody({
         >
           <Ionicons name="search" size={18} color="#9AA0A6" />
           <TextInput
+            value={query}
+            onChangeText={setQuery}
             placeholder="Search rooms, land, jobs, services..."
             placeholderTextColor="#9AA0A6"
             onFocus={onInputFocus}
+            returnKeyType="search"
+            onSubmitEditing={() => void runSearch()}
             style={{ flex: 1, marginLeft: 8, fontSize: 13, color: colors.navy }}
           />
-          <View
+          <PressScale
+            onPress={() => openMapSearch(navigation, { q: query })}
+            style={{ width: 42, height: 42, borderRadius: 11, backgroundColor: "#111827", alignItems: "center", justifyContent: "center", marginRight: 2 }}
+          >
+            <Ionicons name="map" size={18} color="#fff" />
+          </PressScale>
+          <PressScale
+            onPress={() => void runSearch()}
             style={{
               width: 42,
               height: 42,
@@ -131,7 +204,7 @@ function ExploreBody({
             }}
           >
             <Ionicons name="search" size={20} color="#fff" />
-          </View>
+          </PressScale>
         </View>
       </View>
 
@@ -148,7 +221,7 @@ function ExploreBody({
                   openCategory(navigation, "others");
                   return;
                 }
-                openCategory(navigation, chip.key as "property" | "vehicles" | "jobs" | "services" | "shops");
+                openCategory(navigation, chip.key as "property" | "vehicles" | "jobs" | "services" | "shops" | "used");
               }}
               style={{ width: CHIP_W, alignItems: "center" }}
             >
@@ -240,7 +313,7 @@ function ExploreBody({
           <View style={{ width: 22, height: 22, borderRadius: 11, backgroundColor: "#E7F6EC", alignItems: "center", justifyContent: "center" }}>
             <Ionicons name="bag-handle" size={12} color={GREEN} />
           </View>
-          <Text style={{ fontSize: 10, fontWeight: "800", color: "#111827" }}>12K+ Active Listings</Text>
+          <Text style={{ fontSize: 10, fontWeight: "800", color: "#111827" }}>Browse listings</Text>
         </View>
       </View>
 
@@ -294,7 +367,7 @@ function ExploreBody({
                 <Text style={{ fontWeight: "800", fontSize: 11, color: "#111827" }} numberOfLines={1}>
                   {item.title}
                 </Text>
-                <Text style={{ fontWeight: "800", fontSize: 14, color: item.tint, marginTop: 2 }}>{item.count}</Text>
+                <Text style={{ fontWeight: "800", fontSize: 14, color: item.tint, marginTop: 2 }}>{counts[item.id] ?? 0}</Text>
                 <Text style={{ fontSize: 9, color: "#9AA0A6", marginTop: 1 }}>Listings</Text>
               </View>
               <View
@@ -394,7 +467,10 @@ function ExploreBody({
         {popular.map((item) => (
           <PressScale
             key={item.label}
-            onPress={() => openCategory(navigation, item.key, item.filter)}
+            onPress={() => {
+              void saveRecentSearch(item.label).then(setRecent);
+              openMapSearch(navigation, { q: item.label, key: item.key });
+            }}
             style={{
               flexDirection: "row",
               alignItems: "center",
@@ -420,7 +496,7 @@ function ExploreBody({
             {recent.map((item) => (
               <PressScale
                 key={item}
-                onPress={() => openCategory(navigation, "property", item.includes("Land") ? "Land" : "House")}
+                onPress={() => openMapSearch(navigation, { q: item })}
                 style={{
                   flexDirection: "row",
                   alignItems: "center",
@@ -433,7 +509,7 @@ function ExploreBody({
                 }}
               >
                 <Text style={{ fontSize: 12, color: "#4B5563", fontWeight: "600" }}>{item}</Text>
-                <Pressable onPress={() => setRecent(recent.filter((r) => r !== item))} hitSlop={6}>
+                <Pressable onPress={() => void removeRecentSearch(item).then(setRecent)} hitSlop={6}>
                   <Ionicons name="close" size={14} color="#9AA0A6" />
                 </Pressable>
               </PressScale>

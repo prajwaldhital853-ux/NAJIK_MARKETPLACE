@@ -1,12 +1,18 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
-import { Pressable, Text, View } from "react-native";
+import { useEffect, useState } from "react";
+import { Modal, Pressable, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "../context/AuthContext";
+import { lookupPlace, useBuyerLocation } from "../context/BuyerLocationContext";
 import { isPendingProvider, isProvider } from "../demo";
+import { searchPlaces } from "../geo";
 import { colors, shadow } from "../theme";
+import { KeyboardScreen, useKeyboardScroll } from "./KeyboardScreen";
 import { NajikLogo } from "./NajikLogo";
 import { PressScale } from "./PressScale";
+
+const GREEN = "#1B7D2C";
 
 const dotStyle = {
   position: "absolute" as const,
@@ -26,6 +32,7 @@ type Props = {
   showPro?: boolean;
   location?: string;
   onClose?: () => void;
+  onDraft?: () => void;
   bellCount?: number;
   pinColor?: string;
 };
@@ -34,16 +41,20 @@ export function AppHeader({
   right = "bell",
   showLocation = false,
   showPro,
-  location = "Lahan, Siraha",
+  location,
   onClose,
+  onDraft,
   bellCount,
   pinColor = "#111827",
 }: Props) {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
   const { user } = useAuth();
+  const { place, loading } = useBuyerLocation();
+  const [picker, setPicker] = useState(false);
   const pro = showPro ?? isProvider(user);
   const pending = isPendingProvider(user);
+  const label = place.source === "all" ? "All Nepal" : location || place.label || "All Nepal";
 
   function openDrawer() {
     const parent = navigation.getParent();
@@ -86,10 +97,10 @@ export function AppHeader({
 
         <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
           {right === "draft" ? (
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 5, borderWidth: 1, borderColor: colors.green, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10 }}>
+            <PressScale onPress={onDraft} style={{ flexDirection: "row", alignItems: "center", gap: 5, borderWidth: 1, borderColor: colors.green, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10 }}>
               <Ionicons name="save-outline" size={14} color={colors.green} />
               <Text style={{ color: colors.green, fontWeight: "700", fontSize: 12 }}>Save Draft</Text>
-            </View>
+            </PressScale>
           ) : (
             <View>
               <Ionicons name="notifications-outline" size={22} color="#111827" />
@@ -112,16 +123,22 @@ export function AppHeader({
                 >
                   <Text style={{ color: "#fff", fontSize: 9, fontWeight: "800" }}>{bellCount}</Text>
                 </View>
-              ) : (
+              ) : bellCount && bellCount > 0 ? (
                 <View style={dotStyle} />
-              )}
+              ) : null}
             </View>
           )}
           {right === "bell-chat" ? (
-            <View>
+            <Pressable
+              onPress={() => {
+                const parent = navigation.getParent();
+                // @ts-expect-error drawer parent
+                (parent || navigation).navigate?.("ChatInbox");
+              }}
+              hitSlop={10}
+            >
               <Ionicons name="chatbubble-ellipses-outline" size={22} color={colors.navy} />
-              <View style={dotStyle} />
-            </View>
+            </Pressable>
           ) : null}
           {right === "bell-settings" ? <Ionicons name="settings-outline" size={22} color={colors.navy} /> : null}
           {right === "bell-filter" ? <Ionicons name="options-outline" size={22} color={colors.navy} /> : null}
@@ -135,6 +152,7 @@ export function AppHeader({
       {showLocation ? (
         <View style={{ alignItems: "center", paddingBottom: 10 }}>
           <PressScale
+            onPress={() => setPicker(true)}
             style={{
               flexDirection: "row",
               alignItems: "center",
@@ -147,11 +165,115 @@ export function AppHeader({
             }}
           >
             <Ionicons name="location" size={15} color={pinColor} />
-            <Text style={{ fontWeight: "700", color: "#111827" }}>{location}</Text>
+            <Text style={{ fontWeight: "700", color: "#111827" }} numberOfLines={1}>
+              {label}
+            </Text>
             <Ionicons name="chevron-down" size={14} color="#111827" />
           </PressScale>
         </View>
       ) : null}
+      <Modal visible={picker} animationType="none" onRequestClose={() => setPicker(false)}>
+        <View style={{ flex: 1, backgroundColor: "#fff", paddingTop: insets.top }}>
+          <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingVertical: 8 }}>
+            <Text style={{ flex: 1, fontWeight: "800", fontSize: 18 }}>Search location</Text>
+            <Pressable onPress={() => setPicker(false)}>
+              <Ionicons name="close" size={22} />
+            </Pressable>
+          </View>
+          <KeyboardScreen enableRefresh={false} contentStyle={{ padding: 16, paddingBottom: 28 }}>
+            <LocationPickerBody
+              onPicked={() => setPicker(false)}
+            />
+          </KeyboardScreen>
+        </View>
+      </Modal>
     </View>
+  );
+}
+
+function LocationPickerBody({ onPicked }: { onPicked: () => void }) {
+  const { onInputFocus } = useKeyboardScroll();
+  const { detectCurrent, setManual, setAllNepal, place, loading } = useBuyerLocation();
+  const [query, setQuery] = useState("");
+  const [hits, setHits] = useState<Awaited<ReturnType<typeof searchPlaces>>>([]);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    const q = query.trim();
+    if (q.length < 2) {
+      setHits([]);
+      return;
+    }
+    const t = setTimeout(() => {
+      void searchPlaces(q, 12).then(setHits);
+    }, 280);
+    return () => clearTimeout(t);
+  }, [query]);
+
+  async function choose(text: string, hit?: (typeof hits)[0]) {
+    if (hit) {
+      await setManual({
+        label: hit.label,
+        place: hit.place || hit.city || text,
+        lat: hit.lat,
+        lng: hit.lng,
+        radiusKm: hit.place && hit.city && hit.place !== hit.city ? 6 : 14,
+      });
+      onPicked();
+      return;
+    }
+    const looked = await lookupPlace(text);
+    if (!looked) return;
+    await setManual(looked);
+    onPicked();
+  }
+
+  return (
+    <>
+      <View style={{ flexDirection: "row", alignItems: "center", borderWidth: 1, borderColor: "#E6E8EC", borderRadius: 12, paddingLeft: 12, height: 48 }}>
+        <Ionicons name="search" size={18} color="#9AA0A6" />
+        <TextInput
+          value={query}
+          onChangeText={setQuery}
+          onFocus={onInputFocus}
+          placeholder="Kathmandu, New Baneshwor, Shantinagar, Ward 31..."
+          placeholderTextColor="#9AA0A6"
+          returnKeyType="search"
+          onSubmitEditing={() => void choose(query)}
+          style={{ flex: 1, marginLeft: 8, fontSize: 14, color: colors.navy }}
+        />
+      </View>
+      <PressScale
+        onPress={async () => {
+          await setAllNepal();
+          onPicked();
+        }}
+        style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 12, paddingVertical: 10 }}
+      >
+        <Ionicons name="globe-outline" size={18} color={GREEN} />
+        <Text style={{ color: GREEN, fontWeight: "800" }}>All Nepal</Text>
+      </PressScale>
+      <PressScale
+        onPress={async () => {
+          setBusy(true);
+          await detectCurrent();
+          setBusy(false);
+          onPicked();
+        }}
+        style={{ flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 10 }}
+      >
+        <Ionicons name="navigate" size={18} color={GREEN} />
+        <Text style={{ color: GREEN, fontWeight: "800" }}>{busy || loading ? "Finding you..." : "Use my current location"}</Text>
+      </PressScale>
+      <Text style={{ color: "#6B7280", fontSize: 12, marginTop: 4 }}>Now showing: {place.label}</Text>
+      {hits.map((hit) => (
+        <PressScale key={`${hit.lat}-${hit.lng}-${hit.label}`} onPress={() => void choose(hit.label, hit)} style={{ paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: "#F3F4F6" }}>
+          <Text style={{ fontWeight: "700" }}>{hit.label}</Text>
+          <Text style={{ color: "#6B7280", fontSize: 12, marginTop: 2 }} numberOfLines={2}>
+            {hit.location}
+          </Text>
+        </PressScale>
+      ))}
+    </>
   );
 }

@@ -1,5 +1,4 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useNavigation } from "@react-navigation/native";
 import * as ImagePicker from "expo-image-picker";
 import { useState } from "react";
 import { Alert, Dimensions, Image, Text, TextInput, View } from "react-native";
@@ -8,7 +7,6 @@ import { KeyboardScreen, useKeyboardScroll } from "../components/KeyboardScreen"
 import { NajikLogo } from "../components/NajikLogo";
 import { PressScale } from "../components/PressScale";
 import { useAuth } from "../context/AuthContext";
-import { applicationToUser, submitProviderApplication } from "../providersApi";
 import { colors, shadow } from "../theme";
 import type { ProviderServiceType } from "../types";
 
@@ -26,6 +24,7 @@ const services: { key: ProviderServiceType; icon: keyof typeof Ionicons.glyphMap
   { key: "Job Poster", icon: "briefcase-outline", hint: "Hiring & jobs" },
   { key: "Vehicles", icon: "car-outline", hint: "Cars & bikes" },
   { key: "Local Services", icon: "construct-outline", hint: "Home & local work" },
+  { key: "Used Items", icon: "cart-outline", hint: "Marketplace products" },
   { key: "Other", icon: "apps-outline", hint: "Something else" },
 ];
 
@@ -34,23 +33,23 @@ export function SellerApplyScreen() {
 }
 
 function SellerApplyForm() {
-  const navigation = useNavigation<any>();
   const insets = useSafeAreaInsets();
-  const { login } = useAuth();
+  const { user, submitApplication, logout } = useAuth();
   const { onInputFocus } = useKeyboardScroll();
   const [step, setStep] = useState(0);
-  const [fullName, setFullName] = useState("");
-  const [address, setAddress] = useState("");
-  const [contact, setContact] = useState("");
-  const [phone, setPhone] = useState("");
-  const [email, setEmail] = useState("");
+  const [fullName, setFullName] = useState(user?.full_name || "");
+  const [address, setAddress] = useState(user?.address || "");
+  const [contact, setContact] = useState(user?.contact || "");
+  const [phone, setPhone] = useState(user?.phone || "");
+  const [email, setEmail] = useState(user?.email || "");
   const [serviceType, setServiceType] = useState<ProviderServiceType>("Real Estate");
   const [nagrita, setNagrita] = useState("");
+  const [nagritaBack, setNagritaBack] = useState("");
   const [photo, setPhoto] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
-  async function pick(kind: "nagrita" | "photo", fromCamera?: boolean) {
+  async function pick(kind: "nagrita" | "nagrita_back" | "photo", fromCamera?: boolean) {
     if (fromCamera) {
       const permission = await ImagePicker.requestCameraPermissionsAsync();
       if (!permission.granted) {
@@ -65,17 +64,24 @@ function SellerApplyForm() {
       }
     }
     const result = fromCamera
-      ? await ImagePicker.launchCameraAsync({ quality: 0.5, base64: true })
-      : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], quality: 0.5, base64: true });
+      ? await ImagePicker.launchCameraAsync({ quality: 0.4, base64: true })
+      : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], quality: 0.4, base64: true });
     const asset = result.assets?.[0];
-    if (result.canceled || !asset) return;
-    const uri = asset.base64 ? `data:image/jpeg;base64,${asset.base64}` : asset.uri;
+    if (result.canceled || !asset?.base64) {
+      if (!result.canceled) Alert.alert("Upload failed", "Could not read that image. Try another photo.");
+      return;
+    }
+    const mime = asset.mimeType?.includes("png") ? "image/png" : "image/jpeg";
+    const uri = `data:${mime};base64,${asset.base64}`;
     if (kind === "nagrita") setNagrita(uri);
+    else if (kind === "nagrita_back") setNagritaBack(uri);
     else setPhoto(uri);
   }
 
-  function chooseUpload(kind: "nagrita" | "photo") {
-    Alert.alert(kind === "nagrita" ? "Upload nagrita" : "Upload your photo", "Choose a source", [
+  function chooseUpload(kind: "nagrita" | "nagrita_back" | "photo") {
+    const title =
+      kind === "photo" ? "Upload your photo" : kind === "nagrita_back" ? "Upload nagrita back" : "Upload nagrita front";
+    Alert.alert(title, "Choose a source", [
       { text: "Camera", onPress: () => void pick(kind, true) },
       { text: "Gallery", onPress: () => void pick(kind, false) },
       { text: "Cancel", style: "cancel" },
@@ -92,7 +98,7 @@ function SellerApplyForm() {
       if (phone.replace(/\D/g, "").length < 10) return "Enter a valid 10-digit phone number.";
     }
     if (step === 2) {
-      if (!nagrita || !photo) return "Upload your nagrita and a photo.";
+      if (!nagrita || !nagritaBack || !photo) return "Upload nagrita front, nagrita back, and your photo.";
     }
     return "";
   }
@@ -110,7 +116,7 @@ function SellerApplyForm() {
   function back() {
     setError("");
     if (step === 0) {
-      navigation.goBack();
+      void logout();
       return;
     }
     setStep((value) => value - 1);
@@ -124,7 +130,7 @@ function SellerApplyForm() {
     }
     setSubmitting(true);
     try {
-      const app = await submitProviderApplication({
+      await submitApplication({
         full_name: fullName.trim(),
         address: address.trim(),
         contact: contact.trim() || phone.replace(/\s/g, ""),
@@ -132,9 +138,11 @@ function SellerApplyForm() {
         email: email.trim(),
         service_type: serviceType,
         nagrita_uri: nagrita,
+        nagrita_back_uri: nagritaBack,
         photo_uri: photo,
       });
-      await login(applicationToUser(app));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not submit your application.");
     } finally {
       setSubmitting(false);
     }
@@ -142,7 +150,7 @@ function SellerApplyForm() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.white }}>
-      <KeyboardScreen style={{ backgroundColor: colors.white }} contentStyle={{ paddingTop: insets.top + 8, paddingHorizontal: 16, paddingBottom: 20 }}>
+      <KeyboardScreen enableRefresh={false} style={{ backgroundColor: colors.white }} contentStyle={{ paddingTop: insets.top + 8, paddingHorizontal: 16 }}>
       <PressScale onPress={back} style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 10 }}>
         <Ionicons name="arrow-back" size={22} color={colors.navy} />
         <Text style={{ fontWeight: "700" }}>Back</Text>
@@ -215,6 +223,7 @@ function SellerApplyForm() {
       {step === 2 ? (
         <DocumentStep
           nagrita={nagrita}
+          nagritaBack={nagritaBack}
           photo={photo}
           fullName={fullName}
           phone={phone}
@@ -303,7 +312,7 @@ function PersonalStep({
   return (
     <View>
       <Tip text="Use the name on your nagrita so admin can verify you faster." />
-      <Field label="Full name" hint="As written on your citizenship" icon="person-outline" value={fullName} onChangeText={setFullName} onFocus={onFocus} placeholder="e.g. Sunil K. Sah" />
+      <Field label="Full name" hint="As written on your citizenship" icon="person-outline" value={fullName} onChangeText={setFullName} onFocus={onFocus} placeholder="Full name" />
       <Field label="Address" hint="Ward, city and district" icon="location-outline" value={address} onChangeText={setAddress} onFocus={onFocus} placeholder="e.g. Lahan-10, Siraha" />
 
       <Text style={{ fontWeight: "800", marginTop: 18, marginBottom: 4, color: colors.navy }}>What service do you provide?</Text>
@@ -376,6 +385,7 @@ function ContactStep({
 
 function DocumentStep({
   nagrita,
+  nagritaBack,
   photo,
   fullName,
   phone,
@@ -384,22 +394,30 @@ function DocumentStep({
   onPick,
 }: {
   nagrita: string;
+  nagritaBack: string;
   photo: string;
   fullName: string;
   phone: string;
   email: string;
   serviceType: string;
-  onPick: (kind: "nagrita" | "photo") => void;
+  onPick: (kind: "nagrita" | "nagrita_back" | "photo") => void;
 }) {
   return (
     <View>
       <Tip text="Clear photos help admin approve you on the same day." />
       <UploadCard
-        title="Nagrita / Citizenship"
+        title="Nagrita / Citizenship — front"
         hint="Front side, all text readable"
         uri={nagrita}
         icon="id-card-outline"
         onPress={() => onPick("nagrita")}
+      />
+      <UploadCard
+        title="Nagrita / Citizenship — back"
+        hint="Back side, all text readable"
+        uri={nagritaBack}
+        icon="documents-outline"
+        onPress={() => onPick("nagrita_back")}
       />
       <UploadCard title="Your photo" hint="Clear face photo, like a passport shot" uri={photo} icon="camera-outline" onPress={() => onPick("photo")} />
 

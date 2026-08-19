@@ -23,7 +23,7 @@ export default function OrdersPage() {
   return (
     <ResourcePage
       title="Orders & Bookings"
-      summary="15 live service bookings — leaks in Kathmandu, a Pokhara wedding shoot, Lahan car wash. Move pending slots to active when the provider confirms, complete after payout, or cancel no-shows. Amounts feed the Payments page."
+      summary="Service bookings. Move pending slots to active when the provider confirms, complete after payout, or cancel no-shows."
       kpis={[
         { label: "Bookings", value: orders.length, tone: "brand" },
         { label: "Pending", value: orders.filter((o) => o.status === "pending").length, tone: "amber" },

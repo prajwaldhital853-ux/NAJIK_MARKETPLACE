@@ -1,23 +1,24 @@
 "use client";
 
 import { useState } from "react";
-import { CATEGORY_SHARE, GROWTH, PLATFORM_KPIS, REVENUE_BARS } from "@/lib/demo-data";
 import { compact, npr } from "@/lib/format";
+import { REVENUE_BARS } from "@/lib/demo-data";
 import { CategoryDonut, LineGrowth, RevenueBars } from "@/components/admin/charts";
 import { PageHeader, SummaryStrip } from "@/components/admin/page-frame";
 import { KpiCard } from "@/components/admin/ui";
 import { useAdmin } from "@/lib/store";
 
 export default function AnalyticsPage() {
-  const { users, orders, payments, properties } = useAdmin();
+  const { users, orders, payments, properties, kpis, growth, categories } = useAdmin();
   const [city, setCity] = useState("All Nepal");
   const cities = ["All Nepal", "Kathmandu", "Lalitpur", "Pokhara", "Lahan", "Biratnagar"];
+  const gmv = payments.filter((p) => p.status === "completed").reduce((s, p) => s + p.amount, 0);
 
   return (
     <div>
       <PageHeader
         title="Analytics"
-        summary="Marketplace pulse for the last 30 days: user growth, NPR GMV, category mix, and the demo working set (20 users, 16 properties, 15 bookings). Switch city to snapshot regional ops — Valley vs East corridor. Charts use the same series as the main dashboard so exec and ops stay aligned."
+        summary="Live marketplace counts from app signups and submitted listings. Charts follow the same series as the dashboard."
         extra={
           <select
             value={city}
@@ -32,10 +33,10 @@ export default function AnalyticsPage() {
       />
       <SummaryStrip
         items={[
-          { label: "Platform users", value: compact(PLATFORM_KPIS.totalUsers), delta: "+12.5%", tone: "brand" },
-          { label: "GMV", value: npr(PLATFORM_KPIS.revenue), delta: "+16.4%", tone: "green" },
-          { label: "Listings", value: compact(PLATFORM_KPIS.listings), delta: "+8.1%", tone: "brand" },
-          { label: "Providers", value: compact(PLATFORM_KPIS.providers), delta: "+9.4%", tone: "green" },
+          { label: "Platform users", value: compact(kpis.totalUsers), tone: "brand" },
+          { label: "GMV", value: npr(kpis.revenue || gmv), tone: "green" },
+          { label: "Listings", value: compact(kpis.listings), tone: "brand" },
+          { label: "Providers", value: compact(kpis.providers), tone: "green" },
           { label: "Focus city", value: city, tone: "amber" },
         ]}
       />
@@ -44,7 +45,7 @@ export default function AnalyticsPage() {
         <section className="card-glow rounded-2xl border border-line bg-card p-4">
           <h2 className="text-sm font-semibold text-ink">User growth</h2>
           <p className="mb-2 text-[11px] text-muted">Monthly new users · Jan–Jun</p>
-          <LineGrowth data={GROWTH.Users} />
+          <LineGrowth data={growth.Users} />
         </section>
         <section className="card-glow rounded-2xl border border-line bg-card p-4">
           <h2 className="text-sm font-semibold text-ink">Daily GMV</h2>
@@ -53,20 +54,17 @@ export default function AnalyticsPage() {
         </section>
         <section className="card-glow rounded-2xl border border-line bg-card p-4">
           <h2 className="mb-2 text-sm font-semibold text-ink">Listing mix</h2>
-          <CategoryDonut data={CATEGORY_SHARE} />
+          <CategoryDonut data={categories} />
         </section>
         <section className="card-glow grid gap-3 rounded-2xl border border-line bg-card p-4 sm:grid-cols-2">
-          <KpiCard label="Demo users (session)" value={users.length} />
-          <KpiCard label="Demo properties" value={properties.length} />
-          <KpiCard label="Demo bookings" value={orders.length} />
-          <KpiCard
-            label="Completed GMV (demo)"
-            value={npr(payments.filter((p) => p.status === "completed").reduce((s, p) => s + p.amount, 0))}
-          />
+          <KpiCard label="Users" value={users.length} />
+          <KpiCard label="Properties" value={properties.length} />
+          <KpiCard label="Bookings" value={orders.length} />
+          <KpiCard label="Completed GMV" value={npr(gmv)} />
           <div className="sm:col-span-2 rounded-xl bg-elevated p-3 text-sm text-muted">
             {city === "All Nepal"
-              ? "National view. East corridor (Lahan, Siraha, Dharan, Biratnagar) is 22% of new listings this month."
-              : `${city} snapshot: listings and bookings in the demo set that mention this city are highlighted in User and Property tables via search.`}
+              ? "National view of live users and listings."
+              : `${city} can be used as a search filter on User and Property tables.`}
           </div>
         </section>
       </div>

@@ -1,14 +1,18 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useNavigation } from "@react-navigation/native";
-import { Image, ScrollView, Text, View } from "react-native";
+import { useFocusEffect, useNavigation } from "@react-navigation/native";
+import { useCallback, useState } from "react";
+import { ScrollView, Text, View } from "react-native";
 import { AppHeader } from "../components/AppHeader";
+import { AuthImage } from "../components/AuthImage";
+import { useAppRefreshControl } from "../components/KeyboardScreen";
 import { PressScale } from "../components/PressScale";
 import { SellerHeroBanner } from "../components/SellerHeroBanner";
 import { useAuth } from "../context/AuthContext";
-import { nearbyListings } from "../data/mock";
 import { isPendingProvider, isProvider, isRejectedProvider, isVerifiedProvider } from "../demo";
+import { fetchMyListings, type ApiListing } from "../listingsApi";
+import { subscribeListingsChanged } from "../listingsRefresh";
+import { openListing } from "../navigation/browse";
 import { colors, shadow } from "../theme";
-import type { Listing } from "../types";
 import { BuyerHomeScreen } from "./BuyerHomeScreen";
 
 export function HomeScreen() {
@@ -18,28 +22,47 @@ export function HomeScreen() {
 }
 
 function SellerHomeScreen() {
-  const { user, refreshVerification } = useAuth();
+  const { user } = useAuth();
   const navigation = useNavigation<any>();
-  const name = user?.full_name || "Sunil K. Sah";
+  const [posts, setPosts] = useState<ApiListing[]>([]);
+  const name = user?.full_name || "Account";
   const pending = isPendingProvider(user);
   const verified = isVerifiedProvider(user);
   const rejected = isRejectedProvider(user);
-  const photo = user?.photo_uri || "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&q=80";
+  const photo = user?.photo_uri || "";
   const serviceLabel = user?.service_type || "Real Estate & Property Service";
+
+  const loadPosts = useCallback(() => {
+    if (!verified) {
+      setPosts([]);
+      return;
+    }
+    void fetchMyListings()
+      .then(setPosts)
+      .catch(() => setPosts([]));
+  }, [verified]);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadPosts();
+      return subscribeListingsChanged(loadPosts);
+    }, [loadPosts]),
+  );
+
+  const refreshControl = useAppRefreshControl(async () => {
+    loadPosts();
+  });
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
       <AppHeader right="bell-chat" />
-      <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 36 }} showsVerticalScrollIndicator={false}>
+      <ScrollView refreshControl={refreshControl} contentContainerStyle={{ padding: 16, paddingBottom: 36 }} showsVerticalScrollIndicator={false}>
         {pending ? (
           <View style={{ backgroundColor: colors.orangeSoft, borderRadius: 16, padding: 14, marginBottom: 14, ...shadow.card }}>
             <Text style={{ fontWeight: "800", color: colors.navy }}>Verification pending</Text>
             <Text style={{ color: colors.textSecondary, marginTop: 4, fontSize: 13 }}>
-              Your {serviceLabel} application is with NAJIK admin. You can browse, but you cannot post until you are verified.
+              Your {serviceLabel} application is with NAJIK admin. You can browse, but you cannot post until you are verified. This screen updates on its own when admin approves you.
             </Text>
-            <PressScale onPress={() => void refreshVerification()} style={{ marginTop: 10, alignSelf: "flex-start" }}>
-              <Text style={{ color: colors.green, fontWeight: "800" }}>Check status</Text>
-            </PressScale>
           </View>
         ) : null}
         {rejected ? (
@@ -60,6 +83,7 @@ function SellerHomeScreen() {
           variant="home"
           showPosted={verified}
           onPress={() => navigation.jumpTo("Profile")}
+          onCamera={() => navigation.jumpTo("Profile")}
           onViewListing={() => navigation.jumpTo("Listings")}
         />
 
@@ -70,12 +94,14 @@ function SellerHomeScreen() {
           ) : null}
         </View>
 
-        {verified ? (
-          nearbyListings.map((item) => <RecentPostCard key={item.id} item={item} />)
+        {verified && posts.length ? (
+          posts.slice(0, 4).map((item) => <RecentPostCard key={item.id} item={item} />)
         ) : (
           <View style={{ backgroundColor: colors.white, borderRadius: 16, padding: 18, ...shadow.card }}>
             <Text style={{ color: colors.muted, textAlign: "center" }}>
-              No listings yet. After admin verifies you, you can post your services here.
+              {verified
+                ? "No listings yet. Use Add Listing to submit a post for admin review."
+                : "No listings yet. After admin verifies you, you can post your services here."}
             </Text>
           </View>
         )}
@@ -84,57 +110,74 @@ function SellerHomeScreen() {
   );
 }
 
-function RecentPostCard({ item }: { item: Listing }) {
+function RecentPostCard({ item }: { item: ApiListing }) {
+  const navigation = useNavigation<any>();
+  const deal = String(item.extras?.dealType || item.subcategory || item.category);
+  const pending = item.status !== "approved";
+  const beds = item.extras?.beds;
+  const baths = item.extras?.baths;
+  const area = item.extras?.area;
+  const priceDigits = String(item.price).replace(/\D/g, "");
+  const price = Number(priceDigits);
+  const photoUrl = item.photos[0]?.url;
   return (
-    <View
-      style={{ flexDirection: "row", backgroundColor: colors.white, borderRadius: 16, padding: 10, marginBottom: 12, ...shadow.card }}
+    <PressScale
+      onPress={() => openListing(navigation, item.id, true)}
+      style={{ flexDirection: photoUrl ? "row" : "column", backgroundColor: colors.white, borderRadius: 16, padding: 10, marginBottom: 12, ...shadow.card }}
     >
+      {photoUrl ? (
       <View>
-        <Image source={{ uri: item.image }} style={{ width: 102, height: 108, borderRadius: 12 }} />
-        <View style={{ position: "absolute", top: 6, left: 6, backgroundColor: "#1B7D2C", paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6 }}>
-          <Text style={{ color: "#fff", fontSize: 9, fontWeight: "800" }}>LIVE</Text>
+        <AuthImage uri={photoUrl} style={{ width: 102, height: 108, borderRadius: 12 }} />
+        <View style={{ position: "absolute", top: 6, left: 6, backgroundColor: pending ? "#F59E0B" : "#1B7D2C", paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6 }}>
+          <Text style={{ color: "#fff", fontSize: 9, fontWeight: "800" }}>{pending ? "PENDING" : "LIVE"}</Text>
         </View>
         <View style={{ position: "absolute", left: 6, bottom: 6, backgroundColor: "rgba(0,0,0,0.55)", borderRadius: 10, paddingHorizontal: 6, paddingVertical: 2, flexDirection: "row", alignItems: "center", gap: 3 }}>
           <Ionicons name="eye" size={10} color="#fff" />
-          <Text style={{ color: "#fff", fontSize: 9, fontWeight: "700" }}>{item.views}</Text>
+          <Text style={{ color: "#fff", fontSize: 9, fontWeight: "700" }}>{Number(item.view_count) || Number(item.extras?.views) || 0}</Text>
         </View>
       </View>
-      <View style={{ flex: 1, paddingLeft: 12 }}>
+      ) : null}
+      <View style={{ flex: 1, paddingLeft: photoUrl ? 12 : 0 }}>
         <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
           <Text style={{ fontWeight: "800", fontSize: 14, flex: 1, color: colors.navy }}>{item.title}</Text>
-          <View style={{ flexDirection: "row", gap: 10, paddingLeft: 6 }}>
-            <Ionicons name="share-outline" size={16} color={colors.muted} />
+          {!photoUrl ? (
+            <View style={{ backgroundColor: pending ? "#F59E0B" : "#1B7D2C", paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6, alignSelf: "flex-start" }}>
+              <Text style={{ color: "#fff", fontSize: 9, fontWeight: "800" }}>{pending ? "PENDING" : "LIVE"}</Text>
+            </View>
+          ) : (
             <Ionicons name="ellipsis-vertical" size={16} color={colors.muted} />
-          </View>
+          )}
         </View>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 4, marginTop: 4 }}>
           <Ionicons name="location-outline" size={12} color={colors.muted} />
           <Text style={{ color: colors.muted, fontSize: 11 }}>{item.location}</Text>
         </View>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 6 }}>
-          <Text style={{ color: "#1B7D2C", fontWeight: "800" }}>{item.price}</Text>
-          <View style={{ backgroundColor: item.dealType === "For Rent" ? colors.blueSoft : "#E4F6EA", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8 }}>
-            <Text style={{ color: item.dealType === "For Rent" ? colors.blue : "#146B32", fontSize: 10, fontWeight: "800" }}>{item.dealType}</Text>
+          <Text style={{ color: "#1B7D2C", fontWeight: "800" }}>
+            {priceDigits ? `Rs. ${Number.isFinite(price) ? price.toLocaleString("en-IN") : item.price}` : item.negotiable ? "Negotiable" : "Price on request"}
+          </Text>
+          <View style={{ backgroundColor: deal === "For Rent" ? colors.blueSoft : "#E4F6EA", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8 }}>
+            <Text style={{ color: deal === "For Rent" ? colors.blue : "#146B32", fontSize: 10, fontWeight: "800" }}>{deal}</Text>
           </View>
         </View>
-        {item.beds ? (
+        {beds || baths || area ? (
           <View style={{ flexDirection: "row", alignItems: "center", gap: 10, marginTop: 6 }}>
-            <Meta icon="bed-outline" label={`${item.beds} Beds`} />
-            <Meta icon="water-outline" label={`${item.baths} Baths`} />
-            <Meta icon="resize-outline" label={item.sqft || ""} />
+            {beds ? <Meta icon="bed-outline" label={`${beds} Beds`} /> : null}
+            {baths ? <Meta icon="water-outline" label={`${baths} Baths`} /> : null}
+            {area ? <Meta icon="resize-outline" label={`${area} sqft`} /> : null}
           </View>
         ) : null}
         <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 8 }}>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
-            <Text style={{ color: colors.muted, fontSize: 10 }}>{item.time}</Text>
-            <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: "#1B7D2C" }} />
+            <Text style={{ color: colors.muted, fontSize: 10 }}>{pending ? "Pending admin review" : "Live in buyer feed"}</Text>
+            <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: pending ? "#F59E0B" : "#1B7D2C" }} />
           </View>
           <View style={{ borderWidth: 1.5, borderColor: colors.green, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 14 }}>
             <Text style={{ color: colors.green, fontWeight: "800", fontSize: 11 }}>View Details</Text>
           </View>
         </View>
       </View>
-    </View>
+    </PressScale>
   );
 }
 

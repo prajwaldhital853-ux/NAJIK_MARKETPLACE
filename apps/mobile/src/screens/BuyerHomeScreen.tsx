@@ -1,12 +1,17 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
-import { Dimensions, Image, ScrollView, Text, View } from "react-native";
+import { useEffect, useState } from "react";
+import { Dimensions, Image, Text, TextInput, View } from "react-native";
 import { AppHeader } from "../components/AppHeader";
 import { ListingGrid } from "../components/ClassifiedCard";
+import { KeyboardScreen, useKeyboardScroll } from "../components/KeyboardScreen";
 import { PressScale } from "../components/PressScale";
-import { homeCategoryKey, listingById, nearbyCatalogId } from "../data/catalog";
-import { buyerNearbyListings } from "../data/mock";
+import { useBuyerLocation } from "../context/BuyerLocationContext";
+import { homeCategoryKey, type CatalogItem } from "../data/catalog";
+import { listingsToCatalog } from "../data/liveListings";
+import { fetchListingFeed } from "../listingsApi";
+import { subscribeListingsChanged } from "../listingsRefresh";
 import { openCategory } from "../navigation/browse";
 import { colors, shadow } from "../theme";
 
@@ -17,6 +22,7 @@ const PAD = 16;
 const GAP = 11;
 const TILE = (SCREEN_W - PAD * 2 - GAP * 3) / 4;
 const FOREST = "#0E4A3C";
+const GREEN = "#1B7D2C";
 
 const categories: { label: string; icon: keyof typeof Ionicons.glyphMap; bg: string; color: string }[] = [
   { label: "Property", icon: "home", bg: "#E8F1FE", color: "#1D4ED8" },
@@ -30,23 +36,41 @@ const categories: { label: string; icon: keyof typeof Ionicons.glyphMap; bg: str
 ];
 
 export function BuyerHomeScreen() {
+  const [query, setQuery] = useState("");
+  const [submitted, setSubmitted] = useState("");
+
   return (
     <View style={{ flex: 1, backgroundColor: "#F7F8FA" }}>
-      <AppHeader showLocation bellCount={3} />
-      <ScrollView contentContainerStyle={{ padding: PAD, paddingTop: 10, paddingBottom: 28 }} showsVerticalScrollIndicator={false}>
-        <BuyerHomeBody />
-      </ScrollView>
+      <AppHeader showLocation />
+      <KeyboardScreen contentStyle={{ padding: PAD, paddingTop: 10, paddingBottom: 28 }} style={{ backgroundColor: "#F7F8FA" }}>
+        <BuyerHomeBody query={query} setQuery={setQuery} submitted={submitted} setSubmitted={setSubmitted} />
+      </KeyboardScreen>
     </View>
   );
 }
 
-function BuyerHomeBody() {
+function BuyerHomeBody({
+  query,
+  setQuery,
+  submitted,
+  setSubmitted,
+}: {
+  query: string;
+  setQuery: (v: string) => void;
+  submitted: string;
+  setSubmitted: (v: string) => void;
+}) {
   const navigation = useNavigation<any>();
+  const { onInputFocus } = useKeyboardScroll();
+  const { place } = useBuyerLocation();
+
+  function runSearch() {
+    setSubmitted(query.trim());
+  }
 
   return (
     <>
-      <PressScale
-        onPress={() => navigation.jumpTo("Explore")}
+      <View
         style={{
           flexDirection: "row",
           alignItems: "center",
@@ -58,21 +82,31 @@ function BuyerHomeBody() {
         }}
       >
         <Ionicons name="search" size={18} color="#9AA0A6" />
-        <Text style={{ flex: 1, marginLeft: 8, fontSize: 13, color: "#9AA0A6" }}>Search rooms, land, jobs, services...</Text>
-        <View
+        <TextInput
+          value={query}
+          onChangeText={setQuery}
+          onFocus={onInputFocus}
+          placeholder={`Search ${place.source === "all" ? "across Nepal" : `in ${place.label}`}...`}
+          placeholderTextColor="#9AA0A6"
+          returnKeyType="search"
+          onSubmitEditing={runSearch}
+          style={{ flex: 1, marginLeft: 8, fontSize: 13, color: colors.navy }}
+        />
+        <PressScale
+          onPress={runSearch}
           style={{
             width: 44,
             height: 44,
             borderRadius: 12,
-            backgroundColor: "#1B7D2C",
+            backgroundColor: GREEN,
             alignItems: "center",
             justifyContent: "center",
             margin: 4,
           }}
         >
           <Ionicons name="search" size={20} color="#fff" />
-        </View>
-      </PressScale>
+        </PressScale>
+      </View>
 
       <View style={{ flexDirection: "row", flexWrap: "wrap", marginTop: 12, gap: GAP }}>
         {categories.map((item) => (
@@ -96,72 +130,89 @@ function BuyerHomeBody() {
         ))}
       </View>
 
-      <View style={{ marginTop: 18, height: 156, borderRadius: 18, overflow: "hidden", ...shadow.card }}>
-        <Image source={housePhoto} style={{ position: "absolute", right: 0, top: 0, width: "62%", height: "100%" }} resizeMode="cover" />
-        <LinearGradient
-          colors={[FOREST, FOREST, "rgba(14,74,60,0.55)", "transparent"]}
-          locations={[0, 0.36, 0.58, 0.86]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 0 }}
-          style={{ position: "absolute", left: 0, top: 0, bottom: 0, right: 0 }}
-        />
-        <View style={{ position: "absolute", left: 16, top: 18, right: "36%" }}>
-          <Text style={{ color: "#fff", fontSize: 18, fontWeight: "800", lineHeight: 24 }}>
-            Find the Best{"\n"}
-            <Text style={{ color: "#7CDE6A" }}>Property</Text> Near You
-          </Text>
-          <Text style={{ color: "#D5EDE4", marginTop: 4, fontSize: 12 }}>Trusted. Local. Easy.</Text>
-          <PressScale
-            onPress={() => openCategory(navigation, "property")}
-            style={{
-              marginTop: 12,
-              alignSelf: "flex-start",
-              backgroundColor: "#fff",
-              paddingHorizontal: 14,
-              paddingVertical: 8,
-              borderRadius: 20,
-              flexDirection: "row",
-              alignItems: "center",
-              gap: 4,
-            }}
-          >
-            <Text style={{ color: FOREST, fontWeight: "800", fontSize: 12 }}>Explore Now</Text>
-            <Ionicons name="arrow-forward" size={12} color={FOREST} />
-          </PressScale>
+      {!submitted ? (
+        <View style={{ marginTop: 18, height: 156, borderRadius: 18, overflow: "hidden", ...shadow.card }}>
+          <Image source={housePhoto} style={{ position: "absolute", right: 0, top: 0, width: "62%", height: "100%" }} resizeMode="cover" />
+          <LinearGradient
+            colors={[FOREST, FOREST, "rgba(14,74,60,0.55)", "transparent"]}
+            locations={[0, 0.36, 0.58, 0.86]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={{ position: "absolute", left: 0, top: 0, bottom: 0, right: 0 }}
+          />
+          <View style={{ position: "absolute", left: 16, top: 18, right: "36%" }}>
+            <Text style={{ color: "#fff", fontSize: 18, fontWeight: "800", lineHeight: 24 }}>
+              Find the Best{"\n"}
+              <Text style={{ color: "#7CDE6A" }}>Property</Text> Near You
+            </Text>
+            <Text style={{ color: "#D5EDE4", marginTop: 4, fontSize: 12 }}>Trusted. Local. Easy.</Text>
+            <PressScale
+              onPress={() => openCategory(navigation, "property")}
+              style={{
+                marginTop: 12,
+                alignSelf: "flex-start",
+                backgroundColor: "#fff",
+                paddingHorizontal: 14,
+                paddingVertical: 8,
+                borderRadius: 20,
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 4,
+              }}
+            >
+              <Text style={{ color: FOREST, fontWeight: "800", fontSize: 12 }}>Browse property</Text>
+              <Ionicons name="arrow-forward" size={12} color={FOREST} />
+            </PressScale>
+          </View>
         </View>
-        <View
-          style={{
-            position: "absolute",
-            right: 16,
-            top: 14,
-            width: 32,
-            height: 32,
-            borderRadius: 16,
-            backgroundColor: "#fff",
-            alignItems: "center",
-            justifyContent: "center",
-            ...shadow.card,
-          }}
-        >
-          <Ionicons name="location" size={16} color="#2F80ED" />
-        </View>
-      </View>
+      ) : null}
 
       <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 20, marginBottom: 10 }}>
-        <Text style={{ fontSize: 18, fontWeight: "800", color: colors.navy }}>Nearby Listings</Text>
-        <PressScale onPress={() => openCategory(navigation, "property")}>
-          <Text style={{ color: "#1B7D2C", fontWeight: "700" }}>View all ›</Text>
-        </PressScale>
+        <Text style={{ fontSize: 18, fontWeight: "800", color: colors.navy }}>
+          {submitted ? `Results in ${place.label}` : place.source === "all" ? "Latest listings" : `Nearby in ${place.label}`}
+        </Text>
+        {submitted ? (
+          <PressScale onPress={() => { setQuery(""); setSubmitted(""); }}>
+            <Text style={{ color: GREEN, fontWeight: "700" }}>Clear</Text>
+          </PressScale>
+        ) : (
+          <PressScale onPress={() => openCategory(navigation, "property")}>
+            <Text style={{ color: GREEN, fontWeight: "700" }}>View all ›</Text>
+          </PressScale>
+        )}
       </View>
-      <NearbyAds />
+      <NearbyAds keyword={submitted} />
     </>
   );
 }
 
-function NearbyAds() {
-  const ads = buyerNearbyListings
-    .map((item) => listingById(nearbyCatalogId[item.id] ?? "p1"))
-    .filter((ad): ad is NonNullable<typeof ad> => Boolean(ad));
-  return <ListingGrid items={ads} />;
-}
+function NearbyAds({ keyword }: { keyword: string }) {
+  const { feedParams, place } = useBuyerLocation();
+  const [live, setLive] = useState<CatalogItem[]>([]);
 
+  useEffect(() => {
+    const load = () => {
+      void fetchListingFeed({ ...feedParams, q: keyword || undefined })
+        .then((rows) => setLive(listingsToCatalog(rows)))
+        .catch(() => setLive([]));
+    };
+    load();
+    return subscribeListingsChanged(load);
+  }, [keyword, feedParams.place, feedParams.lat, feedParams.lng, feedParams.radius_km]);
+
+  if (!live.length) {
+    return (
+      <View style={{ backgroundColor: "#fff", borderRadius: 16, padding: 18, ...shadow.card }}>
+        <Text style={{ color: colors.muted, textAlign: "center" }}>
+          {keyword
+            ? `No matches for “${keyword}”${place.source === "all" ? "" : ` in ${place.label}`}. Try a related word like apartment, for rent, car, or bike.`
+            : place.source === "all"
+              ? "No listings yet."
+              : `No listings in ${place.label} yet. Choose All Nepal or another place from the pin above.`}
+        </Text>
+      </View>
+    );
+  }
+
+  return <ListingGrid items={live} />;
+}

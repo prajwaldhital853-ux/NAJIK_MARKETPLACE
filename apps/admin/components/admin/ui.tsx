@@ -30,12 +30,13 @@ export function StatusBadge({ status }: { status: string }) {
     live: "bg-green-soft text-green",
     sent: "bg-green-soft text-green",
     ok: "bg-green-soft text-green",
+    edit_pending: "bg-amber-soft text-amber",
     pending: "bg-amber-soft text-amber",
     invited: "bg-amber-soft text-amber",
     scheduled: "bg-amber-soft text-amber",
     paused: "bg-amber-soft text-amber",
     draft: "bg-amber-soft text-amber",
-    blocked: "bg-red-soft text-red",
+    deactivated: "bg-red-soft text-red",
     rejected: "bg-red-soft text-red",
     failed: "bg-red-soft text-red",
     cancelled: "bg-red-soft text-red",
@@ -108,7 +109,7 @@ export function MiniStat({
 }: {
   label: string;
   value: string;
-  delta: string;
+  delta?: string;
   icon: React.ReactNode;
   color: string;
 }) {
@@ -121,7 +122,7 @@ export function MiniStat({
         <p className="truncate text-[10px] text-muted">{label}</p>
         <p className="text-[12px] font-semibold text-ink">{value}</p>
       </div>
-      <span className="ml-auto shrink-0 text-[10px] font-medium text-green">{delta}</span>
+      {delta ? <span className="ml-auto shrink-0 text-[10px] font-medium text-green">{delta}</span> : null}
     </div>
   );
 }

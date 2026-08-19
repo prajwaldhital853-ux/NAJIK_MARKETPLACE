@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { PageHeader, SummaryStrip } from "./page-frame";
 import { DataTable, type Column } from "./table";
 import { Avatar, Btn, Drawer, Field, StatusBadge, inputClass } from "./ui";
@@ -18,6 +18,8 @@ export function ResourcePage<T extends { id: string; status?: string }>({
   tabKey = "status",
   storeKey,
   statusActions,
+  allowDelete,
+  deleteConfirm,
   detail,
 }: {
   title: string;
@@ -30,13 +32,47 @@ export function ResourcePage<T extends { id: string; status?: string }>({
   tabKey?: keyof T | string;
   storeKey?: Parameters<ReturnType<typeof useAdmin>["patch"]>[0];
   statusActions?: string[];
+  allowDelete?: boolean;
+  deleteConfirm?: string;
   detail?: (row: T) => React.ReactNode;
 }) {
   const params = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
   const [tab, setTab] = useState(tabs[0] || "All");
   const [open, setOpen] = useState<T | null>(null);
   const [note, setNote] = useState("");
   const admin = useAdmin();
+  const openId = params.get("id");
+  const autoOpenedId = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!openId) return;
+    if (autoOpenedId.current === openId) return;
+    const match = rows.find((row) => row.id === openId);
+    if (!match) return;
+    autoOpenedId.current = openId;
+    setOpen(match);
+    if (storeKey === "users") admin.markInboxSeen(`user-${openId}`);
+  }, [openId, rows, storeKey]);
+
+  useEffect(() => {
+    setOpen((prev) => {
+      if (!prev) return prev;
+      const next = rows.find((row) => row.id === prev.id);
+      return next || prev;
+    });
+  }, [rows]);
+
+  function closeDrawer() {
+    if (openId) autoOpenedId.current = openId;
+    setOpen(null);
+    if (!params.get("id")) return;
+    const next = new URLSearchParams(params.toString());
+    next.delete("id");
+    const query = next.toString();
+    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+  }
 
   const filtered = useMemo(() => {
     let list = rows;
@@ -75,10 +111,16 @@ export function ResourcePage<T extends { id: string; status?: string }>({
         tabs={tabs}
         tab={tab}
         onTab={setTab}
-        onRow={setOpen}
-        onAction={setOpen}
+        onRow={(row) => {
+          setOpen(row);
+          if (storeKey === "users") admin.markInboxSeen(`user-${row.id}`);
+        }}
+        onAction={(row) => {
+          setOpen(row);
+          if (storeKey === "users") admin.markInboxSeen(`user-${row.id}`);
+        }}
       />
-      <Drawer open={!!open} title={open ? String((open as Record<string, unknown>).title || (open as Record<string, unknown>).name || "Record") : ""} onClose={() => setOpen(null)}>
+      <Drawer open={!!open} title={open ? String((open as Record<string, unknown>).title || (open as Record<string, unknown>).name || "Record") : ""} onClose={closeDrawer}>
         {open ? (
           <div className="space-y-4 text-sm">
             {"name" in open && typeof (open as { name?: string }).name === "string" ? (
@@ -104,11 +146,17 @@ export function ResourcePage<T extends { id: string; status?: string }>({
                   {statusActions.map((s) => (
                     <Btn
                       key={s}
-                      kind={s === "blocked" || s === "rejected" || s === "hidden" ? "danger" : "ghost"}
+                      kind={s === "blocked" || s === "deactivated" || s === "rejected" || s === "hidden" ? "danger" : "ghost"}
                       onClick={() => {
-                        admin.patch(storeKey, open.id, { status: s });
-                        admin.toast(`Updated to ${s}.`);
-                        setOpen({ ...open, status: s } as T);
+                        void admin
+                          .patch(storeKey, open.id, { status: s })
+                          .then(() => {
+                            admin.toast(s === "active" ? "Account is active." : s === "blocked" ? "Account blocked." : s === "deactivated" ? "Account deactivated." : `Updated to ${s}.`);
+                            setOpen({ ...open, status: s === "deactivated" ? "blocked" : s } as T);
+                          })
+                          .catch((err: unknown) => {
+                            admin.toast(err instanceof Error ? err.message : "Could not update.");
+                          });
                       }}
                     >
                       {s}
@@ -125,6 +173,29 @@ export function ResourcePage<T extends { id: string; status?: string }>({
                   }}
                 >
                   Save note
+                </Btn>
+              </div>
+            ) : null}
+            {storeKey && allowDelete ? (
+              <div className="space-y-2 border-t border-line pt-4">
+                <Btn
+                  kind="danger"
+                  onClick={() => {
+                    const message =
+                      deleteConfirm || "Delete this record permanently? This cannot be undone.";
+                    if (!window.confirm(message)) return;
+                    void admin
+                      .remove(storeKey, open.id)
+                      .then(() => {
+                        admin.toast("Deleted.");
+                        closeDrawer();
+                      })
+                      .catch((err: unknown) => {
+                        admin.toast(err instanceof Error ? err.message : "Could not delete.");
+                      });
+                  }}
+                >
+                  Delete
                 </Btn>
               </div>
             ) : null}

@@ -18,15 +18,24 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AppHeader } from "../components/AppHeader";
+import { AuthImage } from "../components/AuthImage";
 import { classifiedMore, ConditionPill, LINE, ListingGrid, listingTags, postedLabel } from "../components/ClassifiedCard";
+import { OsmWebMap } from "../components/OsmWebMap";
 import { KeyboardScreen, useKeyboardScroll } from "../components/KeyboardScreen";
 import { PressScale } from "../components/PressScale";
-import { useSavedListings } from "../context/SavedListings";
-import { catalogMeta, listingById, listingsFor, type CatalogItem } from "../data/catalog";
+import { useAuth } from "../context/AuthContext";
+import { isProvider } from "../demo";
+import { catalogMeta, listingById, type CatalogItem } from "../data/catalog";
+import { liveListingById, listingToCatalog } from "../data/liveListings";
+import { fetchListing, postListingComment, postListingReview, toggleListingSave, type ApiListing } from "../listingsApi";
+import { emitListingsChanged, subscribeListingsChanged } from "../listingsRefresh";
+import { openChatThread } from "../navigation/browse";
 import { richFor, type Review } from "../data/listingDetails";
+import { friendlyError } from "../api";
+import { startListingChat } from "../chatApi";
+import { mapsDirectionsUrl } from "../geo";
 
 const GREEN = "#1B7D2C";
-const PHONE = "+9779812345678";
 const { width: SCREEN_W } = Dimensions.get("window");
 const PHOTO_H = Math.round(SCREEN_W * 0.72);
 
@@ -37,8 +46,29 @@ const infoLinks = ["Safety Tips", "Posting Rules", "FAQ", "Terms of Use", "Priva
 export function ListingDetailScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
-  const { has, toggle } = useSavedListings();
-  const item = listingById(route.params?.id ?? "");
+  const { user } = useAuth();
+  const id = String(route.params?.id ?? "");
+  const manage = Boolean(route.params?.manage);
+  const [item, setItem] = useState<CatalogItem | undefined>(listingById(id) || liveListingById(id));
+  const [live, setLive] = useState<ApiListing | null>(null);
+
+  useEffect(() => {
+    const cached = listingById(id) || liveListingById(id);
+    if (cached) setItem(cached);
+    if (!/^[0-9a-f-]{36}$/i.test(id)) return;
+    const load = () => {
+      void fetchListing(id)
+        .then((row) => {
+          setLive(row);
+          setItem(listingToCatalog(row));
+        })
+        .catch(() => {
+          if (!cached) setItem(undefined);
+        });
+    };
+    load();
+    return subscribeListingsChanged(load);
+  }, [id]);
 
   if (!item) {
     return (
@@ -51,11 +81,36 @@ export function ListingDetailScreen() {
     );
   }
 
+  const isOwner = Boolean(live && user?.id && live.owner_id === user.id) || (manage && isProvider(user));
+
   return (
     <View style={{ flex: 1, backgroundColor: "#fff" }}>
-      <AppHeader onClose={() => navigation.goBack()} right="bell-chat" bellCount={3} />
-      <KeyboardScreen contentStyle={{ paddingBottom: 28 }} style={{ backgroundColor: "#fff" }}>
-        <ListingBody item={item} navigation={navigation} saved={has(item.id)} toggle={() => toggle(item.id)} />
+      <AppHeader onClose={() => navigation.goBack()} showPro={isOwner} />
+      <KeyboardScreen
+        contentStyle={{ paddingBottom: 28 }}
+        style={{ backgroundColor: "#fff" }}
+        onRefresh={async () => {
+          if (!/^[0-9a-f-]{36}$/i.test(id)) {
+            emitListingsChanged();
+            return;
+          }
+          try {
+            const row = await fetchListing(id);
+            setLive(row);
+            setItem(listingToCatalog(row));
+          } catch {
+            emitListingsChanged();
+          }
+        }}
+      >
+        <ListingBody
+          item={item}
+          live={live}
+          isOwner={isOwner}
+          navigation={navigation}
+          saved={Boolean(live?.saved_by_me)}
+          onSaved={setLive}
+        />
       </KeyboardScreen>
     </View>
   );
@@ -63,33 +118,42 @@ export function ListingDetailScreen() {
 
 function ListingBody({
   item,
+  live,
+  isOwner,
   navigation,
   saved,
-  toggle,
+  onSaved,
 }: {
   item: CatalogItem;
+  live: ApiListing | null;
+  isOwner: boolean;
   navigation: any;
   saved: boolean;
-  toggle: () => void;
+  onSaved: (row: ApiListing) => void;
 }) {
+  const { user } = useAuth();
   const insets = useSafeAreaInsets();
+  const listingId = live?.id || item.id;
   const meta = catalogMeta[item.key];
-  const rich = useMemo(() => richFor(item), [item]);
-  const related = listingsFor(item.key).filter((row) => row.id !== item.id).slice(0, 6);
+  const rich = useMemo(() => richFor(item, live), [item, live]);
+  const related: CatalogItem[] = [];
   const galleryRef = useRef<FlatList<number>>(null);
   const [photo, setPhoto] = useState(0);
   const [tab, setTab] = useState<TabKey>("description");
   const [more, setMore] = useState(false);
   const [lightbox, setLightbox] = useState(false);
   const [comment, setComment] = useState("");
-  const [comments, setComments] = useState<string[]>([]);
+  const [reviewText, setReviewText] = useState("");
+  const [rating, setRating] = useState(5);
+  const [busy, setBusy] = useState(false);
+  const marketplace = item.key === "used" || item.key === "electronics";
 
   useEffect(() => {
     setPhoto(0);
     setTab("description");
     setMore(false);
     setComment("");
-    setComments([]);
+    setReviewText("");
     galleryRef.current?.scrollToOffset({ offset: 0, animated: false });
   }, [item.id]);
 
@@ -99,13 +163,38 @@ function ListingBody({
   }
 
   async function callSeller() {
-    const url = `tel:${PHONE}`;
+    const number = live?.contact_phone || rich.seller.phone;
+    if (!number) {
+      Alert.alert("Call seller", "This listing has no phone number.");
+      return;
+    }
+    const url = `tel:${number}`;
     if (await Linking.canOpenURL(url)) await Linking.openURL(url);
-    else Alert.alert("Call seller", PHONE);
+    else Alert.alert("Call seller", number);
   }
 
-  function chatSeller() {
-    Alert.alert("Chat", `Demo chat with ${rich.seller.name}. Mention “${item.title}” from NAJIK.`);
+  async function chatSeller() {
+    if (!user) {
+      Alert.alert("Sign in", "Sign in to chat about this listing.");
+      return;
+    }
+    if (isOwner || (live?.owner_id && live.owner_id === user.id)) {
+      Alert.alert("Chat", "This is your listing. Buyers will message you here.");
+      return;
+    }
+    if (!/^[0-9a-f-]{36}$/i.test(listingId)) {
+      Alert.alert("Chat", "Chat is available on live listings.");
+      return;
+    }
+    setBusy(true);
+    try {
+      const thread = await startListingChat(listingId);
+      openChatThread(navigation, thread.id);
+    } catch (err) {
+      Alert.alert("Chat", friendlyError(err, "Could not start chat."));
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function shareListing() {
@@ -117,16 +206,14 @@ function ListingBody({
   }
 
   const generalRows = [
-    { label: "AD ID", value: item.id.toUpperCase() },
     { label: "Category", value: meta.title },
     { label: "Location", value: item.location },
-    { label: "Delivery", value: item.key === "electronics" || item.key === "used" ? "Not Available" : "Meetup / visit" },
-    { label: "Ads Posted", value: item.time },
-    { label: "Ads Expiry", value: "16 Sep 2026" },
+    { label: "Posted", value: item.time },
   ];
 
   return (
     <>
+      {rich.gallery.length ? (
       <View style={{ height: PHOTO_H, backgroundColor: "#F3F4F6" }}>
         <FlatList
           ref={galleryRef}
@@ -139,7 +226,11 @@ function ListingBody({
           getItemLayout={(_, i) => ({ length: SCREEN_W, offset: SCREEN_W * i, index: i })}
           renderItem={({ item: src }) => (
             <Pressable onPress={() => setLightbox(true)}>
-              <Image source={src} style={{ width: SCREEN_W, height: PHOTO_H, backgroundColor: "#E8EEF0" }} resizeMode="cover" />
+              {typeof src === "number" ? (
+                <Image source={src} style={{ width: SCREEN_W, height: PHOTO_H, backgroundColor: "#E8EEF0" }} resizeMode="cover" />
+              ) : (
+                <AuthImage uri={src.uri} style={{ width: SCREEN_W, height: PHOTO_H, backgroundColor: "#E8EEF0" }} />
+              )}
             </Pressable>
           )}
         />
@@ -159,6 +250,7 @@ function ListingBody({
           </Text>
         </View>
       </View>
+      ) : null}
 
       <View style={{ flexDirection: "row", alignItems: "center", flexWrap: "wrap", paddingHorizontal: 16, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: LINE }}>
         <Ionicons name="eye-outline" size={15} color="#6B7280" />
@@ -199,41 +291,100 @@ function ListingBody({
         </View>
 
         <View style={{ flexDirection: "row", gap: 10, marginTop: 14 }}>
-          <PressScale
-            onPress={toggle}
-            style={{
-              flex: 1,
-              borderWidth: 1,
-              borderColor: "#C4C7CC",
-              borderRadius: 6,
-              height: 44,
-              flexDirection: "row",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 6,
-            }}
-          >
-            <Ionicons name={saved ? "bookmark" : "bookmark-outline"} size={16} color="#111" />
-            <Text style={{ fontWeight: "700", fontSize: 13, color: "#111" }}>{saved ? "Saved" : "Save for later"}</Text>
-          </PressScale>
-          <PressScale
-            onPress={chatSeller}
-            style={{
-              flex: 1,
-              borderWidth: 1,
-              borderColor: "#C4C7CC",
-              borderRadius: 6,
-              height: 44,
-              flexDirection: "row",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 6,
-            }}
-          >
-            <Ionicons name="chatbubble-outline" size={16} color="#111" />
-            <Text style={{ fontWeight: "700", fontSize: 13, color: "#111" }}>Start a chat</Text>
-          </PressScale>
+          {isOwner ? (
+            <>
+              <PressScale
+                onPress={() => navigation.navigate("EditListing", { listingId: item.id })}
+                style={{
+                  flex: 1,
+                  backgroundColor: GREEN,
+                  borderRadius: 6,
+                  height: 44,
+                  flexDirection: "row",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 6,
+                }}
+              >
+                <Ionicons name="create-outline" size={16} color="#fff" />
+                <Text style={{ fontWeight: "800", fontSize: 13, color: "#fff" }}>Edit listing</Text>
+              </PressScale>
+            </>
+          ) : (
+            <>
+              <PressScale
+                onPress={() => {
+                  if (!live) return;
+                  void toggleListingSave(live.id)
+                    .then(onSaved)
+                    .catch((err) => Alert.alert("Save", err instanceof Error ? err.message : "Sign in to save listings."));
+                }}
+                style={{
+                  flex: 1,
+                  borderWidth: 1,
+                  borderColor: "#C4C7CC",
+                  borderRadius: 6,
+                  height: 44,
+                  flexDirection: "row",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 6,
+                }}
+              >
+                <Ionicons name={saved ? "bookmark" : "bookmark-outline"} size={16} color="#111" />
+                <Text style={{ fontWeight: "700", fontSize: 13, color: "#111" }}>{saved ? "Saved" : "Save for later"}</Text>
+              </PressScale>
+              <PressScale
+                onPress={() => {
+                  if (!busy) void chatSeller();
+                }}
+                style={{
+                  flex: 1,
+                  borderWidth: 1,
+                  borderColor: "#C4C7CC",
+                  borderRadius: 6,
+                  height: 44,
+                  flexDirection: "row",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 6,
+                  opacity: busy ? 0.6 : 1,
+                }}
+              >
+                <Ionicons name="chatbubble-outline" size={16} color="#111" />
+                <Text style={{ fontWeight: "700", fontSize: 13, color: "#111" }}>{busy ? "Starting…" : "Start a chat"}</Text>
+              </PressScale>
+            </>
+          )}
         </View>
+        {!isOwner && marketplace ? (
+          <PressScale
+            onPress={callSeller}
+            style={{
+              marginTop: 10,
+              borderWidth: 1,
+              borderColor: "#C4C7CC",
+              borderRadius: 6,
+              height: 44,
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 6,
+            }}
+          >
+            <Ionicons name="call-outline" size={16} color="#111" />
+            <Text style={{ fontWeight: "700", fontSize: 13, color: "#111" }}>Call</Text>
+          </PressScale>
+        ) : null}
+        {isOwner && live?.status === "pending" ? (
+          <Text style={{ marginTop: 10, color: "#F59E0B", fontSize: 12, fontWeight: "700" }}>Pending admin approval. Buyers cannot see this listing yet.</Text>
+        ) : null}
+        {isOwner && live?.has_pending_edit ? (
+          <Text style={{ marginTop: 10, color: "#F59E0B", fontSize: 12, fontWeight: "700" }}>Your edit is with NAJIK admin. The live listing stays unchanged until they approve it.</Text>
+        ) : null}
+        {isOwner && live?.status === "rejected" && live.admin_reason ? (
+          <Text style={{ marginTop: 10, color: "#E53935", fontSize: 12, fontWeight: "700" }}>Rejected: {live.admin_reason}</Text>
+        ) : null}
 
         <View style={{ backgroundColor: "#F7F7F7", padding: 10, marginTop: 12, borderRadius: 4 }}>
           <Text style={{ color: "#4B5563", fontSize: 12, lineHeight: 18 }}>
@@ -251,7 +402,7 @@ function ListingBody({
       <View style={{ flexDirection: "row", alignItems: "flex-end", marginTop: 16, paddingHorizontal: 8, borderBottomWidth: 1, borderBottomColor: LINE }}>
         {(["description", "comments", "location"] as TabKey[]).map((key) => {
           const on = tab === key;
-          const label = key === "description" ? "Description" : key === "comments" ? `Comments (${rich.reviewCount + comments.length})` : "Location";
+          const label = key === "description" ? "Description" : key === "comments" ? `Comments (${live?.comment_count || rich.reviews.length})` : "Location";
           return (
             <Pressable key={key} onPress={() => setTab(key)} style={{ paddingHorizontal: 12, paddingTop: 10 }}>
               <Text style={{ fontWeight: on ? "700" : "600", fontSize: 14, color: on ? "#111" : "#9AA0A6" }}>{label}</Text>
@@ -270,9 +421,11 @@ function ListingBody({
           <Text style={{ color: "#374151", fontSize: 14, lineHeight: 22 }} numberOfLines={more ? undefined : 8}>
             {rich.description}
           </Text>
-          <Pressable onPress={() => setMore((v) => !v)} hitSlop={8} style={{ marginTop: 8 }}>
-            <Text style={{ color: GREEN, fontWeight: "700", fontSize: 13 }}>{more ? "Show less" : "Read more"}</Text>
-          </Pressable>
+          {rich.description.length > 180 ? (
+            <Pressable onPress={() => setMore((v) => !v)} hitSlop={8} style={{ marginTop: 8 }}>
+              <Text style={{ color: GREEN, fontWeight: "700", fontSize: 13 }}>{more ? "Show less" : "Read more"}</Text>
+            </Pressable>
+          ) : null}
 
           {rich.highlights.map((row) => (
             <View key={row} style={{ flexDirection: "row", alignItems: "flex-start", gap: 8, marginTop: 8 }}>
@@ -292,34 +445,74 @@ function ListingBody({
       {tab === "comments" ? (
         <CommentsTab
           reviews={rich.reviews}
-          comments={comments}
+          comments={(live?.comments || []).map((row) => ({ name: row.author_name || "Buyer", text: row.text, time: row.created_at }))}
           comment={comment}
           setComment={setComment}
+          reviewText={reviewText}
+          setReviewText={setReviewText}
+          rating={rating}
+          setRating={setRating}
+          canReview={!isOwner && Boolean(live)}
           onPost={() => {
-            if (!comment.trim()) return;
-            setComments((p) => [...p, comment.trim()]);
-            setComment("");
+            if (!live || !comment.trim() || busy) return;
+            setBusy(true);
+            void postListingComment(live.id, comment.trim())
+              .then((row) => {
+                onSaved(row);
+                setComment("");
+              })
+              .catch((err) => Alert.alert("Comment", err instanceof Error ? err.message : "Sign in to comment."))
+              .finally(() => setBusy(false));
+          }}
+          onReview={() => {
+            if (!live || !reviewText.trim() || busy) return;
+            setBusy(true);
+            void postListingReview(live.id, rating, reviewText.trim())
+              .then((row) => {
+                onSaved(row);
+                setReviewText("");
+              })
+              .catch((err) => Alert.alert("Review", err instanceof Error ? err.message : "Sign in to review."))
+              .finally(() => setBusy(false));
           }}
         />
       ) : null}
 
       {tab === "location" ? (
         <View style={{ paddingHorizontal: 16, paddingTop: 16 }}>
+          {item.lat != null && item.lng != null ? (
+            <View style={{ height: 220, borderRadius: 14, overflow: "hidden", marginBottom: 12, backgroundColor: "#E8EEF3" }}>
+              <OsmWebMap
+                mode="browse"
+                center={{ lat: item.lat, lng: item.lng }}
+                zoom={16}
+                markers={[{ id: item.id, lat: item.lat, lng: item.lng, label: item.price, kind: "price" }]}
+              />
+            </View>
+          ) : null}
           <PressScale
-            onPress={() => Alert.alert("Location", `${item.location}\nOpen Google Maps from your phone for directions.`)}
+            onPress={() => {
+              if (item.lat != null && item.lng != null) {
+                void Linking.openURL(mapsDirectionsUrl({ lat: item.lat, lng: item.lng }));
+                return;
+              }
+              void Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(item.location)}`);
+            }}
             style={{ flexDirection: "row", alignItems: "center", borderWidth: 1, borderColor: LINE, padding: 14 }}
           >
             <Ionicons name="location" size={22} color={GREEN} />
             <View style={{ flex: 1, marginLeft: 12 }}>
               <Text style={{ fontWeight: "700", fontSize: 14, color: "#111" }}>{item.location}</Text>
-              <Text style={{ color: "#6B7280", fontSize: 12, marginTop: 4 }}>Tap for directions</Text>
+              <Text style={{ color: "#6B7280", fontSize: 12, marginTop: 4 }}>
+                {item.lat != null ? "Open directions in Google Maps" : "Address only — seller has not pinned a map point yet"}
+              </Text>
             </View>
             <Ionicons name="navigate-outline" size={18} color={GREEN} />
           </PressScale>
         </View>
       ) : null}
 
-      {related.length ? (
+      {related.length && !live ? (
         <View style={{ paddingTop: 22, paddingHorizontal: 16 }}>
           <Text style={{ fontWeight: "800", fontSize: 16, color: "#111", marginBottom: 10 }}>Similar Products</Text>
           <ListingGrid items={related} />
@@ -396,24 +589,39 @@ function CommentsTab({
   comments,
   comment,
   setComment,
+  reviewText,
+  setReviewText,
+  rating,
+  setRating,
+  canReview,
   onPost,
+  onReview,
 }: {
   reviews: Review[];
-  comments: string[];
+  comments: { name: string; text: string; time: string }[];
   comment: string;
   setComment: (v: string) => void;
+  reviewText: string;
+  setReviewText: (v: string) => void;
+  rating: number;
+  setRating: (v: number) => void;
+  canReview: boolean;
   onPost: () => void;
+  onReview: () => void;
 }) {
   const { onInputFocus } = useKeyboardScroll();
   return (
     <View style={{ paddingHorizontal: 16, paddingTop: 14 }}>
+      {reviews.length === 0 && comments.length === 0 ? (
+        <Text style={{ color: "#6B7280", fontSize: 13, marginBottom: 12 }}>No comments or reviews yet.</Text>
+      ) : null}
       {reviews.map((review) => (
-        <CommentRow key={review.name} review={review} />
+        <CommentRow key={`${review.name}-${review.text}`} review={review} />
       ))}
-      {comments.map((text, i) => (
-        <View key={i} style={{ paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: LINE }}>
-          <Text style={{ fontWeight: "700", fontSize: 13 }}>You</Text>
-          <Text style={{ color: "#4B5563", fontSize: 13, marginTop: 6, lineHeight: 20 }}>{text}</Text>
+      {comments.map((row, i) => (
+        <View key={`${row.time}-${i}`} style={{ paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: LINE }}>
+          <Text style={{ fontWeight: "700", fontSize: 13 }}>{row.name}</Text>
+          <Text style={{ color: "#4B5563", fontSize: 13, marginTop: 6, lineHeight: 20 }}>{row.text}</Text>
         </View>
       ))}
       <View style={{ flexDirection: "row", alignItems: "center", marginTop: 14, gap: 8 }}>
@@ -429,6 +637,30 @@ function CommentsTab({
           <Text style={{ color: "#fff", fontWeight: "800", fontSize: 13 }}>Post</Text>
         </PressScale>
       </View>
+      {canReview ? (
+        <View style={{ marginTop: 16 }}>
+          <Text style={{ fontWeight: "800", marginBottom: 8 }}>Leave a review</Text>
+          <View style={{ flexDirection: "row", gap: 4, marginBottom: 8 }}>
+            {[1, 2, 3, 4, 5].map((n) => (
+              <Pressable key={n} onPress={() => setRating(n)}>
+                <Ionicons name="star" size={20} color={n <= rating ? "#F5C518" : "#E6E8EC"} />
+              </Pressable>
+            ))}
+          </View>
+          <TextInput
+            value={reviewText}
+            onChangeText={setReviewText}
+            onFocus={onInputFocus}
+            placeholder="How was this listing?"
+            placeholderTextColor="#9AA0A6"
+            style={{ borderWidth: 1, borderColor: LINE, borderRadius: 6, minHeight: 70, paddingHorizontal: 12, paddingVertical: 10, fontSize: 13, textAlignVertical: "top" }}
+            multiline
+          />
+          <PressScale onPress={onReview} style={{ marginTop: 8, backgroundColor: GREEN, height: 44, borderRadius: 6, alignItems: "center", justifyContent: "center" }}>
+            <Text style={{ color: "#fff", fontWeight: "800" }}>Submit review</Text>
+          </PressScale>
+        </View>
+      ) : null}
     </View>
   );
 }

@@ -20,8 +20,9 @@ Never let the keypad cover inputs or buttons. Every form/screen with TextInput m
 Buttons and tabs switch instantly. Do not use spring/scale press animations, screen-transition animations, or a loading spinner that delays navigation.
 
 ## Account types
-Welcome screen only chooses the path. Google / Apple / email / phone login is the **second page**.
-- **User** (buyer): Continue as User → login page → app (Home · Explore · Post · Saved · Profile)
-- **Service Provider** (seller): Continue as Service Provider → apply form (name, address, contact, phone, email, nagrita, photo, service type). Status is **pending** until admin verifies. They cannot post until verified.
-Admin frontend queue: `/admin/providers`
+The mockup **Login** screen is the common sign-in for buyers and sellers (logo, 7 icons, skyline, Google / Apple / phone card). After **manual logout**, open this Login page — not Welcome.
+- **Create an account** on Login opens the User vs Service Provider choice, then the matching create form.
+- **User** (buyer): create form (name, phone, password) → OTP (`1234`) → Login → app. Same phone/email cannot also be a seller.
+- **Service Provider** (seller): create form (name, phone, password) → OTP → KYC apply form. Status is **pending** until admin verifies. They cannot post until verified. Approved listings appear in the buyer feed; pending listings wait in `/admin/listing-queue`.
+Admin frontend queues: `/admin/providers` (KYC), `/admin/listing-queue` (listings)
 ---

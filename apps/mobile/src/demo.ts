@@ -1,17 +1,19 @@
 import type { AppUser } from "./types";
 
-export const DEMO_USER: AppUser = {
-  full_name: "Sunil K. Sah",
-  phone: "9800000000",
-  email: "sunil@najik.local",
-  account_type: "user",
-  verification_status: "none",
-  phone_verified: true,
-  email_verified: true,
-};
-
 export function isProvider(user?: { account_type?: string } | null) {
   return user?.account_type === "provider";
+}
+
+export function contactVerified(user?: AppUser | null) {
+  return Boolean(user?.phone_verified || user?.email_verified);
+}
+
+export function needsContactVerify(user?: AppUser | null) {
+  return isProvider(user) && !contactVerified(user);
+}
+
+export function needsSellerApplication(user?: AppUser | null) {
+  return isProvider(user) && contactVerified(user) && !user?.application_id;
 }
 
 export function isPendingProvider(user?: AppUser | null) {

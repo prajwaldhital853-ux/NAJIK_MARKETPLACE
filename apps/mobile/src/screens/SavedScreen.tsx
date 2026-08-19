@@ -3,9 +3,12 @@ import { useNavigation } from "@react-navigation/native";
 import { useMemo, useState } from "react";
 import { Image, Pressable, ScrollView, Text, View } from "react-native";
 import { AppHeader } from "../components/AppHeader";
+import { useAppRefreshControl } from "../components/KeyboardScreen";
 import { PressScale } from "../components/PressScale";
 import { useSavedListings } from "../context/SavedListings";
 import { catalogItems, type CatalogItem } from "../data/catalog";
+import { fetchListingFeed } from "../listingsApi";
+import { listingsToCatalog, liveListingById } from "../data/liveListings";
 import { openListing } from "../navigation/browse";
 import { colors, shadow } from "../theme";
 
@@ -27,7 +30,7 @@ type SavedItem = {
   location: string;
   price: string;
   savedOn: string;
-  photo: number;
+  photo?: number | { uri: string };
   beds?: number;
   baths?: number;
   sqft?: string;
@@ -38,56 +41,6 @@ type SavedItem = {
   rating?: string;
   reviews?: string;
 };
-
-const items: SavedItem[] = [
-  {
-    id: "s1",
-    category: "Property",
-    title: "3 BHK Modern House",
-    location: "Lahan, Siraha",
-    price: "Rs. 25,00,000",
-    savedOn: "16 May 2024",
-    photo: require("../../assets/listings/house.jpg"),
-    beds: 3,
-    baths: 2,
-    sqft: "1,800 Sq.ft",
-  },
-  {
-    id: "s2",
-    category: "Vehicle",
-    title: "Hyundai Creta 2022",
-    location: "Lahan, Siraha",
-    price: "Rs. 28,50,000",
-    savedOn: "12 May 2024",
-    photo: require("../../assets/listings/car.jpg"),
-    fuel: "Petrol",
-    trans: "Automatic",
-    km: "18,000 km",
-  },
-  {
-    id: "s3",
-    category: "Job",
-    title: "Marketing Manager",
-    company: "WebTech Solutions",
-    location: "Lahan, Siraha",
-    price: "Rs. 45,000 /mo",
-    savedOn: "08 May 2024",
-    photo: require("../../assets/listings/jobs.jpg"),
-    tags: ["Full Time", "On-site"],
-  },
-  {
-    id: "s4",
-    category: "Service",
-    title: "Plumbing Service",
-    company: "HomeFix Solutions",
-    location: "Lahan, Siraha",
-    price: "Rs. 1,500 /visit",
-    savedOn: "02 May 2024",
-    photo: require("../../assets/listings/tools.jpg"),
-    rating: "4.8",
-    reviews: "120 reviews",
-  },
-];
 
 const tabMap: Record<string, SavedItem["category"] | "All"> = {
   All: "All",
@@ -108,13 +61,6 @@ const catalogCategory: Record<CatalogItem["key"], SavedItem["category"]> = {
   others: "Service",
 };
 
-const demoToCatalog: Record<string, string> = {
-  s1: "p1",
-  s2: "v1",
-  s3: "j1",
-  s4: "s1",
-};
-
 function fromCatalog(item: CatalogItem): SavedItem {
   return {
     id: item.id,
@@ -133,23 +79,25 @@ export function SavedScreen() {
   const navigation = useNavigation<any>();
   const { ids, remove } = useSavedListings();
   const [tab, setTab] = useState("All");
-  const [saved, setSaved] = useState(items);
   const [banner, setBanner] = useState(true);
   const filter = tabMap[tab];
   const extras = useMemo(
-    () => catalogItems.filter((item) => ids.includes(item.id)).map(fromCatalog),
+    () =>
+      ids
+        .map((id) => catalogItems.find((item) => item.id === id) || liveListingById(id))
+        .filter((item): item is CatalogItem => Boolean(item))
+        .map(fromCatalog),
     [ids],
   );
-  const merged = useMemo(() => {
-    const demoRows = saved.filter((row) => !ids.includes(demoToCatalog[row.id] ?? ""));
-    return [...extras, ...demoRows];
-  }, [extras, saved, ids]);
-  const list = filter === "All" ? merged : merged.filter((item) => item.category === filter);
+  const list = filter === "All" ? extras : extras.filter((item) => item.category === filter);
+  const refreshControl = useAppRefreshControl(async () => {
+    await fetchListingFeed().then(listingsToCatalog).catch(() => undefined);
+  });
 
   return (
     <View style={{ flex: 1, backgroundColor: "#fff" }}>
-      <AppHeader right="bell-chat" bellCount={3} />
-      <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: 36 }} showsVerticalScrollIndicator={false}>
+      <AppHeader right="bell-chat" />
+      <ScrollView refreshControl={refreshControl} contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: 36 }} showsVerticalScrollIndicator={false}>
         <View style={{ flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between" }}>
           <View style={{ flex: 1, paddingRight: 10 }}>
             <Text style={{ fontSize: 26, fontWeight: "800", color: "#111827" }}>Saved Items</Text>
@@ -211,11 +159,8 @@ export function SavedScreen() {
           <SavedCard
             key={item.id}
             item={item}
-            onOpen={() => openListing(navigation, demoToCatalog[item.id] ?? item.id)}
-            onRemove={() => {
-              if (ids.includes(item.id)) remove(item.id);
-              else setSaved((prev) => prev.filter((row) => row.id !== item.id));
-            }}
+            onOpen={() => openListing(navigation, item.id)}
+            onRemove={() => remove(item.id)}
           />
         ))}
 
@@ -259,6 +204,7 @@ export function SavedScreen() {
 function SavedCard({ item, onRemove, onOpen }: { item: SavedItem; onRemove: () => void; onOpen: () => void }) {
   return (
     <PressScale onPress={onOpen} style={{ flexDirection: "row", backgroundColor: "#fff", borderRadius: 16, padding: 10, marginBottom: 12, ...shadow.card }}>
+      {item.photo ? (
       <View style={{ width: 104, height: 104, borderRadius: 12, overflow: "hidden" }}>
         <Image source={item.photo} style={{ width: "100%", height: "100%" }} />
         <View
@@ -290,8 +236,9 @@ function SavedCard({ item, onRemove, onOpen }: { item: SavedItem; onRemove: () =
           <Text style={{ color: "#fff", fontSize: 9, fontWeight: "800" }}>{item.category}</Text>
         </View>
       </View>
+      ) : null}
 
-      <View style={{ flex: 1, marginLeft: 10, marginRight: 8 }}>
+      <View style={{ flex: 1, marginLeft: item.photo ? 10 : 0, marginRight: 8 }}>
         <Text style={{ fontWeight: "800", fontSize: 14, color: "#111827" }} numberOfLines={1}>
           {item.title}
         </Text>

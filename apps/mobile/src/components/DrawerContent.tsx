@@ -1,13 +1,14 @@
 import { Ionicons } from "@expo/vector-icons";
 import type { DrawerContentComponentProps } from "@react-navigation/drawer";
-import { Image, Pressable, ScrollView, Text, View } from "react-native";
+import { Pressable, ScrollView, Text, View } from "react-native";
 import Svg, { Path } from "react-native-svg";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "../context/AuthContext";
 import type { CatalogKey } from "../data/catalog";
 import type { SellerPage } from "../data/sellerHub";
 import { isPendingProvider, isProvider, isRejectedProvider, isVerifiedProvider } from "../demo";
-import { openCategory, openSellerPage } from "../navigation/browse";
+import { openCategory, openMapSearch, openSellerPage } from "../navigation/browse";
+import { Avatar } from "./Avatar";
 import { NajikLogo } from "./NajikLogo";
 import { PressScale } from "./PressScale";
 import { shadow } from "../theme";
@@ -40,7 +41,7 @@ type Item = {
 const sellerMenu: Item[] = [
   { icon: "home", title: "Home", tab: "Home" },
   { icon: "business-outline", title: "My Listings", tab: "Listings" },
-  { icon: "chatbubble-outline", title: "Inquiries", tab: "Inquiries", badge: 12 },
+  { icon: "chatbubble-outline", title: "Inquiries", tab: "Inquiries" },
   { icon: "calendar-outline", title: "Bookings", page: "bookings" },
   { icon: "star-outline", title: "Reviews", page: "reviews" },
   { icon: "card-outline", title: "Earnings", page: "earnings" },
@@ -48,8 +49,8 @@ const sellerMenu: Item[] = [
   { icon: "briefcase-outline", title: "Services", page: "services" },
   { icon: "bookmark-outline", title: "Saved Listings", page: "saved" },
   { icon: "shield-checkmark-outline", title: "Verification & KYC", page: "kyc" },
-  { icon: "notifications-outline", title: "Notification", page: "notifications", badge: 5 },
-  { icon: "mail-outline", title: "Messages", page: "messages" },
+  { icon: "notifications-outline", title: "Notification", page: "notifications" },
+  { icon: "mail-outline", title: "Messages", tab: "ChatInbox" },
   { icon: "settings-outline", title: "Settings", page: "settings" },
   { icon: "headset-outline", title: "Help & Support", page: "help" },
   { icon: "gift-outline", title: "Invite & Earn", page: "invite" },
@@ -69,6 +70,7 @@ type BuyerItem = {
 
 const buyerPrimary: BuyerItem[] = [
   { icon: "home", title: "Home", sub: "Browse nearby", tab: "Home", color: "#1B7D2C", bg: "#E4F6EA" },
+  { icon: "map", title: "Map Search", sub: "Nearby listings on the map", tab: "MapSearch", color: "#1B7D2C", bg: "#E4F6EA" },
   { icon: "home", title: "Property", sub: "Buy, Sell, Rent", tab: "Explore", catalog: "property", color: "#1B7D2C", bg: "#E4F6EA" },
   { icon: "car", title: "Vehicles", sub: "Cars, Bikes and more", tab: "Explore", catalog: "vehicles", color: "#2563EB", bg: "#E8F1FE" },
   { icon: "briefcase", title: "Jobs", sub: "Find jobs near you", tab: "Explore", catalog: "jobs", color: "#EA580C", bg: "#FFF1E0" },
@@ -82,7 +84,8 @@ const buyerPrimary: BuyerItem[] = [
 const buyerSecondary: BuyerItem[] = [
   { icon: "bookmark-outline", title: "My Posts", tab: "Post", color: "#4B5563", bg: "transparent" },
   { icon: "heart-outline", title: "Saved", tab: "Saved", color: "#4B5563", bg: "transparent" },
-  { icon: "notifications-outline", title: "Notifications", tab: "Home", color: "#4B5563", bg: "transparent", badge: 3 },
+  { icon: "chatbubble-ellipses-outline", title: "Messages", tab: "ChatInbox", color: "#4B5563", bg: "transparent" },
+  { icon: "notifications-outline", title: "Notifications", tab: "Home", color: "#4B5563", bg: "transparent" },
   { icon: "settings-outline", title: "Settings", tab: "Profile", color: "#4B5563", bg: "transparent" },
   { icon: "help-circle-outline", title: "Help & Support", tab: "Profile", color: "#4B5563", bg: "transparent" },
   { icon: "power-outline", title: "Logout", tab: "Logout", color: "#E53935", bg: "transparent", danger: true },
@@ -96,7 +99,7 @@ export function DrawerContent({ navigation }: DrawerContentComponentProps) {
   const pending = isPendingProvider(user);
   const verified = isVerifiedProvider(user);
   const rejected = isRejectedProvider(user);
-  const photo = user?.photo_uri || "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&q=80";
+  const photo = user?.photo_uri || "";
   const menu = sellerMenu;
 
   if (!provider) {
@@ -119,6 +122,11 @@ export function DrawerContent({ navigation }: DrawerContentComponentProps) {
   }
 
   function goItem(item: Item) {
+    if (item.tab === "ChatInbox") {
+      navigation.navigate("ChatInbox");
+      navigation.closeDrawer();
+      return;
+    }
     if (item.page) {
       openSellerPage(navigation, item.page);
       navigation.closeDrawer();
@@ -142,10 +150,7 @@ export function DrawerContent({ navigation }: DrawerContentComponentProps) {
         </Pressable>
 
         <View style={{ flexDirection: "row", alignItems: "center", marginTop: k(2) }}>
-          <Image
-            source={{ uri: photo }}
-            style={{ width: k(44), height: k(44), borderRadius: k(22), borderWidth: k(2), borderColor: "#fff" }}
-          />
+          <Avatar name={name} uri={photo || undefined} size={k(44)} />
           <View style={{ flex: 1, marginLeft: k(10) }}>
             <View style={{ flexDirection: "row", alignItems: "center", gap: k(4) }}>
               <Text style={{ color: "#fff", fontWeight: "800", fontSize: k(12) }} numberOfLines={1}>
@@ -156,12 +161,6 @@ export function DrawerContent({ navigation }: DrawerContentComponentProps) {
             <Text style={{ color: "#CFE9DA", fontSize: k(8.5), marginTop: k(2) }} numberOfLines={1}>
               {role}
             </Text>
-            {verified ? (
-              <View style={{ flexDirection: "row", alignItems: "center", gap: k(3), marginTop: k(3) }}>
-                <Ionicons name="star" size={k(9)} color="#F5C518" />
-                <Text style={{ color: "#fff", fontSize: k(8.5), fontWeight: "700" }}>4.9 (128 reviews)</Text>
-              </View>
-            ) : null}
           </View>
         </View>
 
@@ -357,10 +356,10 @@ export function DrawerContent({ navigation }: DrawerContentComponentProps) {
 function BuyerDrawer({ navigation }: { navigation: DrawerContentComponentProps["navigation"] }) {
   const insets = useSafeAreaInsets();
   const { user, logout } = useAuth();
-  const name = user?.full_name || "Sunil K. Sah";
-  const phone = user?.phone ? `+977 ${user.phone}` : "+977 9812345678";
-  const email = user?.email || "sunilksah@example.com";
-  const photo = user?.photo_uri || "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&q=80";
+  const name = user?.full_name || "Account";
+  const phone = user?.phone ? `+977 ${user.phone}` : "";
+  const email = user?.email || "";
+  const photo = user?.photo_uri || "";
   const drawer = navigation.getState();
   const current = drawer.routes[drawer.index];
   const activeCatalog = current.name === "CategoryBrowse" ? (current.params as { key?: CatalogKey } | undefined)?.key : undefined;
@@ -412,17 +411,7 @@ function BuyerDrawer({ navigation }: { navigation: DrawerContentComponentProps["
           ...shadow.card,
         }}
       >
-        <Image
-          source={{ uri: photo }}
-          style={{
-            width: 80,
-            height: 80,
-            borderRadius: 40,
-            backgroundColor: "#E8EEF0",
-            borderWidth: 2.5,
-            borderColor: "#22A34A",
-          }}
-        />
+        <Avatar name={name} uri={photo || undefined} size={80} borderColor="#22A34A" borderWidth={2.5} />
         <View style={{ flex: 1, marginLeft: 14 }}>
           <Text style={{ fontWeight: "800", fontSize: 17, color: "#111827" }} numberOfLines={1}>
             {name}
@@ -443,7 +432,14 @@ function BuyerDrawer({ navigation }: { navigation: DrawerContentComponentProps["
           return (
             <Pressable
               key={item.title}
-              onPress={() => (item.catalog ? goCategory(item.catalog) : goTab(item.tab))}
+              onPress={() => {
+                if (item.tab === "MapSearch") {
+                  openMapSearch(navigation);
+                  navigation.closeDrawer();
+                  return;
+                }
+                item.catalog ? goCategory(item.catalog) : goTab(item.tab);
+              }}
               style={{
                 marginHorizontal: 12,
                 borderRadius: 14,
@@ -482,6 +478,11 @@ function BuyerDrawer({ navigation }: { navigation: DrawerContentComponentProps["
               if (item.danger) {
                 navigation.closeDrawer();
                 await logout();
+                return;
+              }
+              if (item.tab === "ChatInbox") {
+                navigation.navigate("ChatInbox");
+                navigation.closeDrawer();
                 return;
               }
               goTab(item.tab);

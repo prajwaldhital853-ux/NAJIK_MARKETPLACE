@@ -22,7 +22,7 @@ export default function AdsPage() {
   return (
     <ResourcePage
       title="Advertisements / Promotions"
-      summary="10 campaigns: Dashain homes in the valley, TechCorp hiring, Creta push, NAJIK East services. Pause overspend, approve pending kirana/school ads after KYC, and keep featured inventory under 200 Dashain slots. Budget vs spent is live in the drawer."
+      summary="Promoted campaigns. Pause overspend, approve pending ads after KYC, and keep featured inventory in check."
       kpis={[
         { label: "Campaigns", value: ads.length, tone: "brand" },
         { label: "Live", value: ads.filter((a) => a.status === "live").length, tone: "green" },

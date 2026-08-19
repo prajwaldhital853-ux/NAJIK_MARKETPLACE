@@ -1,6 +1,6 @@
 export type AccountType = "user" | "provider";
 export type VerificationStatus = "none" | "pending" | "verified" | "rejected";
-export type ProviderServiceType = "Real Estate" | "Job Poster" | "Vehicles" | "Local Services" | "Other";
+export type ProviderServiceType = "Real Estate" | "Job Poster" | "Vehicles" | "Local Services" | "Used Items" | "Other";
 
 export type AppUser = {
   id?: string;
@@ -17,6 +17,8 @@ export type AppUser = {
   photo_uri?: string;
   phone_verified?: boolean;
   email_verified?: boolean;
+  has_pending_edit?: boolean;
+  date_joined?: string;
 };
 
 export type DealType = "For Sale" | "For Rent";

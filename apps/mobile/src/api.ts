@@ -1,12 +1,55 @@
 import { API_URL } from "./config";
+import { noteForcedOffline } from "./sessionKick";
 
 export class ApiError extends Error {
   status: number;
+  retryAfter?: number;
 
-  constructor(message: string, status: number) {
+  constructor(message: string, status: number, retryAfter?: number) {
     super(message);
     this.status = status;
+    this.retryAfter = retryAfter;
   }
+}
+
+function fromValue(value: unknown, depth = 0): string | null {
+  if (depth > 5 || value == null) return null;
+  if (typeof value === "string") {
+    const text = value.trim();
+    return text && text !== "undefined" ? text : null;
+  }
+  if (typeof value === "number") return null;
+  if (Array.isArray(value)) return fromValue(value[0], depth + 1);
+  if (typeof value === "object") {
+    const obj = value as Record<string, unknown>;
+    if ("detail" in obj) {
+      const nested = fromValue(obj.detail, depth + 1);
+      if (nested) return nested;
+    }
+    for (const key of ["non_field_errors", "identifier", "password", "email", "phone", "code", "reason"]) {
+      const nested = fromValue(obj[key], depth + 1);
+      if (nested) return nested;
+    }
+    for (const [key, nested] of Object.entries(obj)) {
+      if (key === "retry_after") continue;
+      const text = fromValue(nested, depth + 1);
+      if (text) return text;
+    }
+  }
+  return null;
+}
+
+export function firstError(data: unknown) {
+  return fromValue(data) || "Something went wrong. Please try again.";
+}
+
+export function friendlyError(err: unknown, fallback = "Something went wrong. Please try again.") {
+  if (err instanceof ApiError) return err.message || fallback;
+  if (err instanceof TypeError || (err instanceof Error && /network request failed|failed to fetch|networkerror/i.test(err.message))) {
+    return "Cannot reach NAJIK. Check your internet connection and that the server is running.";
+  }
+  if (err instanceof Error && err.message) return err.message;
+  return fallback;
 }
 
 export async function api<T>(
@@ -14,24 +57,37 @@ export async function api<T>(
   options: RequestInit & { token?: string | null } = {},
 ): Promise<T> {
   const { token, headers, ...rest } = options;
-  const response = await fetch(`${API_URL}${path}`, {
-    ...rest,
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...headers,
-    },
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${API_URL}${path}`, {
+      ...rest,
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...headers,
+      },
+    });
+  } catch {
+    throw new ApiError("Cannot reach NAJIK. Check your internet connection and that the server is running.", 0);
+  }
   if (response.status === 204) {
     return undefined as T;
   }
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
-    const detail =
-      (data as { detail?: string; non_field_errors?: string[] }).detail ||
-      (data as { non_field_errors?: string[] }).non_field_errors?.[0] ||
-      "Something went wrong. Please try again.";
-    throw new ApiError(String(detail), response.status);
+    const nested =
+      data && typeof data === "object" && "detail" in data && typeof (data as { detail?: unknown }).detail === "object"
+        ? ((data as { detail?: { retry_after?: number } }).detail?.retry_after)
+        : undefined;
+    const retryAfter =
+      typeof (data as { retry_after?: number }).retry_after === "number"
+        ? (data as { retry_after: number }).retry_after
+        : typeof nested === "number"
+          ? nested
+          : undefined;
+    const err = new ApiError(firstError(data), response.status, retryAfter);
+    noteForcedOffline(err.message, err.status);
+    throw err;
   }
   return data as T;
 }

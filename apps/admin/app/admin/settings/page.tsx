@@ -21,7 +21,7 @@ export default function SettingsPage() {
     <div>
       <PageHeader
         title="Settings"
-        summary="Workspace, theme, KYC SLA and payout window for the NAJIK operations desk. Changes apply to this browser session (demo). Dark mode matches the product mockup; light mode uses the same layout with slate surfaces. Maintenance mode would freeze new seller posts on mobile."
+        summary="Workspace, theme, KYC SLA and payout window for the NAJIK operations desk. Changes apply in this browser session. Dark mode matches the product mockup; light mode uses the same layout with slate surfaces. Maintenance mode would freeze new seller posts on mobile."
       />
       <div className="grid gap-4 lg:grid-cols-2">
         <section className="card-glow space-y-3 rounded-2xl border border-line bg-card p-5">
@@ -78,8 +78,7 @@ export default function SettingsPage() {
             <input type="checkbox" checked={maintenance} onChange={(e) => setMaintenance(e.target.checked)} />
           </label>
           <p className="text-xs leading-relaxed text-muted">
-            Version 2.5.0 · Clusters: api, workers, realtime — all operational. Demo passwords are listed on Staff.
-            Provider queue remains at /admin/providers.
+            Version 2.5.0 · Provider queue remains at /admin/providers.
           </p>
           <Btn
             kind="ghost"

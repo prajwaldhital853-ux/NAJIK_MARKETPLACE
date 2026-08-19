@@ -2,6 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { Alert, Dimensions, Image, Pressable, Share, Text, View } from "react-native";
 import { catalogMeta, listingBlurb, type CatalogItem } from "../data/catalog";
+import { formatDistance } from "../geo";
 import { openListing } from "../navigation/browse";
 import { colors, shadow } from "../theme";
 import { useSavedListings } from "../context/SavedListings";
@@ -106,6 +107,54 @@ export function ListingGrid({ items }: { items: CatalogItem[] }) {
   );
 }
 
+export function ListingList({ items }: { items: CatalogItem[] }) {
+  return (
+    <View>
+      {items.map((item) => (
+        <ListingListRow key={item.id} item={item} />
+      ))}
+    </View>
+  );
+}
+
+export function ListingListRow({ item }: { item: CatalogItem }) {
+  const navigation = useNavigation<any>();
+  return (
+    <PressScale
+      onPress={() => openListing(navigation, item.id)}
+      style={{
+        backgroundColor: "#fff",
+        borderRadius: 14,
+        padding: 10,
+        flexDirection: "row",
+        gap: 10,
+        marginBottom: 10,
+        borderWidth: 1,
+        borderColor: LINE,
+        ...shadow.card,
+      }}
+    >
+      {item.photo ? <Image source={item.photo} style={{ width: 92, height: 92, borderRadius: 10, backgroundColor: "#E8EEF0" }} /> : (
+        <View style={{ width: 92, height: 92, borderRadius: 10, backgroundColor: "#E8EEF0" }} />
+      )}
+      <View style={{ flex: 1 }}>
+        <Text style={{ fontWeight: "800", color: colors.navy }} numberOfLines={2}>{item.title}</Text>
+        <Text style={{ color: GREEN, fontWeight: "800", marginTop: 4 }}>{splitPrice(item.price).amount}</Text>
+        <Text style={{ color: "#6B7280", fontSize: 12, marginTop: 4 }} numberOfLines={1}>
+          {item.location}
+          {item.distanceKm != null ? ` · ${formatDistance(item.distanceKm)}` : ""}
+        </Text>
+        <View style={{ flexDirection: "row", alignItems: "center", marginTop: 6, gap: 8 }}>
+          {item.rating ? <Text style={{ fontSize: 11, fontWeight: "700" }}>★ {item.rating}</Text> : null}
+          {item.verified ? <Text style={{ fontSize: 11, color: GREEN, fontWeight: "800" }}>Verified</Text> : null}
+          <View style={{ flex: 1 }} />
+          <BookmarkBtn id={item.id} />
+        </View>
+      </View>
+    </PressScale>
+  );
+}
+
 function ListingAdCard({
   item,
   width,
@@ -137,17 +186,19 @@ function ListingAdCard({
         ...shadow.card,
       }}
     >
-      <View>
-        <Image source={item.photo} style={{ width: "100%", height: photoH, backgroundColor: "#E8EEF0" }} />
-        {badge ? (
-          <View style={{ position: "absolute", top: 8, left: 8, backgroundColor: GREEN, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 }}>
-            <Text style={{ color: "#fff", fontSize: 9, fontWeight: "800", letterSpacing: 0.3 }}>{badge}</Text>
+      {item.photo ? (
+        <View>
+          <Image source={item.photo} style={{ width: "100%", height: photoH, backgroundColor: "#E8EEF0" }} />
+          {badge ? (
+            <View style={{ position: "absolute", top: 8, left: 8, backgroundColor: GREEN, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 }}>
+              <Text style={{ color: "#fff", fontSize: 9, fontWeight: "800", letterSpacing: 0.3 }}>{badge}</Text>
+            </View>
+          ) : null}
+          <View style={{ position: "absolute", top: 6, right: 6 }}>
+            <HeartSave id={item.id} />
           </View>
-        ) : null}
-        <View style={{ position: "absolute", top: 6, right: 6 }}>
-          <HeartSave id={item.id} />
         </View>
-      </View>
+      ) : null}
 
       <View style={{ padding: compact ? 10 : 14, paddingBottom: compact ? 10 : 12 }}>
         <Text style={{ fontWeight: "800", fontSize: compact ? 13 : 17, color: colors.navy }} numberOfLines={1}>
@@ -168,11 +219,22 @@ function ListingAdCard({
               <Ionicons name="location-outline" size={compact ? 11 : 14} color="#9AA0A6" />
               <Text style={{ color: "#6B7280", fontSize: compact ? 10 : 13, flex: 1 }} numberOfLines={1}>
                 {item.location}
+                {item.distanceKm != null ? ` · ${formatDistance(item.distanceKm)}` : ""}
               </Text>
             </View>
             <View style={{ flexDirection: "row", alignItems: "center", gap: 3, marginTop: compact ? 4 : 6 }}>
-              <Ionicons name="time-outline" size={compact ? 11 : 14} color="#9AA0A6" />
-              <Text style={{ color: "#6B7280", fontSize: compact ? 10 : 13 }}>{compact ? item.time : postedLabel(item.time)}</Text>
+              {item.rating ? (
+                <>
+                  <Ionicons name="star" size={compact ? 11 : 14} color="#F59E0B" />
+                  <Text style={{ color: "#6B7280", fontSize: compact ? 10 : 13 }}>{item.rating}</Text>
+                </>
+              ) : (
+                <>
+                  <Ionicons name="time-outline" size={compact ? 11 : 14} color="#9AA0A6" />
+                  <Text style={{ color: "#6B7280", fontSize: compact ? 10 : 13 }}>{compact ? item.time : postedLabel(item.time)}</Text>
+                </>
+              )}
+              {item.verified ? <Text style={{ color: GREEN, fontSize: compact ? 10 : 12, fontWeight: "800", marginLeft: 4 }}>Verified</Text> : null}
             </View>
           </View>
           <View

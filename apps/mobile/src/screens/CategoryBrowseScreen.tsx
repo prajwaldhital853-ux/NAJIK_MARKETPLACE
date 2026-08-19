@@ -3,18 +3,22 @@ import { useNavigation, useRoute } from "@react-navigation/native";
 import { useEffect, useMemo, useState } from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
 import { AppHeader } from "../components/AppHeader";
-import { LINE, ListingGrid } from "../components/ClassifiedCard";
+import { LINE, ListingGrid, ListingList } from "../components/ClassifiedCard";
 import { KeyboardScreen, useKeyboardScroll } from "../components/KeyboardScreen";
 import { PressScale } from "../components/PressScale";
-import { catalogMeta, listingsFor, priceValue, type CatalogItem, type CatalogKey } from "../data/catalog";
-import { richFor } from "../data/listingDetails";
+import { useBuyerLocation } from "../context/BuyerLocationContext";
+import { catalogMeta, priceValue, type CatalogItem, type CatalogKey } from "../data/catalog";
+import { apiCategoryForKey, listingsToCatalog } from "../data/liveListings";
+import { fetchListingFeed } from "../listingsApi";
+import { subscribeListingsChanged } from "../listingsRefresh";
+import { openMapSearch } from "../navigation/browse";
 import { colors } from "../theme";
 
 const GREEN = "#1B7D2C";
 const PAD = 16;
 
 type FeedTab = "latest" | "recommended";
-type SortKey = "new" | "low" | "high";
+type SortKey = "new" | "popular" | "low" | "high";
 
 export function CategoryBrowseScreen() {
   const navigation = useNavigation<any>();
@@ -28,6 +32,8 @@ export function CategoryBrowseScreen() {
   const [sort, setSort] = useState<SortKey>("new");
   const [grid, setGrid] = useState(true);
   const [feed, setFeed] = useState<FeedTab>("latest");
+  const [live, setLive] = useState<CatalogItem[]>([]);
+  const { feedParams } = useBuyerLocation();
 
   useEffect(() => {
     setFilter(route.params?.filter ?? "All");
@@ -36,25 +42,55 @@ export function CategoryBrowseScreen() {
     setFeed("latest");
   }, [key, route.params?.filter]);
 
+  useEffect(() => {
+    const category = apiCategoryForKey(key);
+    let cancelled = false;
+    const load = () => {
+      void fetchListingFeed({
+        category,
+        q: query.trim() || undefined,
+        ...feedParams,
+      })
+        .then((rows) => {
+          if (cancelled) return;
+          const items = listingsToCatalog(rows);
+          setLive(key === "electronics" ? items.filter((item) => item.key === "electronics") : items);
+        })
+        .catch(() => {
+          if (!cancelled) setLive([]);
+        });
+    };
+    const t = setTimeout(load, 280);
+    const stop = subscribeListingsChanged(load);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+      stop();
+    };
+  }, [key, query, feedParams.place, feedParams.lat, feedParams.lng, feedParams.radius_km]);
+
   const list = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    let rows = listingsFor(key).filter((item) => {
-      const hay = `${item.title} ${item.location} ${item.company ?? ""} ${item.tags.join(" ")} ${item.extra.join(" ")}`.toLowerCase();
-      if (q && !hay.includes(q)) return false;
-      if (filter !== "All" && !item.tags.includes(filter) && item.badge !== filter) return false;
+    let rows = [...live].filter((item) => {
+      if (filter !== "All") {
+        const needle = filter.toLowerCase();
+        const hit = [...item.tags, ...item.extra, item.badge || ""].some((value) => String(value).toLowerCase() === needle);
+        if (!hit) return false;
+      }
       return true;
     });
-    if (feed === "recommended") rows = [...rows].sort((a, b) => richFor(b).rating - richFor(a).rating);
+    if (feed === "recommended") rows = [...rows];
+    else if (sort === "popular") rows = [...rows].sort((a, b) => (b.rating || 0) - (a.rating || 0) || priceValue(b.price) - priceValue(a.price));
     else if (sort === "low") rows = [...rows].sort((a, b) => priceValue(a.price) - priceValue(b.price));
     else if (sort === "high") rows = [...rows].sort((a, b) => priceValue(b.price) - priceValue(a.price));
     return rows;
-  }, [key, query, filter, sort, feed]);
+  }, [key, query, filter, sort, feed, live]);
 
   return (
     <View style={{ flex: 1, backgroundColor: "#F7F8FA" }}>
-      <AppHeader onClose={() => navigation.goBack()} showLocation bellCount={3} />
+      <AppHeader onClose={() => navigation.goBack()} showLocation />
       <KeyboardScreen contentStyle={{ paddingBottom: 28 }} style={{ backgroundColor: "#F7F8FA" }}>
         <BrowseBody
+          catalogKey={key}
           meta={meta}
           count={list.length}
           query={query}
@@ -75,6 +111,7 @@ export function CategoryBrowseScreen() {
 }
 
 function BrowseBody({
+  catalogKey,
   meta,
   count,
   query,
@@ -89,6 +126,7 @@ function BrowseBody({
   setFeed,
   list,
 }: {
+  catalogKey: CatalogKey;
   meta: (typeof catalogMeta)[CatalogKey];
   count: number;
   query: string;
@@ -104,6 +142,7 @@ function BrowseBody({
   list: CatalogItem[];
 }) {
   const { onInputFocus } = useKeyboardScroll();
+  const navigation = useNavigation<any>();
 
   return (
     <>
@@ -174,11 +213,16 @@ function BrowseBody({
           onPress={() => setFeed("recommended")}
         />
         <View style={{ flex: 1 }} />
-        {feed === "latest" ? (
-          <Pressable onPress={() => setSort(sort === "low" ? "high" : sort === "high" ? "new" : "low")} hitSlop={8} style={{ padding: 10 }}>
-            <Ionicons name="swap-vertical-outline" size={18} color="#6B7280" />
-          </Pressable>
-        ) : null}
+        <Pressable
+          onPress={() => setSort(sort === "low" ? "high" : sort === "high" ? "popular" : sort === "popular" ? "new" : "low")}
+          hitSlop={8}
+          style={{ padding: 10 }}
+        >
+          <Ionicons name="swap-vertical-outline" size={18} color="#6B7280" />
+        </Pressable>
+        <Pressable onPress={() => openMapSearch(navigation, { key: catalogKey, q: query })} hitSlop={8} style={{ padding: 10 }}>
+          <Ionicons name="map-outline" size={18} color="#111" />
+        </Pressable>
         <Pressable onPress={() => setGrid(!grid)} hitSlop={8} style={{ padding: 10 }}>
           <Ionicons name={grid ? "list-outline" : "grid-outline"} size={18} color="#111" />
         </Pressable>
@@ -201,7 +245,7 @@ function BrowseBody({
         </View>
       ) : (
         <View style={{ paddingHorizontal: PAD, paddingTop: 14 }}>
-          <ListingGrid items={list} />
+          {grid ? <ListingGrid items={list} /> : <ListingList items={list} />}
         </View>
       )}
     </>

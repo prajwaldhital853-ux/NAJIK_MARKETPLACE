@@ -12,22 +12,37 @@ import {
   Search,
   Sun,
 } from "lucide-react";
-import { ALERTS, INBOX, STAFF } from "@/lib/demo-data";
+import Link from "next/link";
 import { useSession } from "@/lib/session";
 import { useTheme } from "@/lib/theme";
+import { useAdmin } from "@/lib/store";
+import { OPEN_INBOX_KEY } from "@/lib/live-inbox";
 import { Avatar } from "./ui";
 import { CommandPalette } from "./command-palette";
 import { AddModal } from "./add-modal";
+import { InboxList } from "./inbox-list";
 
 export function Topbar({ onMenu }: { onMenu?: () => void }) {
   const { theme, toggle } = useTheme();
-  const { staff, logout, loginAs } = useSession();
+  const { staff, logout } = useSession();
+  const { inbox, inboxCount, inboxReady } = useAdmin();
   const [cmd, setCmd] = useState(false);
   const [add, setAdd] = useState(false);
   const [bell, setBell] = useState(false);
   const [mail, setMail] = useState(false);
   const [menu, setMenu] = useState(false);
   const [full, setFull] = useState(false);
+
+  useEffect(() => {
+    if (!inboxReady) return;
+    if (sessionStorage.getItem(OPEN_INBOX_KEY) !== "1") return;
+    sessionStorage.removeItem(OPEN_INBOX_KEY);
+    if (inboxCount > 0) {
+      setBell(true);
+      setMail(false);
+      setMenu(false);
+    }
+  }, [inboxReady, inboxCount]);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -77,10 +92,17 @@ export function Topbar({ onMenu }: { onMenu?: () => void }) {
           Add New
         </button>
 
-        <IconBtn onClick={() => setBell((v) => !v)} badge={12}>
+        <IconBtn
+          onClick={() => {
+            setBell((v) => !v);
+            setMail(false);
+            setMenu(false);
+          }}
+          badge={inboxCount}
+        >
           <Bell size={15} />
         </IconBtn>
-        <IconBtn onClick={() => setMail((v) => !v)} badge={5}>
+        <IconBtn onClick={() => setMail((v) => !v)}>
           <MessageSquare size={15} />
         </IconBtn>
         <IconBtn onClick={() => void toggleFull()}>{full ? <Minimize size={15} /> : <Maximize size={15} />}</IconBtn>
@@ -96,30 +118,17 @@ export function Topbar({ onMenu }: { onMenu?: () => void }) {
       </header>
 
       {bell ? (
-        <Panel title="Notifications" onClose={() => setBell(false)}>
-          {ALERTS.map((a) => (
-            <a key={a.id} href={a.href} className="block border-b border-line px-4 py-3 hover:bg-elevated">
-              <p className="text-sm text-ink">{a.title}</p>
-              <p className="text-[11px] capitalize text-muted">{a.level}</p>
-            </a>
-          ))}
+        <Panel title={`Notifications${inboxCount ? ` (${inboxCount})` : ""}`} onClose={() => setBell(false)}>
+          <InboxList items={inbox} onOpen={() => setBell(false)} />
+          <Link href="/admin/notifications" onClick={() => setBell(false)} className="block border-t border-line px-4 py-2.5 text-center text-[12px] font-semibold text-brand">
+            Open notifications
+          </Link>
         </Panel>
       ) : null}
 
       {mail ? (
         <Panel title="Messages" onClose={() => setMail(false)}>
-          {INBOX.map((m) => (
-            <div key={m.id} className="flex gap-3 border-b border-line px-4 py-3">
-              <Avatar name={m.from} />
-              <div>
-                <p className="text-sm font-medium text-ink">
-                  {m.from} {m.unread ? <span className="ml-1 inline-block h-1.5 w-1.5 rounded-full bg-red" /> : null}
-                </p>
-                <p className="text-xs text-muted">{m.preview}</p>
-                <p className="mt-1 text-[11px] text-faint">{m.time}</p>
-              </div>
-            </div>
-          ))}
+          <p className="px-4 py-6 text-sm text-muted">No messages.</p>
         </Panel>
       ) : null}
 
@@ -127,25 +136,6 @@ export function Topbar({ onMenu }: { onMenu?: () => void }) {
         <Panel title="Signed in" onClose={() => setMenu(false)}>
           <div className="px-4 py-3 text-sm text-muted">
             {staff?.email}
-            <div className="mt-3 space-y-1">
-              {STAFF.filter((s) => s.status === "active").map((s) => (
-                <button
-                  key={s.id}
-                  type="button"
-                  onClick={() => {
-                    loginAs(s.id);
-                    setMenu(false);
-                  }}
-                  className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left hover:bg-elevated"
-                >
-                  <Avatar name={s.name} id={s.id} size={24} />
-                  <span>
-                    <span className="block text-ink">{s.name}</span>
-                    <span className="text-[11px]">{s.role}</span>
-                  </span>
-                </button>
-              ))}
-            </div>
             <button type="button" onClick={logout} className="mt-4 w-full rounded-xl border border-line py-2 text-sm font-semibold text-ink">
               Log out
             </button>
@@ -184,7 +174,7 @@ function Panel({ title, onClose, children }: { title: string; onClose: () => voi
   return (
     <div className="fixed inset-0 z-40" onClick={onClose}>
       <div
-        className="admin-scroll absolute top-[var(--topbar-h)] right-3 max-h-[min(70vh,480px)] w-[300px] overflow-y-auto border border-line bg-card"
+        className="admin-scroll absolute top-[var(--topbar-h)] right-3 max-h-[min(70vh,480px)] w-[320px] overflow-y-auto border border-line bg-card"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="border-b border-line px-4 py-3 text-sm font-semibold text-ink">{title}</div>

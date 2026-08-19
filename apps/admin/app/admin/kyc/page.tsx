@@ -22,7 +22,7 @@ export default function KycPage() {
     <ResourcePage
       title="KYC / Verification"
       crumb="Dashboard / KYC / User documents"
-      summary="12 citizenship packets (user + provider). Face-match notes sit on each row. Reject altered scans (Nabin Thapa, Sunil Bhattarai) and keep the 24h backlog under 12. Provider nagrita photos also land on the live mobile queue."
+      summary="User document packets for this session. Live seller apply-form submissions land on the provider queue."
       kpis={[
         { label: "Packets", value: kyc.length, tone: "brand" },
         { label: "Pending", value: kyc.filter((k) => k.status === "pending").length, delta: "SLA 24h", tone: "amber" },

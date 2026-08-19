@@ -6,7 +6,7 @@ from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from apps.accounts.models import AppUser
-from apps.accounts.serializers.auth import AppTokenSerializer, RefreshSerializer
+from apps.accounts.serializers.auth import AppTokenSerializer, RefreshSerializer, inactive_auth_error
 
 
 class RefreshView(APIView):
@@ -21,9 +21,11 @@ class RefreshView(APIView):
             if token.get("kind") != "app":
                 return Response({"detail": "Invalid token."}, status=status.HTTP_401_UNAUTHORIZED)
             token.blacklist()
-            user = AppUser.objects.filter(pk=token["user_id"], is_active=True).first()
+            user = AppUser.objects.filter(pk=token["user_id"]).first()
             if user is None:
                 return Response({"detail": "Invalid token."}, status=status.HTTP_401_UNAUTHORIZED)
+            if not user.is_active:
+                return Response({"detail": inactive_auth_error(user)}, status=status.HTTP_401_UNAUTHORIZED)
             return Response(AppTokenSerializer.for_user(user))
         except TokenError:
             return Response({"detail": "Invalid token."}, status=status.HTTP_401_UNAUTHORIZED)

@@ -26,6 +26,8 @@ import {
   LifeBuoy,
 } from "lucide-react";
 import { NAV } from "@/lib/nav";
+import { useAdmin } from "@/lib/store";
+import { CountBadge } from "./inbox-list";
 
 const ICONS: Record<string, React.ReactNode> = {
   layout: <LayoutDashboard size={14} />,
@@ -68,6 +70,7 @@ export function Sidebar({
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const search = searchParams.toString();
+  const { badges } = useAdmin();
   const [open, setOpen] = useState<string>(() => {
     const match = NAV.find((n) => n.href !== "/admin" && pathname.startsWith(n.href));
     return match?.href || "/admin";
@@ -109,7 +112,8 @@ export function Sidebar({
                   }`}
                 >
                   <span className="opacity-80">{ICONS[item.icon]}</span>
-                  <span className="truncate">{item.label}</span>
+                  <span className="min-w-0 flex-1 truncate">{item.label}</span>
+                  <CountBadge count={badges[item.href] || 0} />
                 </Link>
                 {item.children ? (
                   <button
@@ -128,13 +132,14 @@ export function Sidebar({
                       key={child.href}
                       href={child.href}
                       onClick={() => onNavigate?.()}
-                      className={`block truncate rounded px-1.5 py-1 text-[11px] ${
+                      className={`flex items-center gap-2 rounded px-1.5 py-1 text-[11px] ${
                         pathMatches(child.href, pathname, search)
                           ? "font-medium text-brand"
                           : "text-muted hover:text-ink"
                       }`}
                     >
-                      {child.label}
+                      <span className="min-w-0 flex-1 truncate">{child.label}</span>
+                      <CountBadge count={badges[child.href] || 0} />
                     </Link>
                   ))}
                 </div>

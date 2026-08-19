@@ -1,0 +1,199 @@
+import base64
+import re
+import uuid
+
+from django.core.files.base import ContentFile
+from rest_framework import serializers
+
+from apps.verification.models import ProviderApplication
+
+MAX_IMAGE_BYTES = 2 * 1024 * 1024
+DATA_URI = re.compile(r"^data:image/(jpeg|jpg|png|webp);base64,([A-Za-z0-9+/=\s]+)$", re.I)
+
+
+def file_from_data_uri(value: str, prefix: str) -> ContentFile:
+    match = DATA_URI.match((value or "").strip())
+    if not match:
+        raise serializers.ValidationError("Upload a JPEG, PNG, or WebP image.")
+    try:
+        raw = base64.b64decode(re.sub(r"\s+", "", match.group(2)), validate=True)
+    except Exception as exc:
+        raise serializers.ValidationError("Invalid image data.") from exc
+    if len(raw) > MAX_IMAGE_BYTES:
+        raise serializers.ValidationError("Image must be 2 MB or smaller.")
+    ext = match.group(1).lower().replace("jpg", "jpeg")
+    return ContentFile(raw, name=f"{prefix}_{uuid.uuid4().hex[:8]}.{ext}")
+
+
+class ProviderApplicationSerializer(serializers.ModelSerializer):
+    nagrita_uri = serializers.SerializerMethodField()
+    nagrita_back_uri = serializers.SerializerMethodField()
+    photo_uri = serializers.SerializerMethodField()
+    pending_photo_uri = serializers.SerializerMethodField()
+    pending_nagrita_uri = serializers.SerializerMethodField()
+    pending_nagrita_back_uri = serializers.SerializerMethodField()
+    has_pending_edit = serializers.SerializerMethodField()
+    owner_id = serializers.UUIDField(source="owner.id", read_only=True)
+    owner_email = serializers.EmailField(source="owner.email", read_only=True, allow_null=True)
+    owner_phone = serializers.CharField(source="owner.phone", read_only=True, allow_null=True, allow_blank=True)
+    phone_verified = serializers.BooleanField(source="owner.phone_verified", read_only=True)
+    email_verified = serializers.BooleanField(source="owner.email_verified", read_only=True)
+
+    class Meta:
+        model = ProviderApplication
+        fields = (
+            "id",
+            "full_name",
+            "address",
+            "contact",
+            "phone",
+            "email",
+            "service_type",
+            "status",
+            "created_at",
+            "reviewed_at",
+            "owner_id",
+            "owner_email",
+            "owner_phone",
+            "phone_verified",
+            "email_verified",
+            "nagrita_uri",
+            "nagrita_back_uri",
+            "photo_uri",
+            "pending_photo_uri",
+            "pending_nagrita_uri",
+            "pending_nagrita_back_uri",
+            "has_pending_edit",
+            "pending_edit",
+        )
+        read_only_fields = fields
+
+    def get_nagrita_uri(self, obj):
+        return self._file_uri(obj, "nagrita")
+
+    def get_nagrita_back_uri(self, obj):
+        if not obj.nagrita_back:
+            return None
+        return self._file_uri(obj, "nagrita_back")
+
+    def get_photo_uri(self, obj):
+        return self._file_uri(obj, "photo")
+
+    def get_pending_photo_uri(self, obj):
+        if not obj.pending_photo:
+            return None
+        return self._file_uri(obj, "pending_photo")
+
+    def get_pending_nagrita_uri(self, obj):
+        if not obj.pending_nagrita:
+            return None
+        return self._file_uri(obj, "pending_nagrita")
+
+    def get_pending_nagrita_back_uri(self, obj):
+        if not obj.pending_nagrita_back:
+            return None
+        return self._file_uri(obj, "pending_nagrita_back")
+
+    def get_has_pending_edit(self, obj):
+        return obj.has_pending_profile_edit()
+
+    def _file_uri(self, obj, kind):
+        request = self.context.get("request")
+        if not request:
+            return None
+        if request.path.startswith("/api/admin/"):
+            return request.build_absolute_uri(f"/api/admin/verification/applications/{obj.id}/file/{kind}/")
+        return request.build_absolute_uri(f"/api/verification/applications/me/file/{kind}/")
+
+
+class ProviderApplicationCreateSerializer(serializers.Serializer):
+    full_name = serializers.CharField(max_length=150)
+    address = serializers.CharField(max_length=255)
+    contact = serializers.CharField(max_length=80, required=False, allow_blank=True)
+    phone = serializers.CharField(max_length=15)
+    email = serializers.EmailField()
+    service_type = serializers.CharField(max_length=40)
+    nagrita_uri = serializers.CharField()
+    nagrita_back_uri = serializers.CharField()
+    photo_uri = serializers.CharField()
+
+    def validate_nagrita_uri(self, value):
+        return file_from_data_uri(value, "nagrita")
+
+    def validate_nagrita_back_uri(self, value):
+        return file_from_data_uri(value, "nagrita_back")
+
+    def validate_photo_uri(self, value):
+        return file_from_data_uri(value, "photo")
+
+    def create(self, validated_data):
+        nagrita = validated_data.pop("nagrita_uri")
+        nagrita_back = validated_data.pop("nagrita_back_uri")
+        photo = validated_data.pop("photo_uri")
+        return ProviderApplication.objects.create(
+            **validated_data,
+            nagrita=nagrita,
+            nagrita_back=nagrita_back,
+            photo=photo,
+        )
+
+
+class ProviderApplicationStatusSerializer(serializers.Serializer):
+    status = serializers.ChoiceField(
+        choices=(ProviderApplication.STATUS_VERIFIED, ProviderApplication.STATUS_REJECTED)
+    )
+
+
+class ProviderProfileEditSerializer(serializers.Serializer):
+    full_name = serializers.CharField(max_length=150, required=False)
+    address = serializers.CharField(max_length=255, required=False)
+    contact = serializers.CharField(max_length=80, required=False, allow_blank=True)
+    service_type = serializers.CharField(max_length=40, required=False)
+    nagrita_uri = serializers.CharField(required=False, allow_blank=True)
+    nagrita_back_uri = serializers.CharField(required=False, allow_blank=True)
+    photo_uri = serializers.CharField(required=False, allow_blank=True)
+
+    def validate_nagrita_uri(self, value):
+        if not value:
+            return None
+        return file_from_data_uri(value, "nagrita")
+
+    def validate_nagrita_back_uri(self, value):
+        if not value:
+            return None
+        return file_from_data_uri(value, "nagrita_back")
+
+    def validate_photo_uri(self, value):
+        if not value:
+            return None
+        return file_from_data_uri(value, "photo")
+
+
+def clear_pending_profile(app: ProviderApplication):
+    app.pending_edit = {}
+    app.pending_nagrita = ""
+    app.pending_nagrita_back = ""
+    app.pending_photo = ""
+    app.save(update_fields=["pending_edit", "pending_nagrita", "pending_nagrita_back", "pending_photo"])
+
+
+def apply_pending_profile(app: ProviderApplication):
+    edit = app.pending_edit or {}
+    for field in ("full_name", "address", "contact", "service_type"):
+        if field in edit and edit[field] is not None:
+            setattr(app, field, edit[field])
+    if app.pending_nagrita:
+        app.nagrita = app.pending_nagrita
+        app.pending_nagrita = ""
+    if app.pending_nagrita_back:
+        app.nagrita_back = app.pending_nagrita_back
+        app.pending_nagrita_back = ""
+    if app.pending_photo:
+        app.photo = app.pending_photo
+        app.pending_photo = ""
+    app.pending_edit = {}
+    app.save()
+    if app.full_name and app.owner.full_name != app.full_name:
+        app.owner.full_name = app.full_name
+        app.owner.save(update_fields=["full_name"])
+    return app

@@ -37,37 +37,30 @@ export const sellerPageMeta: Record<
   invite: { title: "Invite & Earn", sub: "Share NAJIK, earn credit", icon: "gift", color: "#1B7D2C", bg: "#E4F6EA", photo: require("../../assets/listings/land.jpg") },
 };
 
-export const sellerBookings = [
-  { id: "b1", name: "Ramesh Yadav", job: "House visit · 3 BHK", when: "Today · 4:30 pm", where: "Lahan-3", status: "Upcoming" as const, pay: "Rs. 0", photo: require("../../assets/listings/house.jpg") },
-  { id: "b2", name: "Sita Kumari", job: "Plumbing visit", when: "Tomorrow · 10:00 am", where: "Lahan Bazaar", status: "Upcoming" as const, pay: "Rs. 1,500", photo: require("../../assets/listings/tools.jpg") },
-  { id: "b3", name: "Bikash Sah", job: "Shop walkthrough", when: "Thu · 11:30 am", where: "Main Road", status: "Confirmed" as const, pay: "Rs. 0", photo: require("../../assets/listings/shop.jpg") },
-  { id: "b4", name: "Anita Magar", job: "Car inspection", when: "Mon · Done", where: "Golbazar", status: "Completed" as const, pay: "Rs. 800", photo: require("../../assets/listings/car.jpg") },
-  { id: "b5", name: "Hari Sharma", job: "Land visit", when: "Sun · Cancelled", where: "Lahan-7", status: "Cancelled" as const, pay: "—", photo: require("../../assets/listings/land.jpg") },
-];
+export const sellerBookings: {
+  id: string;
+  name: string;
+  job: string;
+  when: string;
+  where: string;
+  status: "Upcoming" | "Confirmed" | "Completed" | "Cancelled";
+  pay: string;
+  photo: number;
+}[] = [];
 
-export const sellerReviews = [
-  { id: "r1", name: "Ramesh Yadav", rating: 5, text: "On time and very clear about the papers. Visit was easy to book on NAJIK.", time: "2 days ago", listing: "3 BHK Flat" },
-  { id: "r2", name: "Sita Kumari", rating: 5, text: "Fixed the leak the same afternoon. Fair price.", time: "5 days ago", listing: "Plumbing Service" },
-  { id: "r3", name: "Bikash Sah", rating: 4, text: "Good listing photos. Wish the parking note was bigger.", time: "1 week ago", listing: "Shop for Rent" },
-  { id: "r4", name: "Anita Magar", rating: 5, text: "Honest about the car’s kilometres. Test drive was smooth.", time: "2 weeks ago", listing: "Honda Civic" },
-];
+export const sellerReviews: { id: string; name: string; rating: number; text: string; time: string; listing: string }[] = [];
 
 export const weekBars = [
-  { d: "Mon", v: 0.4, n: "4.2k" },
-  { d: "Tue", v: 0.62, n: "6.1k" },
-  { d: "Wed", v: 0.5, n: "5.0k" },
-  { d: "Thu", v: 0.88, n: "8.8k" },
-  { d: "Fri", v: 0.7, n: "7.1k" },
-  { d: "Sat", v: 0.95, n: "9.4k" },
-  { d: "Sun", v: 0.55, n: "5.4k" },
+  { d: "Mon", v: 0, n: "0" },
+  { d: "Tue", v: 0, n: "0" },
+  { d: "Wed", v: 0, n: "0" },
+  { d: "Thu", v: 0, n: "0" },
+  { d: "Fri", v: 0, n: "0" },
+  { d: "Sat", v: 0, n: "0" },
+  { d: "Sun", v: 0, n: "0" },
 ];
 
-export const payouts = [
-  { id: "p1", title: "Visit fees", amount: "+ Rs. 4,500", when: "15 Aug", ok: true },
-  { id: "p2", title: "Boost · 3 BHK Flat", amount: "− Rs. 499", when: "14 Aug", ok: false },
-  { id: "p3", title: "Plumbing job", amount: "+ Rs. 1,500", when: "12 Aug", ok: true },
-  { id: "p4", title: "eSewa payout", amount: "− Rs. 8,000", when: "10 Aug", ok: false },
-];
+export const payouts: { id: string; title: string; amount: string; when: string; ok: boolean }[] = [];
 
 export const promoPacks = [
   { id: "g1", name: "Top of search", days: "7 days", price: "Rs. 499", reach: "3× views", popular: true },
@@ -75,40 +68,21 @@ export const promoPacks = [
   { id: "g3", name: "Urgent badge", days: "14 days", price: "Rs. 199", reach: "More calls", popular: false },
 ];
 
-export const sellerServices = [
-  { id: "sv1", title: "Property visits", sub: "Show homes and land", on: true, price: "Free with listing", photo: require("../../assets/listings/house.jpg") },
-  { id: "sv2", title: "Home plumbing", sub: "Leak, tap, bathroom", on: true, price: "Rs. 1,500 /visit", photo: require("../../assets/listings/tools.jpg") },
-  { id: "sv3", title: "Vehicle inspection", sub: "Local test drive", on: true, price: "Rs. 800", photo: require("../../assets/listings/car.jpg") },
-  { id: "sv4", title: "Shop consultancy", sub: "Rent / sale walkthrough", on: false, price: "Rs. 1,000", photo: require("../../assets/listings/shop.jpg") },
-];
+export const sellerServices: { id: string; title: string; sub: string; on: boolean; price: string; photo: number }[] = [];
 
-export const sellerSaved = [
-  { id: "ss1", title: "Corner shop · Main Road", price: "Rs. 18,000 /mo", where: "Lahan", photo: require("../../assets/listings/shop.jpg") },
-  { id: "ss2", title: "Creta 2022 nearby", price: "Rs. 28,50,000", where: "Lahan-4", photo: require("../../assets/listings/car.jpg") },
-  { id: "ss3", title: "Land 8 Katha", price: "Rs. 32,00,000", where: "Lahan-7", photo: require("../../assets/listings/land.jpg") },
-];
+export const sellerSaved: { id: string; title: string; price: string; where: string; photo: number }[] = [];
 
 export const kycSteps = [
-  { id: "k1", title: "Phone & email", sub: "Verified at signup", done: true },
-  { id: "k2", title: "Citizenship (nagrita)", sub: "Reviewed by NAJIK admin", done: true },
-  { id: "k3", title: "Profile photo", sub: "Face matches ID", done: true },
-  { id: "k4", title: "Service type", sub: "Real Estate & local services", done: true },
+  { id: "k1", title: "Phone & email", sub: "Verified at signup", done: false },
+  { id: "k2", title: "Citizenship (nagrita)", sub: "Reviewed by NAJIK admin", done: false },
+  { id: "k3", title: "Profile photo", sub: "Face matches ID", done: false },
+  { id: "k4", title: "Service type", sub: "Set when you apply", done: false },
   { id: "k5", title: "Bank / eSewa", sub: "Add for payouts", done: false },
 ];
 
-export const sellerNotes = [
-  { id: "n1", title: "New inquiry on 3 BHK Flat", sub: "Ramesh wants a weekend visit", time: "10 min", unread: true, icon: "chatbubble" },
-  { id: "n2", title: "Booking confirmed", sub: "Sita · plumbing tomorrow 10am", time: "1 hr", unread: true, icon: "calendar" },
-  { id: "n3", title: "You got a 5★ review", sub: "Anita Magar · Honda Civic", time: "Yesterday", unread: false, icon: "star" },
-  { id: "n4", title: "Boost ending soon", sub: "Homepage card expires in 8 hours", time: "Yesterday", unread: false, icon: "megaphone" },
-  { id: "n5", title: "KYC reminder", sub: "Add eSewa to receive payouts", time: "2 days", unread: false, icon: "shield-checkmark" },
-];
+export const sellerNotes: { id: string; title: string; sub: string; time: string; unread: boolean; icon: string }[] = [];
 
-export const sellerThreads = [
-  { id: "m1", name: "Ramesh Yadav", last: "Is the flat still free this Saturday?", time: "10m", unread: 2, photo: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&q=80" },
-  { id: "m2", name: "Sita Kumari", last: "I’ll be home after 10. Gate is blue.", time: "1h", unread: 0, photo: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=200&q=80" },
-  { id: "m3", name: "Bikash Sah", last: "Thanks, see you at the shop.", time: "1d", unread: 0, photo: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=200&q=80" },
-];
+export const sellerThreads: { id: string; name: string; last: string; time: string; unread: number; photo: string }[] = [];
 
 export const helpFaqs = [
   { q: "When can I post listings?", a: "After NAJIK admin verifies your nagrita and photo. Verified providers can post from the Post tab." },

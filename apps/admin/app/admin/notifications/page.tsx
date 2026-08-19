@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useAdmin } from "@/lib/store";
 import { PageHeader, SummaryStrip } from "@/components/admin/page-frame";
 import { Btn, Field, StatusBadge, inputClass } from "@/components/admin/ui";
-import { useAdmin } from "@/lib/store";
+import { InboxList } from "@/components/admin/inbox-list";
+import { useState } from "react";
 
 export default function NotificationsPage() {
-  const { notices, add, patch, toast } = useAdmin();
+  const { notices, add, patch, toast, inbox, inboxCount } = useAdmin();
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [audience, setAudience] = useState("All users");
@@ -24,7 +25,7 @@ export default function NotificationsPage() {
       time: status === "sent" ? "Just now" : "Queued",
       reads: status === "sent" ? 1 : 0,
     });
-    toast(status === "sent" ? "Notification sent to demo audience." : "Saved.");
+    toast(status === "sent" ? "Notification sent." : "Saved.");
     setTitle("");
     setBody("");
   }
@@ -33,10 +34,11 @@ export default function NotificationsPage() {
     <div>
       <PageHeader
         title="Notifications"
-        summary="12 staff and user notices — KYC backlog, Dashain promo, payout window, safety tips. Compose a push, email or in-app message on the right. Sent counts are demo reads; scheduled items fire in this session when you mark them sent from the list."
+        summary="New buyer signups, seller KYC, listings waiting for review, and chat complaints."
       />
       <SummaryStrip
         items={[
+          { label: "Waiting", value: inboxCount, tone: "amber" },
           { label: "Notices", value: notices.length, tone: "brand" },
           { label: "Sent", value: notices.filter((n) => n.status === "sent").length, tone: "green" },
           { label: "Scheduled", value: notices.filter((n) => n.status === "scheduled").length, tone: "amber" },
@@ -44,6 +46,13 @@ export default function NotificationsPage() {
           { label: "Reads (sum)", value: notices.reduce((s, n) => s + n.reads, 0), tone: "green" },
         ]}
       />
+      <section className="mb-4 overflow-hidden rounded-2xl border border-line bg-card">
+        <div className="border-b border-line px-4 py-3 text-sm font-semibold text-ink">
+          Live queue {inboxCount ? `(${inboxCount})` : ""}
+        </div>
+        <InboxList items={inbox} />
+      </section>
+
       <div className="grid gap-4 xl:grid-cols-3">
         <div className="space-y-3 xl:col-span-2">
           {notices.map((n) => (

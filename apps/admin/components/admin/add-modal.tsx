@@ -122,7 +122,7 @@ export function AddModal({ open, onClose }: { open: boolean; onClose: () => void
         password: "najiktemp",
       });
     }
-    admin.toast(`${kind} “${name}” added to the demo queue.`);
+    admin.toast(`${kind} “${name}” added.`);
     setName("");
     setExtra("");
     onClose();

@@ -20,8 +20,8 @@ const buyerTabs = [
 const sellerTabs = [
   { key: "Home", label: "Home", icon: "home-outline", activeIcon: "home" },
   { key: "Listings", label: "Listings", icon: "document-text-outline", activeIcon: "document-text" },
-  { key: "Post", label: "Post", icon: "add" },
-  { key: "Inquiries", label: "Inquiries", icon: "chatbubble-ellipses-outline", activeIcon: "chatbubble-ellipses", badge: 12 },
+  { key: "Post", label: "Add Listing", icon: "add" },
+  { key: "Inquiries", label: "Inquiries", icon: "chatbubble-ellipses-outline", activeIcon: "chatbubble-ellipses" },
   { key: "Profile", label: "Profile", icon: "person-outline", activeIcon: "person" },
 ] as const;
 
@@ -99,7 +99,7 @@ export function TabBar({ state, navigation }: BottomTabBarProps) {
                   </LinearGradient>
                 </Pressable>
                 <Text style={{ fontSize: 11, marginTop: 4, color: focused ? ACTIVE : INACTIVE, fontWeight: focused ? "700" : "600" }}>
-                  Post
+                  {tab.label}
                 </Text>
                 <View
                   style={{

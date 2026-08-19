@@ -8,7 +8,7 @@ import type { Review } from "@/lib/demo-data";
 
 export default function ReviewsPage() {
   const { reviews } = useAdmin();
-  const avg = (reviews.reduce((s, r) => s + r.rating, 0) / reviews.length).toFixed(1);
+  const avg = reviews.length ? (reviews.reduce((s, r) => s + r.rating, 0) / reviews.length).toFixed(1) : "—";
   const columns: Column<Review>[] = [
     { key: "listing", label: "Listing", render: (r) => <span className="font-medium">{r.listing}</span> },
     { key: "author", label: "By / Owner" },
@@ -22,7 +22,7 @@ export default function ReviewsPage() {
   return (
     <ResourcePage
       title="Reviews & Ratings"
-      summary="12 buyer/seller reviews. Flagged: iPhone battery health dispute and a 1★ kirana note alleging fake 5-stars. Hide school-job reviews that name unpaid trials. Stars drive service ranking on the mobile Explore tab."
+      summary="Buyer and seller reviews on live listings. Flag or hide reviews that break posting rules."
       kpis={[
         { label: "Reviews", value: reviews.length, tone: "brand" },
         { label: "Average", value: avg, tone: "green" },

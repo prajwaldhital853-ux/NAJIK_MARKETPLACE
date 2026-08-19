@@ -1,3 +1,23 @@
 from django.urls import path
 
-urlpatterns = []
+from apps.listings.views import (
+    ListingCommentView,
+    ListingFeedView,
+    ListingMineDetailView,
+    ListingMineView,
+    ListingPhotoFileView,
+    ListingPublicDetailView,
+    ListingReviewView,
+    ListingSaveView,
+)
+
+urlpatterns = [
+    path("feed/", ListingFeedView.as_view(), name="listing-feed"),
+    path("me/", ListingMineView.as_view(), name="listing-mine"),
+    path("me/<uuid:pk>/", ListingMineDetailView.as_view(), name="listing-mine-detail"),
+    path("<uuid:pk>/comments/", ListingCommentView.as_view(), name="listing-comments"),
+    path("<uuid:pk>/reviews/", ListingReviewView.as_view(), name="listing-reviews"),
+    path("<uuid:pk>/save/", ListingSaveView.as_view(), name="listing-save"),
+    path("<uuid:pk>/", ListingPublicDetailView.as_view(), name="listing-detail"),
+    path("<uuid:pk>/photos/<uuid:photo_id>/", ListingPhotoFileView.as_view(), name="listing-photo"),
+]

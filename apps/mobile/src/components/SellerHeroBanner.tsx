@@ -2,6 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { Dimensions, Image, Text, View } from "react-native";
 import Svg, { Path } from "react-native-svg";
 import { colors, shadow } from "../theme";
+import { Avatar } from "./Avatar";
 import { PressScale } from "./PressScale";
 
 const { width: SCREEN_W } = Dimensions.get("window");
@@ -67,6 +68,7 @@ const SERVICE_PHOTOS: Record<string, Scene> = {
   "Job Poster": { src: require("../../assets/hero/office.png") },
   Vehicles: { src: require("../../assets/hero/car.png") },
   "Local Services": { src: require("../../assets/hero/tools.png") },
+  "Used Items": { src: require("../../assets/hero/shop.png") },
   Other: { src: require("../../assets/hero/shop.png") },
 };
 
@@ -75,12 +77,14 @@ const SERVICE_TITLES: Record<string, string> = {
   "Job Poster": "Job Posting Service",
   Vehicles: "Vehicle Sales & Service",
   "Local Services": "Local Home Services",
+  "Used Items": "Used Items Marketplace",
   Other: "Other Services",
 };
 
 export function serviceHeroPhoto(service?: string): Scene {
   const value = (service || "").toLowerCase();
   if (value.includes("job")) return SERVICE_PHOTOS["Job Poster"];
+  if (value.includes("used") || value.includes("market")) return SERVICE_PHOTOS["Used Items"];
   if (value.includes("vehicle")) return SERVICE_PHOTOS.Vehicles;
   if (value.includes("local")) return SERVICE_PHOTOS["Local Services"];
   if (value.includes("other")) return SERVICE_PHOTOS.Other;
@@ -91,6 +95,7 @@ export function serviceHeroTitle(service?: string) {
   if (!service) return SERVICE_TITLES["Real Estate"];
   const value = service.toLowerCase();
   if (value.includes("job")) return SERVICE_TITLES["Job Poster"];
+  if (value.includes("used") || value.includes("market")) return SERVICE_TITLES["Used Items"];
   if (value.includes("vehicle")) return SERVICE_TITLES.Vehicles;
   if (value.includes("local")) return SERVICE_TITLES["Local Services"];
   if (value.includes("other")) return SERVICE_TITLES.Other;
@@ -103,6 +108,12 @@ function postedCopy(service?: string) {
     return {
       title: "Your job has been posted successfully! 🎉",
       body: "Your opening is now live and visible to thousands of job seekers.",
+    };
+  }
+  if (value.includes("used") || value.includes("market")) {
+    return {
+      title: "Your item has been posted successfully! 🎉",
+      body: "Buyers nearby can see it in Used Items Marketplace after admin approval.",
     };
   }
   if (value.includes("vehicle")) {
@@ -134,6 +145,7 @@ type Props = {
   location?: string;
   showPosted?: boolean;
   onPress?: () => void;
+  onCamera?: () => void;
   onViewListing?: () => void;
 };
 
@@ -148,6 +160,7 @@ export function SellerHeroBanner({
   location = "Lahan, Siraha",
   showPosted,
   onPress,
+  onCamera,
   onViewListing,
 }: Props) {
   const home = variant === "home";
@@ -167,35 +180,7 @@ export function SellerHeroBanner({
 
   const info = (
     <View style={{ flexDirection: "row", alignItems: "flex-start" }}>
-      <View>
-        <Image
-          source={{ uri: photo }}
-          style={{
-            width: avatar,
-            height: avatar,
-            borderRadius: avatar / 2,
-            borderWidth: f(0.008, 3),
-            borderColor: "#fff",
-          }}
-        />
-        <View
-          style={{
-            position: "absolute",
-            right: -2,
-            bottom: -2,
-            width: f(0.055, 20),
-            height: f(0.055, 20),
-            borderRadius: f(0.0275, 10),
-            backgroundColor: "#1FA24C",
-            borderWidth: 2,
-            borderColor: "#fff",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
-          <Ionicons name="camera" size={f(0.028, 11)} color="#fff" />
-        </View>
-      </View>
+      <Avatar name={name} uri={photo || undefined} size={avatar} borderWidth={f(0.008, 3)} onCamera={onCamera} />
 
       <View style={{ flex: 1, marginLeft: f(0.025, 10), maxWidth: home ? 0.5 * W : undefined }}>
         <Text style={{ color: "#D8EDE2", fontSize: home ? f(0.026, 11) : 11 }}>Welcome Back,</Text>
@@ -247,12 +232,6 @@ export function SellerHeroBanner({
         <Text style={{ color: "#fff", fontSize: f(0.029, 12), marginTop: f(0.007, 3) }} numberOfLines={1}>
           {serviceLabel}
         </Text>
-        {verified ? (
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 4, marginTop: f(0.007, 3) }}>
-            <Ionicons name="star" size={f(0.03, 12)} color="#F5A623" />
-            <Text style={{ color: "#fff", fontWeight: "700", fontSize: f(0.028, 12) }}>4.9 (128 reviews)</Text>
-          </View>
-        ) : null}
       </View>
 
       {!home ? <Ionicons name="chevron-forward" size={20} color="#fff" /> : null}

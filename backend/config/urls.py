@@ -6,4 +6,11 @@ urlpatterns = [
     path("api/health/", include("apps.core.urls")),
     path("api/auth/", include("apps.accounts.urls")),
     path("api/admin/auth/", include("apps.staff.urls")),
+    path("api/verification/", include("apps.verification.urls")),
+    path("api/admin/verification/", include("apps.verification.staff_urls")),
+    path("api/admin/users/", include("apps.accounts.staff_urls")),
+    path("api/listings/", include("apps.listings.urls")),
+    path("api/admin/listings/", include("apps.listings.staff_urls")),
+    path("api/chat/", include("apps.chat.urls")),
+    path("api/admin/chat/", include("apps.chat.staff_urls")),
 ]

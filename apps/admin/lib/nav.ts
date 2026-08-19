@@ -65,9 +65,10 @@ export const NAV: NavItem[] = [
     label: "Other Listings",
     icon: "layers",
     children: [
+      { href: "/admin/listing-queue", label: "Pending approval" },
       { href: "/admin/listings", label: "All other" },
       { href: "/admin/listings?kind=vehicle", label: "Vehicles" },
-      { href: "/admin/listings?kind=used", label: "Used items" },
+      { href: "/admin/listings?kind=used", label: "Used items marketplace" },
       { href: "/admin/listings?kind=shop", label: "Shops" },
     ],
   },
@@ -97,7 +98,7 @@ export const NAV: NavItem[] = [
     icon: "shield",
     children: [
       { href: "/admin/kyc", label: "User KYC" },
-      { href: "/admin/providers", label: "Provider queue" },
+      { href: "/admin/providers", label: "Seller applications" },
     ],
   },
   {

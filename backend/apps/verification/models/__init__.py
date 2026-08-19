@@ -1,1 +1,3 @@
-# Models for this feature will be added when the feature is built.
+from apps.verification.models.application import ProviderApplication
+
+__all__ = ["ProviderApplication"]

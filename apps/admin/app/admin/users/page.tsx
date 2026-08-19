@@ -34,11 +34,11 @@ export default function UsersPage() {
   return (
     <ResourcePage
       title="User Management"
-      summary="20 demo accounts covering buyers, sellers and service providers across Nepal. Filter by role or status from the sidebar, open a row to verify KYC, block abuse, or promote a pending signup. Totals on the cards are live against this working set."
+      summary="Live app signups. Open a row to block, verify, or permanently delete the account and all of their listings."
       kpis={[
-        { label: "Demo accounts", value: users.length, delta: "+4 this week", tone: "brand" },
-        { label: "Active", value: users.filter((u) => u.status === "active" || u.status === "verified").length, delta: "+2", tone: "green" },
-        { label: "Pending", value: users.filter((u) => u.status === "pending").length, delta: "+1", tone: "amber" },
+        { label: "Accounts", value: users.length, tone: "brand" },
+        { label: "Active", value: users.filter((u) => u.status === "active" || u.status === "verified").length, tone: "green" },
+        { label: "Pending", value: users.filter((u) => u.status === "pending").length, tone: "amber" },
         { label: "Blocked", value: users.filter((u) => u.status === "blocked").length, tone: "red" },
         { label: "KYC verified", value: users.filter((u) => u.kyc === "verified").length, tone: "green" },
       ]}
@@ -46,7 +46,9 @@ export default function UsersPage() {
       columns={columns}
       tabs={["All", "Active", "Pending", "Verified", "Blocked"]}
       storeKey="users"
-      statusActions={["active", "pending", "verified", "blocked"]}
+      statusActions={["active", "deactivated", "blocked"]}
+      allowDelete
+      deleteConfirm="Delete this account and all of their listings? This cannot be undone."
       detail={(u) => (
         <>
           <Kv label="Email" value={u.email} />

@@ -1,4 +1,6 @@
 import { adsCount, sellerPhone, type CatalogItem, type CatalogKey } from "./catalog";
+import { liveSpecs } from "./liveListings";
+import type { ApiListing } from "../listingsApi";
 
 const img = {
   house: require("../../assets/listings/house.jpg"),
@@ -34,7 +36,7 @@ export type Review = { name: string; rating: number; text: string; time: string;
 export type Faq = { q: string; a: string };
 
 export type ListingRich = {
-  gallery: number[];
+  gallery: (number | { uri: string })[];
   rating: number;
   reviewCount: number;
   views: number;
@@ -59,11 +61,7 @@ function uniqueGallery(main: number, rest: number[]) {
   return out.slice(0, 6);
 }
 
-const reviewsSeed: Review[] = [
-  { name: "Ramesh Yadav", rating: 5, text: "Exactly as shown. Seller replied fast and the visit was easy to arrange.", time: "2 days ago", helpful: 12 },
-  { name: "Sita Kumari", rating: 4, text: "Good condition and fair price for Lahan. Would recommend checking in person.", time: "1 week ago", helpful: 8 },
-  { name: "Bikash Sah", rating: 5, text: "Smooth deal on NAJIK. Photos matched what I saw on site.", time: "2 weeks ago", helpful: 5 },
-];
+const reviewsSeed: Review[] = [];
 
 const byKey: Record<CatalogKey, Omit<ListingRich, "gallery" | "seller">> = {
   property: {
@@ -99,7 +97,7 @@ const byKey: Record<CatalogKey, Omit<ListingRich, "gallery" | "seller">> = {
       { q: "Are papers clear?", a: "Lalpurja and tax receipts are ready to show during the visit." },
     ],
     reviews: reviewsSeed,
-    variants: { label: "Deal type", options: ["Buy now", "Schedule visit", "Make offer"] },
+    variants: { label: "Deal type", options: ["Buy now", "Schedule visit"] },
     cta: "Schedule visit",
   },
   vehicles: {
@@ -323,11 +321,49 @@ const byKey: Record<CatalogKey, Omit<ListingRich, "gallery" | "seller">> = {
 };
 
 export function galleryFor(item: CatalogItem) {
+  if (!item.photo) return [];
+  if (typeof item.photo !== "number") return [item.photo];
   return uniqueGallery(item.photo, pools[item.key] ?? pools.property);
 }
 
-export function richFor(item: CatalogItem): ListingRich {
+export function richFor(item: CatalogItem, live?: ApiListing | null): ListingRich {
   const base = byKey[item.key];
+  if (live) {
+    const features = Array.isArray(live.extras?.features) ? live.extras.features.map(String) : [];
+    const reviews = (live.reviews || []).map((review) => ({
+      name: review.author_name || "Buyer",
+      rating: review.rating,
+      text: review.text,
+      time: new Date(review.created_at).toLocaleDateString("en-GB", { day: "2-digit", month: "short" }),
+      helpful: 0,
+    }));
+    const avg = reviews.length ? reviews.reduce((sum, row) => sum + row.rating, 0) / reviews.length : 0;
+    const photos = live.photos || [];
+    return {
+      gallery: photos.map((photo) => ({ uri: photo.url })),
+      rating: avg,
+      reviewCount: live.review_count || reviews.length,
+      views: live.view_count || 0,
+      saved: live.save_count || 0,
+      negotiable: Boolean(live.negotiable),
+      highlights: features,
+      description: (live.description || "").trim() || "No description added.",
+      specs: liveSpecs(live),
+      amenities: features.map((label) => ({ icon: "checkmark-outline", label })),
+      faqs: [],
+      reviews,
+      seller: {
+        name: live.owner_name || item.company || "NAJIK Seller",
+        role: "Listed on NAJIK",
+        listed: live.created_at ? new Date(live.created_at).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "",
+        response: "Replies on NAJIK",
+        rating: avg ? avg.toFixed(1) : "0",
+        phone: live.contact_phone || "",
+        ads: 1,
+      },
+      cta: "Contact seller",
+    };
+  }
   const specs = item.extra.length
     ? [
         ...item.extra.map((row) => {

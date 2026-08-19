@@ -1,64 +1,167 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useNavigation } from "@react-navigation/native";
-import { useState } from "react";
-import { Alert, Image, Keyboard, Text, TextInput, View } from "react-native";
+import { useNavigation, useRoute } from "@react-navigation/native";
+import * as ImagePicker from "expo-image-picker";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Alert, ActivityIndicator, Image, Keyboard, Modal, Text, TextInput, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AppHeader } from "../components/AppHeader";
+import { AuthImage } from "../components/AuthImage";
 import { KeyboardScreen, useKeyboardScroll } from "../components/KeyboardScreen";
+import { OsmWebMap } from "../components/OsmWebMap";
+import { searchPlaces, LAHAN, requestUserPoint, reverseGeocode, type PlaceHit } from "../geo";
 import { PressScale } from "../components/PressScale";
 import { useAuth } from "../context/AuthContext";
+import { CONTACT_OPTIONS } from "../data/listingCategories";
+import {
+  JOB_EXPERIENCE,
+  KIND_CARDS,
+  SERVICE_RATE,
+  TYPE_OPTIONS,
+  VEHICLE_FUEL,
+  VERTICAL_COPY,
+  VERTICAL_DEFAULTS,
+  VERTICAL_FEATURES,
+  verticalForService,
+  verticalFromCategory,
+  type ListingVertical,
+} from "../data/listingVertical";
 import { canPostServices, isProvider } from "../demo";
+import { createListing, fetchMyListings, updateListing } from "../listingsApi";
 import { colors, shadow } from "../theme";
 
 const GREEN = "#1B7D2C";
+const houseArt = require("../../assets/hero/house.png");
 
-const steps = [
-  { key: "Basic Info", icon: "home-outline" as const },
-  { key: "Details", icon: "list-outline" as const },
-  { key: "Pricing", icon: "pricetag-outline" as const },
-  { key: "Media", icon: "image-outline" as const },
-  { key: "Review", icon: "checkmark-circle-outline" as const },
-];
-
-const categories = [
-  { key: "For Sale", icon: "home-outline" as const },
-  { key: "For Rent", icon: "key-outline" as const },
-  { key: "Land", icon: "leaf-outline" as const },
-  { key: "Commercial", icon: "business-outline" as const },
-];
-
-const propertyTypes = ["House", "Flat", "Apartment", "Land", "Shop", "Office"];
-
-const amenityOptions = ["Parking", "Water boring", "Backup light", "Wi-Fi", "Garden", "CCTV", "Furnished", "Near school"];
-const facingOptions = ["East", "West", "North", "South"];
-const furnishOptions = ["Unfurnished", "Semi", "Fully"];
-
-const galleryPool = [
-  require("../../assets/listings/house.jpg"),
-  require("../../assets/listings/flat.jpg"),
-  require("../../assets/listings/apartment.jpg"),
-  require("../../assets/listings/modern.jpg"),
-  require("../../assets/listings/land.jpg"),
-  require("../../assets/listings/shop.jpg"),
+const STEPS = [
+  { key: "Basic Info", next: "Details", icon: "home" as const },
+  { key: "Details", next: "Pricing", icon: "document-text-outline" as const },
+  { key: "Pricing", next: "Media", icon: "pricetag-outline" as const },
+  { key: "Media", next: "Review", icon: "image-outline" as const },
+  { key: "Review", next: "Submit", icon: "eye-outline" as const },
 ];
 
 export function PostScreen() {
   const navigation = useNavigation<any>();
+  const route = useRoute<any>();
+  const listingId = route.params?.listingId as string | undefined;
   const { user } = useAuth();
+  const insets = useSafeAreaInsets();
+  const { onInputFocus } = useKeyboardScroll();
+  const [editCategory, setEditCategory] = useState<string | null>(null);
+  const vertical: ListingVertical = listingId && editCategory ? verticalFromCategory(editCategory) : verticalForService(user?.service_type);
+  const copy = VERTICAL_COPY[vertical];
+  const kindCards = KIND_CARDS[vertical];
+  const types = TYPE_OPTIONS[vertical];
+  const showTypePicker = vertical === "property" || vertical === "jobs" || vertical === "vehicles" || vertical === "marketplace";
+  const defaults = VERTICAL_DEFAULTS[vertical];
+
   const [step, setStep] = useState(0);
-  const [category, setCategory] = useState("For Sale");
-  const [ptype, setPtype] = useState("House");
-  const [title, setTitle] = useState("Modern 3 BHK House for Sale in Lahan");
-  const [address, setAddress] = useState("Lahan-3, Siraha, Nepal");
-  const [desc, setDesc] = useState("Bright rooms, tiled floors, parking for one car. Near school and bazaar.");
-  const [beds, setBeds] = useState(3);
-  const [baths, setBaths] = useState(2);
-  const [sqft, setSqft] = useState("1800");
-  const [amenities, setAmenities] = useState<string[]>(["Parking", "Water boring"]);
-  const [facing, setFacing] = useState("East");
-  const [furnish, setFurnish] = useState("Semi");
-  const [price, setPrice] = useState("2500000");
+  const [dealType, setDealType] = useState(defaults.deal);
+  const [propertyType, setPropertyType] = useState(defaults.type);
+  const [typeOpen, setTypeOpen] = useState(false);
+  const [photos, setPhotos] = useState<string[]>([]);
+  const [uploadPct, setUploadPct] = useState(0);
+  const [uploading, setUploading] = useState(false);
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [price, setPrice] = useState("");
   const [negotiable, setNegotiable] = useState(true);
-  const [photos, setPhotos] = useState<number[]>([galleryPool[0], galleryPool[1]]);
+  const [city, setCity] = useState("Kathmandu");
+  const [district, setDistrict] = useState("Kathmandu");
+  const [location, setLocation] = useState("");
+  const [lat, setLat] = useState<number | null>(null);
+  const [lng, setLng] = useState<number | null>(null);
+  const [mapOpen, setMapOpen] = useState(false);
+  const [locBusy, setLocBusy] = useState(false);
+  const [placeHits, setPlaceHits] = useState<PlaceHit[]>([]);
+  const skipGeocode = useRef(false);
+  const [contactName, setContactName] = useState(user?.full_name || "");
+  const [contactPhone, setContactPhone] = useState(user?.phone || "");
+  const [contactEmail, setContactEmail] = useState(user?.email || "");
+  const [contactVia, setContactVia] = useState("phone");
+  const [beds, setBeds] = useState("3");
+  const [baths, setBaths] = useState("2");
+  const [kitchens, setKitchens] = useState("1");
+  const [parking, setParking] = useState(true);
+  const [area, setArea] = useState("");
+  const [furnished, setFurnished] = useState(false);
+  const [company, setCompany] = useState("");
+  const [experience, setExperience] = useState("Entry level");
+  const [applyEmail, setApplyEmail] = useState(user?.email || "");
+  const [year, setYear] = useState("");
+  const [km, setKm] = useState("");
+  const [fuel, setFuel] = useState("Petrol");
+  const [make, setMake] = useState("");
+  const [model, setModel] = useState("");
+  const [rateType, setRateType] = useState("Per visit");
+  const [availability, setAvailability] = useState("");
+  const [features, setFeatures] = useState<string[]>([]);
+  const [addFeatureOpen, setAddFeatureOpen] = useState(false);
+  const [customFeature, setCustomFeature] = useState("");
+  const [promote, setPromote] = useState(false);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [keepPhotos, setKeepPhotos] = useState(true);
+
+  useEffect(() => {
+    if (listingId) return;
+    const next = VERTICAL_DEFAULTS[vertical];
+    setDealType(next.deal);
+    setPropertyType(next.type);
+  }, [vertical, listingId]);
+
+  useEffect(() => {
+    if (!listingId) return;
+    void fetchMyListings()
+      .then((rows) => {
+        const row = rows.find((item) => item.id === listingId);
+        if (!row) return;
+        setEditCategory(row.category);
+        const loaded = verticalFromCategory(row.category);
+        const fallback = VERTICAL_DEFAULTS[loaded];
+        setDealType(String(row.extras?.dealType || fallback.deal));
+        setPropertyType(row.subcategory || fallback.type);
+        setTitle(row.title || "");
+        setDescription(row.description || "");
+        setPrice(String(row.price || "").replace(/\D/g, "") || String(row.price || ""));
+        setNegotiable(Boolean(row.negotiable));
+        setCity(row.city || "Kathmandu");
+        setDistrict(row.district || "Kathmandu");
+        setLocation(row.location || "");
+        setLat(row.lat ?? null);
+        setLng(row.lng ?? null);
+        setContactName(row.contact_name || user?.full_name || "");
+        setContactPhone(row.contact_phone || user?.phone || "");
+        setContactEmail(row.contact_email || user?.email || "");
+        setContactVia(row.contact_via || "phone");
+        setBeds(String(row.extras?.beds || "0"));
+        setBaths(String(row.extras?.baths || "0"));
+        setKitchens(String(row.extras?.kitchens || "0"));
+        setParking(Boolean(row.extras?.parking));
+        setArea(String(row.extras?.area || ""));
+        setFurnished(Boolean(row.extras?.furnished));
+        setCompany(String(row.extras?.company || ""));
+        setExperience(String(row.extras?.experience || "Entry level"));
+        setApplyEmail(String(row.extras?.applyEmail || row.contact_email || ""));
+        setYear(String(row.extras?.year || ""));
+        setKm(String(row.extras?.km || ""));
+        setFuel(String(row.extras?.fuel || "Petrol"));
+        setMake(String(row.extras?.make || ""));
+        setModel(String(row.extras?.model || ""));
+        setRateType(String(row.extras?.rateType || "Per visit"));
+        setAvailability(String(row.extras?.availability || ""));
+        setFeatures(Array.isArray(row.extras?.features) ? row.extras.features.map(String) : []);
+        setPromote(Boolean(row.promote_requested));
+        setPhotos(row.photos.map((photo) => photo.url));
+        setKeepPhotos(true);
+      })
+      .catch(() => undefined);
+  }, [listingId, user?.email, user?.full_name, user?.phone]);
+
+  const nextLabel = useMemo(() => {
+    if (step === 4) return promote ? "Submit & promote" : "Submit listing";
+    return `Next: ${STEPS[step].next}`;
+  }, [step, promote]);
 
   if (isProvider(user) && !canPostServices(user)) {
     const rejected = user?.verification_status === "rejected";
@@ -72,614 +175,882 @@ export function PostScreen() {
           </Text>
           <Text style={{ color: colors.muted, textAlign: "center", marginTop: 8 }}>
             {rejected
-              ? "NAJIK admin rejected this application. You cannot post services yet."
-              : "You cannot post services until NAJIK admin verifies your nagrita, photo and details."}
+              ? "NAJIK admin rejected this seller account. You cannot post listings yet."
+              : "You cannot post listings until NAJIK admin verifies your nagrita, photo and details."}
           </Text>
         </View>
       </View>
     );
   }
 
-  function next() {
-    Keyboard.dismiss();
-    if (step < 4) setStep((s) => s + 1);
-    else {
-      Alert.alert("Listing live", "Demo listing published. Buyers in Lahan can now see it.", [
-        { text: "View listings", onPress: () => (isProvider(user) ? navigation.jumpTo("Listings") : navigation.jumpTo("Home")) },
-      ]);
+  function validate() {
+    if (step === 0) {
+      if (!title.trim()) return `Add a ${copy.titleLabel.toLowerCase()}.`;
+      if (!location.trim()) return "Enter the listing location.";
+      if (lat == null || lng == null) return "Pin the exact location on the map.";
+      if (!description.trim()) return "Add a short description.";
+    }
+    if (step === 1 && !contactPhone.replace(/\s/g, "")) return "Enter a contact phone number.";
+    if (step === 2) return "";
+    if (step === 3) return "";
+    return "";
+  }
+
+  async function applyPin(point: { lat: number; lng: number }, geocode = true) {
+    skipGeocode.current = true;
+    setLat(point.lat);
+    setLng(point.lng);
+    if (!geocode) return;
+    try {
+      const geo = await reverseGeocode(point);
+      if (geo.location) setLocation(geo.location);
+      if (geo.city) setCity(geo.city);
+      if (geo.district) setDistrict(geo.district);
+    } catch {
+      return;
     }
   }
 
+  async function useCurrentLocation() {
+    if (locBusy) return;
+    setLocBusy(true);
+    try {
+      const point = await requestUserPoint();
+      if (!point) {
+        Alert.alert("Location", "Allow location access to pin your listing, or search and pick a place below.");
+        return;
+      }
+      await applyPin(point);
+    } finally {
+      setLocBusy(false);
+    }
+  }
+
+  function pickSuggestedPlace(hit: PlaceHit) {
+    skipGeocode.current = true;
+    setPlaceHits([]);
+    setLocation(hit.location || hit.label);
+    setLat(hit.lat);
+    setLng(hit.lng);
+    if (hit.city) setCity(hit.city);
+    if (hit.district) setDistrict(hit.district);
+  }
+
+  useEffect(() => {
+    if (skipGeocode.current) {
+      skipGeocode.current = false;
+      return;
+    }
+    const text = location.trim();
+    if (text.length < 2) {
+      setPlaceHits([]);
+      return;
+    }
+    const timer = setTimeout(() => {
+      void searchPlaces(text, 12).then(setPlaceHits);
+    }, 280);
+    return () => clearTimeout(timer);
+  }, [location]);
+
+  async function pickPhotos() {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert("Permission needed", "Allow photos so you can add listing pictures.");
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ["images"],
+      allowsMultipleSelection: true,
+      quality: 0.32,
+      base64: true,
+      selectionLimit: 8,
+    });
+    if (result.canceled) return;
+    setUploading(true);
+    setUploadPct(8);
+    const next: string[] = [];
+    const assets = result.assets.slice(0, 8);
+    for (let i = 0; i < assets.length; i += 1) {
+      const asset = assets[i];
+      if (!asset.base64) continue;
+      const mime = asset.mimeType?.includes("png") ? "image/png" : "image/jpeg";
+      next.push(`data:${mime};base64,${asset.base64}`);
+      setUploadPct(Math.round(((i + 1) / assets.length) * 100));
+    }
+    setPhotos(next);
+    setKeepPhotos(false);
+    setUploading(false);
+  }
+
+  function extrasPayload() {
+    const featureTags = features.filter(Boolean);
+    const shared = { dealType, features: featureTags };
+    if (vertical === "jobs") {
+      return { ...shared, company, experience, applyEmail, workplace: propertyType };
+    }
+    if (vertical === "vehicles") {
+      return { ...shared, year, km, fuel, make, model };
+    }
+    if (vertical === "services" || vertical === "nearby") {
+      return { ...shared, rateType, availability };
+    }
+    if (vertical === "marketplace") {
+      return { ...shared, condition: dealType };
+    }
+    return { ...shared, beds, baths, kitchens, parking, area, furnished };
+  }
+
+  function payload(publish: boolean) {
+    return {
+      category: vertical,
+      subcategory: propertyType,
+      title: title.trim(),
+      description: description.trim(),
+      price: price.replace(/\D/g, ""),
+      negotiable,
+      location: location.trim(),
+      city,
+      district,
+      lat,
+      lng,
+      contact_name: contactName.trim(),
+      contact_phone: contactPhone.replace(/\s/g, ""),
+      contact_email: (applyEmail || contactEmail).trim(),
+      contact_via: contactVia,
+      extras: extrasPayload(),
+      ...(listingId && keepPhotos ? {} : { photos }),
+      promote,
+      publish,
+    };
+  }
+
+  async function save(publish: boolean) {
+    if (publish) {
+      for (let index = 0; index < 4; index += 1) {
+        const previous = step;
+        setStep(index);
+        const message = (() => {
+          if (index === 0) {
+            if (!title.trim()) return `Add a ${copy.titleLabel.toLowerCase()}.`;
+            if (!location.trim()) return "Enter the listing location.";
+            if (lat == null || lng == null) return "Pin the exact location on the map.";
+            if (!description.trim()) return "Add a short description.";
+          }
+          if (index === 1 && !contactPhone.replace(/\s/g, "")) return "Enter a contact phone number.";
+          if (index === 2) return "";
+          if (index === 3) return "";
+          return "";
+        })();
+        if (message) {
+          setError(message);
+          setStep(index);
+          return;
+        }
+        setStep(previous);
+      }
+    } else if (!title.trim()) {
+      setError("Add a title before saving a draft.");
+      return;
+    }
+    setBusy(true);
+    setError("");
+    try {
+      const row = listingId ? await updateListing(listingId, payload(publish)) : await createListing(payload(publish));
+      const editQueued = Boolean(row.has_pending_edit);
+      Alert.alert(
+        publish ? (editQueued ? "Edit sent for review" : "Sent for review") : "Draft saved",
+        publish
+          ? editQueued
+            ? "NAJIK admin will approve your changes. The live listing stays as-is until then."
+            : "This listing is pending. It stays hidden from buyers until NAJIK admin approves it."
+          : "You can edit and publish this listing later.",
+        [{ text: "My listings", onPress: () => (isProvider(user) ? navigation.navigate("Tabs", { screen: "Listings" }) : navigation.jumpTo("Home")) }],
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not save this listing.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function next() {
+    Keyboard.dismiss();
+    const message = validate();
+    if (message) {
+      setError(message);
+      return;
+    }
+    setError("");
+    if (step < 4) setStep((value) => value + 1);
+    else void save(true);
+  }
+
   function back() {
-    if (step === 0) navigation.jumpTo("Home");
+    if (step === 0) listingId ? navigation.goBack() : navigation.jumpTo("Home");
     else setStep(step - 1);
   }
 
-  const nextLabel = ["Next: Details", "Next: Pricing", "Next: Photos", "Next: Review", "Publish listing"][step];
+  function addFeature(label: string) {
+    const value = label.trim();
+    if (!value) return;
+    setFeatures((current) => (current.includes(value) ? current : [...current, value]));
+    setCustomFeature("");
+    setAddFeatureOpen(false);
+  }
 
   return (
-    <View style={{ flex: 1, backgroundColor: "#F7F8FA" }}>
-      <AppHeader right="draft" showPro={isProvider(user)} onClose={back} />
-      <KeyboardScreen key={`post-step-${step}`} style={{ backgroundColor: "#F7F8FA" }} contentStyle={{ padding: 16, paddingBottom: 28 }}>
-        <View style={{ marginBottom: 10 }}>
-          <View style={{ position: "absolute", left: 18, right: 18, top: 16, height: 2, backgroundColor: colors.border }} />
-          <View style={{ position: "absolute", left: 18, width: `${(step / 4) * 100}%`, top: 16, height: 2, backgroundColor: GREEN }} />
-          <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
-            {steps.map((item, index) => {
-              const on = index === step;
-              const done = index < step;
-              return (
-                <PressScale key={item.key} onPress={() => setStep(index)} style={{ alignItems: "center", flex: 1 }}>
-                  <View
+    <View style={{ flex: 1, backgroundColor: "#fff" }}>
+      <AppHeader
+        right="draft"
+        showPro={isProvider(user)}
+        onClose={back}
+        onDraft={() => void save(false)}
+      />
+      <View style={{ paddingHorizontal: 10, paddingTop: 4, paddingBottom: 8 }}>
+        <View style={{ position: "absolute", left: 28, right: 28, top: 18, height: 2, backgroundColor: "#E6E8EC" }} />
+        <View style={{ position: "absolute", left: 28, width: `${(step / 4) * 72}%`, top: 18, height: 2, backgroundColor: GREEN }} />
+        <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+          {STEPS.map((item, index) => {
+            const on = index === step;
+            const done = index < step;
+            return (
+              <PressScale key={item.key} onPress={() => index <= step && setStep(index)} style={{ alignItems: "center", width: 62 }}>
+                <View
+                  style={{
+                    width: 30,
+                    height: 30,
+                    borderRadius: 15,
+                    backgroundColor: on || done ? GREEN : "#fff",
+                    borderWidth: 1.5,
+                    borderColor: on || done ? GREEN : "#D1D5DB",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  <Ionicons name={done && !on ? "checkmark" : item.icon} size={14} color={on || done ? "#fff" : "#9AA0A6"} />
+                </View>
+                <Text style={{ marginTop: 4, fontSize: 9, fontWeight: on ? "800" : "600", color: on ? GREEN : "#6B7280" }} numberOfLines={1}>
+                  {item.key}
+                </Text>
+              </PressScale>
+            );
+          })}
+        </View>
+      </View>
+
+      <KeyboardScreen key={`post-step-${step}`} style={{ backgroundColor: "#fff" }} contentStyle={{ padding: 16, paddingBottom: 28 }}>
+        {step === 0 ? (
+          <View>
+            <View
+              style={{
+                backgroundColor: "#E7F6EC",
+                borderRadius: 16,
+                padding: 14,
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 10,
+                marginBottom: 16,
+              }}
+            >
+              <Image source={houseArt} style={{ width: 72, height: 56, resizeMode: "contain" }} />
+              <Text style={{ flex: 1, fontWeight: "800", color: colors.navy, fontSize: 14, lineHeight: 20 }}>{copy.banner}</Text>
+              <View style={{ backgroundColor: "#fff", paddingHorizontal: 8, paddingVertical: 5, borderRadius: 12 }}>
+                <Text style={{ color: GREEN, fontWeight: "800", fontSize: 10 }}>Pro Tips</Text>
+              </View>
+            </View>
+
+            <Text style={{ fontWeight: "800", color: colors.navy, marginBottom: 10 }}>{copy.kindLabel}</Text>
+            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
+              {kindCards.map((item) => {
+                const on = dealType === item.key;
+                return (
+                  <PressScale
+                    key={item.key}
+                    onPress={() => {
+                      setDealType(item.key);
+                      if (vertical === "services" || vertical === "nearby") setPropertyType(item.key);
+                      else if (vertical === "marketplace") setPropertyType(propertyType || types[0]?.key || defaults.type);
+                      else setPropertyType(types[0]?.key || defaults.type);
+                    }}
                     style={{
-                      width: 34,
-                      height: 34,
-                      borderRadius: 17,
-                      backgroundColor: on || done ? GREEN : "#fff",
+                      flexGrow: 1,
+                      flexBasis: kindCards.length > 2 ? "22%" : "46%",
+                      minHeight: 86,
+                      borderRadius: 14,
                       borderWidth: 1.5,
-                      borderColor: on || done ? GREEN : colors.border,
+                      borderColor: on ? GREEN : "#E6E8EC",
+                      backgroundColor: on ? "#F3FBF5" : "#fff",
                       alignItems: "center",
                       justifyContent: "center",
+                      padding: 8,
                     }}
                   >
-                    <Ionicons name={done && !on ? "checkmark" : item.icon} size={16} color={on || done ? "#fff" : colors.muted} />
-                  </View>
-                  <Text style={{ fontSize: 9, marginTop: 4, fontWeight: on ? "800" : "600", color: on ? GREEN : colors.muted }}>{item.key}</Text>
+                    {on ? (
+                      <View style={{ position: "absolute", top: 6, right: 6 }}>
+                        <Ionicons name="checkmark-circle" size={16} color={GREEN} />
+                      </View>
+                    ) : null}
+                    <View style={{ width: 34, height: 34, borderRadius: 10, backgroundColor: item.bg, alignItems: "center", justifyContent: "center" }}>
+                      <Ionicons name={item.icon} size={18} color={item.color} />
+                    </View>
+                    <Text style={{ marginTop: 6, fontWeight: "800", fontSize: 11, color: colors.navy, textAlign: "center" }}>{item.key}</Text>
+                  </PressScale>
+                );
+              })}
+            </View>
+
+            {showTypePicker ? (
+              <>
+                <Text style={{ fontWeight: "700", marginBottom: 6 }}>{copy.typeLabel}</Text>
+                <PressScale
+                  onPress={() => setTypeOpen((value) => !value)}
+                  style={{
+                    borderWidth: 1,
+                    borderColor: "#E6E8EC",
+                    borderRadius: 12,
+                    minHeight: 50,
+                    paddingHorizontal: 12,
+                    flexDirection: "row",
+                    alignItems: "center",
+                    backgroundColor: "#fff",
+                  }}
+                >
+                  <Ionicons name={types.find((item) => item.key === propertyType)?.icon || "home-outline"} size={16} color={GREEN} />
+                  <Text style={{ flex: 1, marginLeft: 8, fontWeight: "700", color: colors.navy }}>{propertyType}</Text>
+                  <Ionicons name={typeOpen ? "chevron-up" : "chevron-down"} size={16} color="#6B7280" />
+                </PressScale>
+                {typeOpen
+                  ? types.map((item) => (
+                      <PressScale
+                        key={item.key}
+                        onPress={() => {
+                          setPropertyType(item.key);
+                          setTypeOpen(false);
+                        }}
+                        style={{
+                          marginTop: 6,
+                          borderWidth: 1,
+                          borderColor: propertyType === item.key ? GREEN : "#E6E8EC",
+                          borderRadius: 12,
+                          padding: 12,
+                          flexDirection: "row",
+                          alignItems: "center",
+                          gap: 8,
+                        }}
+                      >
+                        <Ionicons name={item.icon} size={16} color={GREEN} />
+                        <Text style={{ fontWeight: "700", flex: 1 }}>{item.key}</Text>
+                        {propertyType === item.key ? <Ionicons name="checkmark" size={16} color={GREEN} /> : null}
+                      </PressScale>
+                    ))
+                  : null}
+              </>
+            ) : null}
+
+            <View style={{ marginTop: 14 }}>
+              <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+                <Text style={{ fontWeight: "700" }}>{copy.titleLabel}</Text>
+                <Text style={{ color: title.length > 60 ? colors.red : "#9AA0A6", fontSize: 11 }}>{title.length}/60</Text>
+              </View>
+              <Text style={{ color: colors.muted, fontSize: 11, marginTop: 2, marginBottom: 6 }}>{copy.titleHint}</Text>
+              <TextInput
+                value={title}
+                onChangeText={(value) => setTitle(value.slice(0, 60))}
+                onFocus={onInputFocus}
+                placeholder={copy.titlePlaceholder}
+                placeholderTextColor="#9AA0A6"
+                maxLength={60}
+                style={inputStyle}
+              />
+            </View>
+
+            <View style={{ marginTop: 14 }}>
+              <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                <Text style={{ fontWeight: "700" }}>{vertical === "jobs" ? "Job location" : "Location"}</Text>
+                <PressScale onPress={useCurrentLocation} style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                  {locBusy ? <ActivityIndicator size="small" color={GREEN} /> : <Ionicons name="navigate" size={13} color={GREEN} />}
+                  <Text style={{ color: GREEN, fontWeight: "800", fontSize: 12 }}>{locBusy ? "Finding you..." : "Use current location"}</Text>
+                </PressScale>
+              </View>
+              <TextInput
+                value={location}
+                onChangeText={setLocation}
+                onFocus={onInputFocus}
+                placeholder="Shantinagar, New Baneshwor, Ward 31..."
+                placeholderTextColor="#9AA0A6"
+                style={[inputStyle, { marginTop: 6 }]}
+              />
+              {placeHits.length ? (
+                <View style={{ marginTop: 6, borderWidth: 1, borderColor: "#E6E8EC", borderRadius: 12, backgroundColor: "#fff", overflow: "hidden" }}>
+                  {placeHits.map((hit) => (
+                    <PressScale
+                      key={`${hit.lat}-${hit.lng}-${hit.label}`}
+                      onPress={() => pickSuggestedPlace(hit)}
+                      style={{ paddingHorizontal: 12, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: "#F3F4F6" }}
+                    >
+                      <Text style={{ fontWeight: "700", fontSize: 13 }}>{hit.label}</Text>
+                      <Text style={{ color: "#6B7280", fontSize: 11, marginTop: 2 }} numberOfLines={2}>
+                        {hit.location}
+                      </Text>
+                    </PressScale>
+                  ))}
+                </View>
+              ) : null}
+              <View style={{ marginTop: 10, height: 180, borderRadius: 14, overflow: "hidden", backgroundColor: "#E8EEF3" }}>
+                <OsmWebMap
+                  mode="pick"
+                  center={lat != null && lng != null ? { lat, lng } : LAHAN}
+                  zoom={15}
+                  pin={lat != null && lng != null ? { lat, lng } : LAHAN}
+                  onPin={(point) => void applyPin(point)}
+                />
+                <View style={{ position: "absolute", left: 8, right: 8, bottom: 8, flexDirection: "row", gap: 8 }}>
+                  <PressScale
+                    onPress={() => setMapOpen(true)}
+                    style={{ flex: 1, backgroundColor: "#fff", borderRadius: 10, paddingVertical: 8, alignItems: "center" }}
+                  >
+                    <Text style={{ fontWeight: "800", fontSize: 11, color: GREEN }}>Move pin on map</Text>
+                  </PressScale>
+                </View>
+              </View>
+              <Text style={{ color: "#6B7280", fontSize: 11, marginTop: 6 }}>
+                {lat != null && lng != null ? `Pinned ${lat.toFixed(5)}, ${lng.toFixed(5)}` : "Tap the map to drop your exact pin."}
+              </Text>
+            </View>
+
+            <View style={{ marginTop: 14 }}>
+              <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+                <Text style={{ fontWeight: "700" }}>{copy.descLabel}</Text>
+                <Text style={{ color: description.length > 1000 ? colors.red : "#9AA0A6", fontSize: 11 }}>{description.length}/1000</Text>
+              </View>
+              <TextInput
+                value={description}
+                onChangeText={(value) => setDescription(value.slice(0, 1000))}
+                onFocus={onInputFocus}
+                placeholder={copy.descPlaceholder}
+                placeholderTextColor="#9AA0A6"
+                multiline
+                maxLength={1000}
+                style={[inputStyle, { minHeight: 110, textAlignVertical: "top", marginTop: 6 }]}
+              />
+              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 10 }}>
+                {features.map((item) => (
+                  <PressScale
+                    key={item}
+                    onPress={() => setFeatures((current) => current.filter((value) => value !== item))}
+                    style={{
+                      backgroundColor: "#E7F6EC",
+                      borderRadius: 16,
+                      paddingHorizontal: 10,
+                      paddingVertical: 6,
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 4,
+                    }}
+                  >
+                    <Ionicons name="pricetag-outline" size={12} color={GREEN} />
+                    <Text style={{ fontSize: 11, fontWeight: "700", color: colors.navy }}>{item}</Text>
+                    <Ionicons name="close" size={12} color="#6B7280" />
+                  </PressScale>
+                ))}
+                <PressScale
+                  onPress={() => setAddFeatureOpen(true)}
+                  style={{
+                    borderWidth: 1,
+                    borderColor: GREEN,
+                    borderRadius: 16,
+                    paddingHorizontal: 10,
+                    paddingVertical: 6,
+                  }}
+                >
+                  <Text style={{ color: GREEN, fontWeight: "800", fontSize: 11 }}>+ {copy.featureLabel}</Text>
+                </PressScale>
+              </View>
+            </View>
+          </View>
+        ) : null}
+
+        {step === 1 ? (
+          <View>
+            {vertical === "property" ? (
+              <>
+                <Counter label="Bedrooms" value={beds} onChange={setBeds} />
+                <Counter label="Bathrooms" value={baths} onChange={setBaths} />
+                <Counter label="Kitchens" value={kitchens} onChange={setKitchens} />
+                <Field label="Area (sqft)" value={area} onChangeText={setArea} onFocus={onInputFocus} placeholder="1200" keyboardType="number-pad" />
+                <PressScale
+                  onPress={() => setParking((value) => !value)}
+                  style={[toggleStyle, { backgroundColor: parking ? "#E4F6EA" : "#fff", borderColor: parking ? GREEN : colors.border }]}
+                >
+                  <Ionicons name={parking ? "checkbox" : "square-outline"} size={20} color={GREEN} />
+                  <Text style={{ fontWeight: "700" }}>Car parking available</Text>
+                </PressScale>
+                <PressScale
+                  onPress={() => setFurnished((value) => !value)}
+                  style={[toggleStyle, { backgroundColor: furnished ? "#E4F6EA" : "#fff", borderColor: furnished ? GREEN : colors.border }]}
+                >
+                  <Ionicons name={furnished ? "checkbox" : "square-outline"} size={20} color={GREEN} />
+                  <Text style={{ fontWeight: "700" }}>Furnished</Text>
+                </PressScale>
+              </>
+            ) : null}
+            {vertical === "jobs" ? (
+              <>
+                <Field label="Company name" value={company} onChangeText={setCompany} onFocus={onInputFocus} placeholder="NAJIK Services Pvt. Ltd." />
+                <Text style={{ fontWeight: "700", marginTop: 14, marginBottom: 8 }}>Experience level</Text>
+                <ChipRow options={JOB_EXPERIENCE} value={experience} onChange={setExperience} />
+                <Field label="Apply email" value={applyEmail} onChangeText={setApplyEmail} onFocus={onInputFocus} placeholder="jobs@company.com" />
+              </>
+            ) : null}
+            {vertical === "vehicles" ? (
+              <>
+                <Field label="Make" value={make} onChangeText={setMake} onFocus={onInputFocus} placeholder="Hyundai" />
+                <Field label="Model" value={model} onChangeText={setModel} onFocus={onInputFocus} placeholder="Creta" />
+                <Field label="Year" value={year} onChangeText={setYear} onFocus={onInputFocus} placeholder="2022" keyboardType="number-pad" />
+                <Field label="Kilometers" value={km} onChangeText={setKm} onFocus={onInputFocus} placeholder="18000" keyboardType="number-pad" />
+                <Text style={{ fontWeight: "700", marginTop: 14, marginBottom: 8 }}>Fuel</Text>
+                <ChipRow options={VEHICLE_FUEL} value={fuel} onChange={setFuel} />
+              </>
+            ) : null}
+            {vertical === "services" || vertical === "nearby" ? (
+              <>
+                <Text style={{ fontWeight: "700", marginTop: 4, marginBottom: 8 }}>Rate type</Text>
+                <ChipRow options={SERVICE_RATE} value={rateType} onChange={setRateType} />
+                <Field label="Availability" value={availability} onChangeText={setAvailability} onFocus={onInputFocus} placeholder="Daily 8am–6pm, Lahan and nearby" />
+              </>
+            ) : null}
+            {vertical === "marketplace" ? (
+              <Text style={{ color: colors.muted, fontSize: 13, marginBottom: 8 }}>
+                Condition is set on the first step (New or Used). Price can be left blank or marked negotiable next.
+              </Text>
+            ) : null}
+            <Field label="Contact name" value={contactName} onChangeText={setContactName} onFocus={onInputFocus} placeholder="Your name" />
+            <Field label="Phone" value={contactPhone} onChangeText={setContactPhone} onFocus={onInputFocus} placeholder="98xxxxxxxx" keyboardType="phone-pad" />
+            <Field label="Email (optional)" value={contactEmail} onChangeText={setContactEmail} onFocus={onInputFocus} placeholder="you@email.com" />
+            <Text style={{ fontWeight: "700", marginTop: 14, marginBottom: 8 }}>
+              {vertical === "jobs" ? "How should applicants reach you?" : "How should buyers reach you?"}
+            </Text>
+            {CONTACT_OPTIONS.map((item) => {
+              const on = contactVia === item.key;
+              return (
+                <PressScale
+                  key={item.key}
+                  onPress={() => setContactVia(item.key)}
+                  style={{
+                    marginBottom: 8,
+                    backgroundColor: on ? "#E4F6EA" : "#fff",
+                    borderRadius: 16,
+                    padding: 14,
+                    borderWidth: 1.5,
+                    borderColor: on ? GREEN : colors.border,
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 10,
+                  }}
+                >
+                  <Ionicons name={item.icon} size={18} color={on ? GREEN : colors.muted} />
+                  <Text style={{ fontWeight: "700", flex: 1 }}>{item.label}</Text>
+                  {on ? <Ionicons name="checkmark-circle" size={18} color={GREEN} /> : null}
                 </PressScale>
               );
             })}
           </View>
-        </View>
+        ) : null}
 
-        {step === 0 ? (
-          <BasicStep
-            category={category}
-            setCategory={setCategory}
-            ptype={ptype}
-            setPtype={setPtype}
-            title={title}
-            setTitle={setTitle}
-            address={address}
-            setAddress={setAddress}
-            desc={desc}
-            setDesc={setDesc}
-          />
+        {step === 2 ? (
+          <View>
+            <Field label={`${copy.priceLabel} (optional)`} value={price} onChangeText={setPrice} onFocus={onInputFocus} placeholder={copy.pricePlaceholder} keyboardType="number-pad" />
+            <PressScale
+              onPress={() => setNegotiable((value) => !value)}
+              style={[toggleStyle, { backgroundColor: negotiable ? "#E4F6EA" : "#fff", borderColor: negotiable ? GREEN : colors.border }]}
+            >
+              <Ionicons name={negotiable ? "checkbox" : "square-outline"} size={20} color={GREEN} />
+              <Text style={{ fontWeight: "700" }}>{vertical === "jobs" ? "Salary is negotiable" : "Price is negotiable"}</Text>
+            </PressScale>
+            <PressScale
+              onPress={() => setPromote((value) => !value)}
+              style={[toggleStyle, { backgroundColor: promote ? "#E4F6EA" : "#fff", borderColor: promote ? GREEN : colors.border }]}
+            >
+              <Ionicons name={promote ? "checkbox" : "square-outline"} size={20} color={GREEN} />
+              <Text style={{ fontWeight: "700" }}>Request promotion after approval</Text>
+            </PressScale>
+          </View>
         ) : null}
-        {step === 1 ? (
-          <DetailsStep
-            beds={beds}
-            setBeds={setBeds}
-            baths={baths}
-            setBaths={setBaths}
-            sqft={sqft}
-            setSqft={setSqft}
-            amenities={amenities}
-            setAmenities={setAmenities}
-            facing={facing}
-            setFacing={setFacing}
-            furnish={furnish}
-            setFurnish={setFurnish}
-          />
+
+        {step === 3 ? (
+          <View>
+            <PressScale onPress={() => void pickPhotos()} style={{ backgroundColor: GREEN, borderRadius: 16, paddingVertical: 14, alignItems: "center" }}>
+              <Text style={{ color: "#fff", fontWeight: "800" }}>{photos.length ? "Replace photos" : "Upload photos (optional)"}</Text>
+            </PressScale>
+            <Text style={{ color: colors.muted, marginTop: 8, fontSize: 12 }}>{copy.photoHint}</Text>
+            {uploading ? (
+              <View style={{ marginTop: 12, height: 10, backgroundColor: colors.border, borderRadius: 8, overflow: "hidden" }}>
+                <View style={{ width: `${uploadPct}%`, height: 10, backgroundColor: GREEN }} />
+              </View>
+            ) : null}
+            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 12 }}>
+              {photos.map((uri, index) => (
+                <View key={`${index}-${uri.slice(-18)}`}>
+                  <AuthImage uri={uri} style={{ width: 96, height: 96, borderRadius: 12 }} />
+                  <PressScale
+                    onPress={() => setPhotos((current) => current.filter((_, i) => i !== index))}
+                    style={{ position: "absolute", top: 4, right: 4, backgroundColor: "#fff", borderRadius: 10, padding: 2 }}
+                  >
+                    <Ionicons name="close" size={14} color={colors.navy} />
+                  </PressScale>
+                </View>
+              ))}
+            </View>
+          </View>
         ) : null}
-        {step === 2 ? <PricingStep category={category} price={price} setPrice={setPrice} negotiable={negotiable} setNegotiable={setNegotiable} /> : null}
-        {step === 3 ? <MediaStep photos={photos} setPhotos={setPhotos} /> : null}
+
         {step === 4 ? (
-          <ReviewStep
-            category={category}
-            ptype={ptype}
-            title={title}
-            address={address}
-            desc={desc}
-            beds={beds}
-            baths={baths}
-            sqft={sqft}
-            amenities={amenities}
-            facing={facing}
-            furnish={furnish}
-            price={price}
-            negotiable={negotiable}
-            photos={photos}
-            onEdit={setStep}
-          />
+          <View style={{ backgroundColor: "#fff", borderRadius: 18, padding: 16, borderWidth: 1, borderColor: "#E6E8EC", ...shadow.card }}>
+            {photos[0] ? <AuthImage uri={photos[0]} style={{ width: "100%", height: 160, borderRadius: 14 }} /> : null}
+            <Text style={{ fontWeight: "800", fontSize: 20, marginTop: 12 }}>{title || "Untitled listing"}</Text>
+            <Text style={{ color: GREEN, fontWeight: "800", marginTop: 4 }}>
+              {price.replace(/\D/g, "")
+                ? `Rs. ${Number(price.replace(/\D/g, "")).toLocaleString("en-IN")}`
+                : negotiable
+                  ? "Price negotiable"
+                  : "Price on request"}
+            </Text>
+            <Text style={{ color: colors.muted, marginTop: 6 }}>
+              {dealType} · {propertyType}
+              {company ? ` · ${company}` : ""}
+            </Text>
+            <Text style={{ color: colors.muted, marginTop: 4 }}>{location}</Text>
+            <Text style={{ marginTop: 10, lineHeight: 20 }}>{description}</Text>
+            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 10 }}>
+              {features.map((item) => (
+                <Text key={item} style={{ backgroundColor: "#E7F6EC", color: GREEN, fontWeight: "700", fontSize: 11, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 10 }}>
+                  {item}
+                </Text>
+              ))}
+            </View>
+            <Text style={{ marginTop: 12, color: colors.muted, fontSize: 12 }}>
+              Submit sends this listing to NAJIK admin. Buyers will not see it until it is approved.
+            </Text>
+          </View>
         ) : null}
 
+        {error ? <Text style={{ marginTop: 12, color: colors.red }}>{error}</Text> : null}
+      </KeyboardScreen>
+
+      <View
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          paddingHorizontal: 12,
+          paddingTop: 10,
+          paddingBottom: listingId ? Math.max(insets.bottom, 10) : 10,
+          borderTopWidth: 1,
+          borderColor: "#E6E8EC",
+          backgroundColor: "#fff",
+          gap: 8,
+        }}
+      >
+        <PressScale
+          onPress={() => (listingId ? navigation.goBack() : navigation.jumpTo("Home"))}
+          style={{
+            borderWidth: 1,
+            borderColor: "#E6E8EC",
+            borderRadius: 12,
+            paddingHorizontal: 12,
+            paddingVertical: 11,
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 4,
+            flexShrink: 0,
+          }}
+        >
+          <Ionicons name="close" size={14} color="#4B5563" />
+          <Text style={{ fontWeight: "700", color: "#4B5563", fontSize: 12 }}>Cancel</Text>
+        </PressScale>
+        <Text
+          style={{ flex: 1, textAlign: "center", color: "#6B7280", fontSize: 11, fontWeight: "700" }}
+          numberOfLines={1}
+        >
+          Step {step + 1} of 5 | {STEPS[step].key === "Basic Info" ? "Basic Information" : STEPS[step].key}
+        </Text>
         <PressScale
           onPress={next}
           style={{
-            marginTop: 22,
             backgroundColor: GREEN,
-            borderRadius: 16,
-            paddingVertical: 15,
-            alignItems: "center",
+            borderRadius: 12,
+            paddingHorizontal: 14,
+            paddingVertical: 11,
             flexDirection: "row",
-            justifyContent: "center",
-            gap: 8,
+            alignItems: "center",
+            gap: 6,
+            opacity: busy ? 0.7 : 1,
+            flexShrink: 0,
           }}
         >
-          <Text style={{ color: "#fff", fontWeight: "800", fontSize: 15 }}>{nextLabel}</Text>
-          <Ionicons name={step === 4 ? "checkmark" : "arrow-forward"} size={16} color="#fff" />
-        </PressScale>
-      </KeyboardScreen>
-
-      <View style={{ flexDirection: "row", alignItems: "center", padding: 12, backgroundColor: "#fff", borderTopWidth: 1, borderTopColor: colors.border, gap: 10 }}>
-        <PressScale
-          onPress={back}
-          style={{ paddingHorizontal: 12, paddingVertical: 10, borderRadius: 12, borderWidth: 1, borderColor: colors.border, flexDirection: "row", alignItems: "center", gap: 4 }}
-        >
-          <Ionicons name={step === 0 ? "close" : "arrow-back"} size={14} color={colors.text} />
-          <Text style={{ fontWeight: "700" }}>{step === 0 ? "Cancel" : "Back"}</Text>
-        </PressScale>
-        <View style={{ flex: 1, alignItems: "center" }}>
-          <Text style={{ color: GREEN, fontSize: 12, fontWeight: "800" }}>Step {step + 1} of 5</Text>
-          <Text style={{ color: colors.muted, fontSize: 10 }}>{steps[step].key}</Text>
-        </View>
-        <PressScale
-          onPress={next}
-          style={{ backgroundColor: GREEN, paddingHorizontal: 16, paddingVertical: 12, borderRadius: 14, flexDirection: "row", alignItems: "center", gap: 6 }}
-        >
-          <Text style={{ color: "#fff", fontWeight: "800" }}>{nextLabel}</Text>
-          <Ionicons name={step === 4 ? "checkmark" : "arrow-forward"} size={14} color="#fff" />
+          <Text style={{ color: "#fff", fontWeight: "800", fontSize: 12 }}>{busy ? "Saving…" : nextLabel}</Text>
+          <Ionicons name="arrow-forward" size={14} color="#fff" />
         </PressScale>
       </View>
+
+      <Modal visible={addFeatureOpen} transparent animationType="fade" onRequestClose={() => setAddFeatureOpen(false)}>
+        <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.35)", justifyContent: "flex-end" }}>
+          <View style={{ backgroundColor: "#fff", borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 18 }}>
+            <Text style={{ fontWeight: "800", fontSize: 16, color: colors.navy }}>{copy.featureLabel}</Text>
+            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 12 }}>
+              {VERTICAL_FEATURES[vertical].map((item) => (
+                <PressScale
+                  key={item}
+                  onPress={() => addFeature(item)}
+                  style={{ backgroundColor: "#E7F6EC", borderRadius: 16, paddingHorizontal: 10, paddingVertical: 7 }}
+                >
+                  <Text style={{ color: GREEN, fontWeight: "800", fontSize: 12 }}>{item}</Text>
+                </PressScale>
+              ))}
+            </View>
+            <TextInput
+              value={customFeature}
+              onChangeText={setCustomFeature}
+              placeholder={`Custom ${copy.featureLabel.toLowerCase()}`}
+              placeholderTextColor="#9AA0A6"
+              style={[inputStyle, { marginTop: 12 }]}
+            />
+            <View style={{ flexDirection: "row", gap: 8, marginTop: 12 }}>
+              <PressScale onPress={() => setAddFeatureOpen(false)} style={{ flex: 1, alignItems: "center", padding: 12 }}>
+                <Text style={{ fontWeight: "700", color: "#6B7280" }}>Close</Text>
+              </PressScale>
+              <PressScale
+                onPress={() => addFeature(customFeature)}
+                style={{ flex: 1, backgroundColor: GREEN, borderRadius: 12, alignItems: "center", padding: 12 }}
+              >
+                <Text style={{ color: "#fff", fontWeight: "800" }}>Add</Text>
+              </PressScale>
+            </View>
+          </View>
+        </View>
+      </Modal>
+      <Modal visible={mapOpen} animationType="none" onRequestClose={() => setMapOpen(false)}>
+        <View style={{ flex: 1, backgroundColor: "#E8EEF3" }}>
+          <View style={{ paddingTop: insets.top + 8, paddingHorizontal: 16, paddingBottom: 10, backgroundColor: "#111827", flexDirection: "row", alignItems: "center" }}>
+            <Text style={{ flex: 1, color: "#fff", fontWeight: "800" }}>Pin exact location</Text>
+            <PressScale onPress={() => setMapOpen(false)}>
+              <Text style={{ color: GREEN, fontWeight: "800" }}>Done</Text>
+            </PressScale>
+          </View>
+          <OsmWebMap
+            mode="pick"
+            center={lat != null && lng != null ? { lat, lng } : LAHAN}
+            zoom={16}
+            pin={lat != null && lng != null ? { lat, lng } : LAHAN}
+            onPin={(point) => void applyPin(point)}
+          />
+          <Text style={{ color: "#D1D5DB", padding: 12, fontSize: 12 }}>Tap or drag the pin. Buyers use this point for directions.</Text>
+        </View>
+      </Modal>
     </View>
   );
 }
 
-function BasicStep({
-  category,
-  setCategory,
-  ptype,
-  setPtype,
-  title,
-  setTitle,
-  address,
-  setAddress,
-  desc,
-  setDesc,
-}: {
-  category: string;
-  setCategory: (v: string) => void;
-  ptype: string;
-  setPtype: (v: string) => void;
-  title: string;
-  setTitle: (v: string) => void;
-  address: string;
-  setAddress: (v: string) => void;
-  desc: string;
-  setDesc: (v: string) => void;
-}) {
+const inputStyle = {
+  borderWidth: 1,
+  borderColor: "#E6E8EC",
+  backgroundColor: "#fff",
+  borderRadius: 12,
+  minHeight: 50,
+  paddingHorizontal: 12,
+  paddingVertical: 12,
+  color: "#0B1D2A",
+};
+
+const toggleStyle = {
+  marginTop: 12,
+  borderRadius: 16,
+  padding: 14,
+  borderWidth: 1.5,
+  flexDirection: "row" as const,
+  alignItems: "center" as const,
+  gap: 10,
+};
+
+function ChipRow({ options, value, onChange }: { options: string[]; value: string; onChange: (value: string) => void }) {
   return (
-    <>
-      <Text style={{ fontWeight: "800", fontSize: 18, color: colors.navy }}>Basic information</Text>
-      <Text style={{ color: "#6B7280", fontSize: 12, marginTop: 4, marginBottom: 14 }}>What are you listing in Lahan?</Text>
-
-      <Text style={{ fontWeight: "800", marginBottom: 8 }}>Deal type</Text>
-      <View style={{ flexDirection: "row", gap: 8 }}>
-        {categories.map((item) => {
-          const on = item.key === category;
-          return (
-            <PressScale
-              key={item.key}
-              onPress={() => setCategory(item.key)}
-              style={{
-                flex: 1,
-                backgroundColor: "#fff",
-                borderRadius: 14,
-                paddingVertical: 12,
-                borderWidth: 1.5,
-                borderColor: on ? GREEN : colors.border,
-                alignItems: "center",
-              }}
-            >
-              <Ionicons name={item.icon} size={20} color={on ? GREEN : "#6B7280"} />
-              <Text style={{ fontWeight: "800", marginTop: 6, fontSize: 11, color: on ? GREEN : colors.navy }}>{item.key}</Text>
-            </PressScale>
-          );
-        })}
-      </View>
-
-      <Text style={{ fontWeight: "800", marginTop: 16, marginBottom: 8 }}>Property type</Text>
-      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-        {propertyTypes.map((item) => {
-          const on = item === ptype;
-          return (
-            <PressScale
-              key={item}
-              onPress={() => setPtype(item)}
-              style={{
-                paddingHorizontal: 14,
-                paddingVertical: 8,
-                borderRadius: 18,
-                backgroundColor: on ? GREEN : "#fff",
-                borderWidth: 1,
-                borderColor: on ? GREEN : colors.border,
-              }}
-            >
-              <Text style={{ fontWeight: "700", fontSize: 12, color: on ? "#fff" : "#374151" }}>{item}</Text>
-            </PressScale>
-          );
-        })}
-      </View>
-
-      <Label title="Listing title" hint={`${title.length}/60`} />
-      <FormInput value={title} onChangeText={setTitle} />
-
-      <Label title="Location" hint="Lahan & nearby" />
-      <Field value={address} onChangeText={setAddress} icon="location" />
-      <PressScale
-        onPress={() => setAddress("Lahan-3, Siraha, Nepal")}
-        style={{ marginTop: 8, alignSelf: "flex-start", flexDirection: "row", alignItems: "center", gap: 4 }}
-      >
-        <Ionicons name="navigate" size={14} color={GREEN} />
-        <Text style={{ color: GREEN, fontWeight: "800", fontSize: 12 }}>Use Lahan pin</Text>
-      </PressScale>
-
-      <Label title="Short description" hint={`${desc.length}/1000`} />
-      <FormInput value={desc} onChangeText={setDesc} multiline />
-    </>
-  );
-}
-
-function DetailsStep({
-  beds,
-  setBeds,
-  baths,
-  setBaths,
-  sqft,
-  setSqft,
-  amenities,
-  setAmenities,
-  facing,
-  setFacing,
-  furnish,
-  setFurnish,
-}: {
-  beds: number;
-  setBeds: (n: number) => void;
-  baths: number;
-  setBaths: (n: number) => void;
-  sqft: string;
-  setSqft: (v: string) => void;
-  amenities: string[];
-  setAmenities: (v: string[]) => void;
-  facing: string;
-  setFacing: (v: string) => void;
-  furnish: string;
-  setFurnish: (v: string) => void;
-}) {
-  return (
-    <>
-      <Text style={{ fontWeight: "800", fontSize: 18, color: colors.navy }}>Property details</Text>
-      <Text style={{ color: "#6B7280", fontSize: 12, marginTop: 4, marginBottom: 14 }}>Size and what is included.</Text>
-
-      <View style={{ flexDirection: "row", gap: 10 }}>
-        <Counter label="Bedrooms" value={beds} onChange={setBeds} />
-        <Counter label="Bathrooms" value={baths} onChange={setBaths} />
-      </View>
-
-      <Label title="Built-up area (sqft)" />
-      <FormInput value={sqft} onChangeText={setSqft} />
-
-      <Text style={{ fontWeight: "800", marginTop: 16, marginBottom: 8 }}>Facing</Text>
-      <View style={{ flexDirection: "row", gap: 8 }}>
-        {facingOptions.map((item) => {
-          const on = item === facing;
-          return (
-            <PressScale
-              key={item}
-              onPress={() => setFacing(item)}
-              style={{
-                flex: 1,
-                paddingVertical: 10,
-                borderRadius: 12,
-                backgroundColor: on ? GREEN : "#fff",
-                borderWidth: 1.5,
-                borderColor: on ? GREEN : colors.border,
-                alignItems: "center",
-              }}
-            >
-              <Text style={{ fontWeight: "800", fontSize: 12, color: on ? "#fff" : "#374151" }}>{item}</Text>
-            </PressScale>
-          );
-        })}
-      </View>
-
-      <Text style={{ fontWeight: "800", marginTop: 16, marginBottom: 8 }}>Furnishing</Text>
-      <View style={{ flexDirection: "row", gap: 8 }}>
-        {furnishOptions.map((item) => {
-          const on = item === furnish;
-          return (
-            <PressScale
-              key={item}
-              onPress={() => setFurnish(item)}
-              style={{
-                flex: 1,
-                paddingVertical: 10,
-                borderRadius: 12,
-                backgroundColor: on ? GREEN : "#fff",
-                borderWidth: 1.5,
-                borderColor: on ? GREEN : colors.border,
-                alignItems: "center",
-              }}
-            >
-              <Text style={{ fontWeight: "800", fontSize: 12, color: on ? "#fff" : "#374151" }}>{item}</Text>
-            </PressScale>
-          );
-        })}
-      </View>
-
-      <Text style={{ fontWeight: "800", marginTop: 16, marginBottom: 8 }}>Amenities</Text>
-      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-        {amenityOptions.map((item) => {
-          const on = amenities.includes(item);
-          return (
-            <PressScale
-              key={item}
-              onPress={() => setAmenities(on ? amenities.filter((a) => a !== item) : [...amenities, item])}
-              style={{
-                flexDirection: "row",
-                alignItems: "center",
-                gap: 6,
-                paddingHorizontal: 12,
-                paddingVertical: 8,
-                borderRadius: 12,
-                backgroundColor: on ? "#E7F6EC" : "#fff",
-                borderWidth: 1.5,
-                borderColor: on ? GREEN : colors.border,
-              }}
-            >
-              <Ionicons name={on ? "checkmark-circle" : "ellipse-outline"} size={14} color={on ? GREEN : "#9AA0A6"} />
-              <Text style={{ fontWeight: "700", fontSize: 12, color: on ? GREEN : "#374151" }}>{item}</Text>
-            </PressScale>
-          );
-        })}
-      </View>
-    </>
-  );
-}
-
-function PricingStep({
-  category,
-  price,
-  setPrice,
-  negotiable,
-  setNegotiable,
-}: {
-  category: string;
-  price: string;
-  setPrice: (v: string) => void;
-  negotiable: boolean;
-  setNegotiable: (v: boolean) => void;
-}) {
-  const presets = category === "For Rent" ? ["15000", "18000", "22000", "35000"] : ["1800000", "2500000", "3200000", "4500000"];
-  return (
-    <>
-      <Text style={{ fontWeight: "800", fontSize: 18, color: colors.navy }}>Pricing</Text>
-      <Text style={{ color: "#6B7280", fontSize: 12, marginTop: 4, marginBottom: 14 }}>
-        {category === "For Rent" ? "Monthly rent in Rs." : "Asking price in Rs."}
-      </Text>
-      <View style={{ backgroundColor: "#fff", borderRadius: 16, padding: 16, ...shadow.card }}>
-        <Text style={{ color: "#8A8F98", fontWeight: "700" }}>Rs.</Text>
-        <FormInput value={price} onChangeText={setPrice} />
-        <Text style={{ color: GREEN, fontWeight: "800", marginTop: 8, fontSize: 18 }}>
-          Rs. {Number(price || 0).toLocaleString("en-IN")}
-          {category === "For Rent" ? " /mo" : ""}
-        </Text>
-      </View>
-      <Text style={{ fontWeight: "800", marginTop: 16, marginBottom: 8 }}>Quick set</Text>
-      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-        {presets.map((p) => (
+    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+      {options.map((item) => {
+        const on = value === item;
+        return (
           <PressScale
-            key={p}
-            onPress={() => setPrice(p)}
+            key={item}
+            onPress={() => onChange(item)}
             style={{
+              borderWidth: 1.5,
+              borderColor: on ? GREEN : "#E6E8EC",
+              backgroundColor: on ? "#E4F6EA" : "#fff",
+              borderRadius: 16,
               paddingHorizontal: 12,
               paddingVertical: 8,
-              borderRadius: 12,
-              backgroundColor: price === p ? GREEN : "#fff",
-              borderWidth: 1,
-              borderColor: price === p ? GREEN : colors.border,
             }}
           >
-            <Text style={{ fontWeight: "700", fontSize: 12, color: price === p ? "#fff" : "#374151" }}>
-              Rs. {Number(p).toLocaleString("en-IN")}
-            </Text>
+            <Text style={{ fontWeight: "800", fontSize: 12, color: on ? GREEN : colors.navy }}>{item}</Text>
           </PressScale>
-        ))}
-      </View>
-      <PressScale
-        onPress={() => setNegotiable(!negotiable)}
-        style={{
-          marginTop: 16,
-          backgroundColor: "#fff",
-          borderRadius: 14,
-          padding: 14,
-          flexDirection: "row",
-          alignItems: "center",
-          ...shadow.card,
-        }}
-      >
-        <Ionicons name={negotiable ? "checkbox" : "square-outline"} size={20} color={GREEN} />
-        <View style={{ marginLeft: 10, flex: 1 }}>
-          <Text style={{ fontWeight: "800" }}>Price is negotiable</Text>
-          <Text style={{ color: "#6B7280", fontSize: 12, marginTop: 2 }}>Buyers can make an offer on NAJIK.</Text>
-        </View>
-      </PressScale>
-    </>
-  );
-}
-
-function MediaStep({ photos, setPhotos }: { photos: number[]; setPhotos: (v: number[]) => void }) {
-  return (
-    <>
-      <Text style={{ fontWeight: "800", fontSize: 18, color: colors.navy }}>Photos</Text>
-      <Text style={{ color: "#6B7280", fontSize: 12, marginTop: 4, marginBottom: 14 }}>Tap to add or remove. First photo is the cover.</Text>
-      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>
-        {galleryPool.map((src, i) => {
-          const on = photos.includes(src);
-          return (
-            <PressScale key={i} onPress={() => setPhotos(on ? photos.filter((p) => p !== src) : [...photos, src])} style={{ width: "31%" }}>
-              <Image source={src} style={{ width: "100%", height: 92, borderRadius: 12, borderWidth: on ? 3 : 0, borderColor: GREEN }} />
-              {on ? (
-                <View style={{ position: "absolute", top: 6, right: 6, width: 20, height: 20, borderRadius: 10, backgroundColor: GREEN, alignItems: "center", justifyContent: "center" }}>
-                  <Ionicons name="checkmark" size={12} color="#fff" />
-                </View>
-              ) : null}
-              {photos[0] === src ? (
-                <View style={{ position: "absolute", left: 6, bottom: 6, backgroundColor: GREEN, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 }}>
-                  <Text style={{ color: "#fff", fontSize: 9, fontWeight: "800" }}>COVER</Text>
-                </View>
-              ) : null}
-            </PressScale>
-          );
-        })}
-      </View>
-      <Text style={{ color: "#8A8F98", fontSize: 12, marginTop: 12 }}>{photos.length} photos selected</Text>
-      <View style={{ flexDirection: "row", gap: 8, marginTop: 14 }}>
-        <PressScale onPress={() => Alert.alert("Camera", "Demo: take a photo of the listing.")} style={{ flex: 1, backgroundColor: "#fff", borderRadius: 14, paddingVertical: 12, alignItems: "center", borderWidth: 1, borderColor: colors.border }}>
-          <Ionicons name="camera-outline" size={18} color={GREEN} />
-          <Text style={{ fontWeight: "800", fontSize: 12, marginTop: 4 }}>Camera</Text>
-        </PressScale>
-        <PressScale onPress={() => Alert.alert("Gallery", "Demo: pick from your phone.")} style={{ flex: 1, backgroundColor: "#fff", borderRadius: 14, paddingVertical: 12, alignItems: "center", borderWidth: 1, borderColor: colors.border }}>
-          <Ionicons name="images-outline" size={18} color={GREEN} />
-          <Text style={{ fontWeight: "800", fontSize: 12, marginTop: 4 }}>Gallery</Text>
-        </PressScale>
-      </View>
-    </>
-  );
-}
-
-function ReviewStep({
-  category,
-  ptype,
-  title,
-  address,
-  desc,
-  beds,
-  baths,
-  sqft,
-  amenities,
-  facing,
-  furnish,
-  price,
-  negotiable,
-  photos,
-  onEdit,
-}: {
-  category: string;
-  ptype: string;
-  title: string;
-  address: string;
-  desc: string;
-  beds: number;
-  baths: number;
-  sqft: string;
-  amenities: string[];
-  facing: string;
-  furnish: string;
-  price: string;
-  negotiable: boolean;
-  photos: number[];
-  onEdit: (step: number) => void;
-}) {
-  return (
-    <>
-      <Text style={{ fontWeight: "800", fontSize: 18, color: colors.navy }}>Review & publish</Text>
-      <Text style={{ color: "#6B7280", fontSize: 12, marginTop: 4, marginBottom: 12 }}>Check everything, then publish.</Text>
-      {photos.length ? (
-        <View style={{ flexDirection: "row", gap: 8, marginBottom: 12 }}>
-          {photos.slice(0, 4).map((src, i) => (
-            <Image key={i} source={src} style={{ flex: 1, height: 72, borderRadius: 12 }} />
-          ))}
-        </View>
-      ) : null}
-      <Text style={{ fontWeight: "800", fontSize: 20 }}>{title}</Text>
-      <Text style={{ color: GREEN, fontWeight: "800", fontSize: 18, marginTop: 6 }}>
-        Rs. {Number(price || 0).toLocaleString("en-IN")}
-        {category === "For Rent" ? " /mo" : ""}
-      </Text>
-      <Text style={{ color: "#6B7280", marginTop: 6 }}>{address}</Text>
-      <Text style={{ color: "#4B5563", marginTop: 10, lineHeight: 20 }}>{desc}</Text>
-      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 12 }}>
-        {[category, ptype, `${beds} Beds`, `${baths} Baths`, `${sqft} sqft`, `${facing} facing`, furnish, negotiable ? "Negotiable" : "Fixed", ...amenities].map((tag) => (
-          <View key={tag} style={{ backgroundColor: "#E7F6EC", paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10 }}>
-            <Text style={{ color: GREEN, fontWeight: "700", fontSize: 11 }}>{tag}</Text>
-          </View>
-        ))}
-      </View>
-      <View style={{ flexDirection: "row", gap: 8, marginTop: 16 }}>
-        {[0, 1, 2, 3].map((s) => (
-          <PressScale key={s} onPress={() => onEdit(s)} style={{ flex: 1, backgroundColor: "#fff", borderRadius: 12, paddingVertical: 10, alignItems: "center", borderWidth: 1, borderColor: colors.border }}>
-            <Text style={{ fontWeight: "800", fontSize: 11, color: GREEN }}>Edit {steps[s].key.split(" ")[0]}</Text>
-          </PressScale>
-        ))}
-      </View>
-    </>
-  );
-}
-
-function Label({ title, hint }: { title: string; hint?: string }) {
-  return (
-    <View style={{ flexDirection: "row", justifyContent: "space-between", marginTop: 16, marginBottom: 8 }}>
-      <Text style={{ fontWeight: "800", color: colors.navy }}>{title}</Text>
-      {hint ? <Text style={{ color: GREEN, fontSize: 11, fontWeight: "700" }}>{hint}</Text> : null}
+        );
+      })}
     </View>
-  );
-}
-
-function Counter({ label, value, onChange }: { label: string; value: number; onChange: (n: number) => void }) {
-  return (
-    <View style={{ flex: 1, backgroundColor: "#fff", borderRadius: 16, padding: 12, ...shadow.card }}>
-      <Text style={{ color: "#6B7280", fontSize: 12, fontWeight: "700" }}>{label}</Text>
-      <View style={{ flexDirection: "row", alignItems: "center", marginTop: 10, justifyContent: "space-between" }}>
-        <PressScale onPress={() => onChange(Math.max(0, value - 1))} style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: "#F3F4F6", alignItems: "center", justifyContent: "center" }}>
-          <Ionicons name="remove" size={16} color="#111827" />
-        </PressScale>
-        <Text style={{ fontSize: 22, fontWeight: "800" }}>{value}</Text>
-        <PressScale onPress={() => onChange(value + 1)} style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: GREEN, alignItems: "center", justifyContent: "center" }}>
-          <Ionicons name="add" size={16} color="#fff" />
-        </PressScale>
-      </View>
-    </View>
-  );
-}
-
-function FormInput({ value, onChangeText, multiline }: { value: string; onChangeText: (v: string) => void; multiline?: boolean }) {
-  const { onInputFocus } = useKeyboardScroll();
-  return (
-    <TextInput
-      value={value}
-      onChangeText={onChangeText}
-      onFocus={onInputFocus}
-      multiline={multiline}
-      style={{
-        backgroundColor: "#fff",
-        borderWidth: 1,
-        borderColor: colors.border,
-        borderRadius: 12,
-        padding: 12,
-        color: colors.text,
-        minHeight: multiline ? 90 : undefined,
-        textAlignVertical: multiline ? "top" : "center",
-      }}
-    />
   );
 }
 
 function Field({
+  label,
   value,
   onChangeText,
-  icon,
+  onFocus,
+  placeholder,
+  multiline,
+  keyboardType,
 }: {
+  label: string;
   value: string;
-  onChangeText?: (v: string) => void;
-  icon: keyof typeof Ionicons.glyphMap;
+  onChangeText: (value: string) => void;
+  onFocus: () => void;
+  placeholder: string;
+  multiline?: boolean;
+  keyboardType?: "default" | "number-pad" | "phone-pad";
 }) {
-  const { onInputFocus } = useKeyboardScroll();
   return (
-    <View style={{ flexDirection: "row", alignItems: "center", backgroundColor: "#fff", borderWidth: 1, borderColor: colors.border, borderRadius: 12, paddingHorizontal: 12, height: 48, gap: 8 }}>
-      <Ionicons name={icon} size={16} color={GREEN} />
-      <TextInput value={value} onChangeText={onChangeText} onFocus={onInputFocus} editable={!!onChangeText} style={{ flex: 1, color: colors.text }} />
+    <View style={{ marginTop: 12 }}>
+      <Text style={{ fontWeight: "700", marginBottom: 6 }}>{label}</Text>
+      <TextInput
+        value={value}
+        onChangeText={onChangeText}
+        onFocus={onFocus}
+        placeholder={placeholder}
+        placeholderTextColor={colors.muted}
+        multiline={multiline}
+        keyboardType={keyboardType}
+        style={[inputStyle, { minHeight: multiline ? 110 : 50, textAlignVertical: multiline ? "top" : "center" }]}
+      />
+    </View>
+  );
+}
+
+function Counter({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
+  const n = Number(value) || 0;
+  return (
+    <View style={{ marginTop: 12, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+      <Text style={{ fontWeight: "700" }}>{label}</Text>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+        <PressScale
+          onPress={() => onChange(String(Math.max(0, n - 1)))}
+          style={{ width: 32, height: 32, borderRadius: 16, borderWidth: 1, borderColor: "#E6E8EC", alignItems: "center", justifyContent: "center" }}
+        >
+          <Ionicons name="remove" size={16} color={colors.navy} />
+        </PressScale>
+        <Text style={{ width: 24, textAlign: "center", fontWeight: "800" }}>{n}</Text>
+        <PressScale
+          onPress={() => onChange(String(n + 1))}
+          style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: GREEN, alignItems: "center", justifyContent: "center" }}
+        >
+          <Ionicons name="add" size={16} color="#fff" />
+        </PressScale>
+      </View>
     </View>
   );
 }

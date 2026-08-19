@@ -34,6 +34,13 @@ export function RoleWelcomeScreen() {
         contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}
       >
         <View style={{ paddingTop: insets.top + 12, paddingHorizontal: 12, alignItems: "center" }}>
+          <PressScale
+            onPress={() => navigation.navigate("Login")}
+            style={{ alignSelf: "flex-start", flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 8 }}
+          >
+            <Ionicons name="arrow-back" size={22} color={W.title} />
+            <Text style={{ fontWeight: "700", color: W.title }}>Back to login</Text>
+          </PressScale>
           <NajikWordmark />
 
           <Text style={{ marginTop: 22, fontSize: 26, fontWeight: "800", color: W.title, textAlign: "center" }}>
@@ -82,7 +89,7 @@ export function RoleWelcomeScreen() {
               description="Find properties, vehicles, jobs, services and more."
               button="Continue as User"
               icon="person"
-              onPress={() => navigation.navigate("Login")}
+              onPress={() => navigation.navigate("Register", { accountType: "user" })}
             />
             <RoleCard
               highlight="Service Provider"
@@ -92,7 +99,7 @@ export function RoleWelcomeScreen() {
               description="Offer your services, reach more customers and grow your business."
               button="Continue as Service Provider"
               icon="briefcase"
-              onPress={() => navigation.navigate("SellerApply")}
+              onPress={() => navigation.navigate("Register", { accountType: "provider" })}
             />
           </View>
 

@@ -2,28 +2,25 @@
 
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
-import { STAFF } from "@/lib/demo-data";
 import { useSession } from "@/lib/session";
 import { inputClass } from "@/components/admin/ui";
 
 export default function StaffLoginPage() {
   const router = useRouter();
-  const { login, loginAs } = useSession();
-  const [email, setEmail] = useState("admin@najik.com");
-  const [password, setPassword] = useState("najikadmin");
+  const { login } = useSession();
+  const [email, setEmail] = useState("owner@najik.local");
+  const [password, setPassword] = useState("ChangeMeNow!23");
   const [error, setError] = useState("");
 
-  function onSubmit(event: FormEvent) {
+  async function onSubmit(event: FormEvent) {
     event.preventDefault();
-    const staff = login(email, password);
+    const staff = await login(email, password);
     if (!staff) {
-      setError("Invalid demo credentials, or that account is disabled.");
+      setError("Invalid credentials.");
       return;
     }
     router.replace("/admin");
   }
-
-  const accounts = STAFF.filter((s) => s.status === "active");
 
   return (
     <main className="flex h-dvh overflow-hidden bg-surface">
@@ -37,7 +34,7 @@ export default function StaffLoginPage() {
         </div>
 
         <h1 className="mt-6 text-lg font-semibold text-ink">Sign in</h1>
-        <p className="mt-1 text-[12px] text-muted">Owners and staff only. Buyers and sellers use the mobile app.</p>
+        <p className="mt-1 text-[12px] text-muted">Use a Django staff account to review live users, KYC and listings.</p>
 
         <form onSubmit={onSubmit} className="mt-4 space-y-2.5">
           <label className="block">
@@ -53,34 +50,6 @@ export default function StaffLoginPage() {
             Sign in
           </button>
         </form>
-
-        <p className="mt-5 mb-1.5 text-[10px] font-medium tracking-wide text-muted uppercase">Demo accounts</p>
-        <div className="admin-scroll min-h-0 flex-1 overflow-y-auto rounded border border-line bg-card">
-          {accounts.map((s) => (
-            <button
-              key={s.id}
-              type="button"
-              onClick={() => {
-                loginAs(s.id);
-                router.replace("/admin");
-              }}
-              className="flex w-full items-center gap-2 border-b border-line px-2.5 py-1.5 text-left last:border-b-0 hover:bg-elevated"
-            >
-              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-soft text-[9px] font-semibold text-brand">
-                {s.name
-                  .split(" ")
-                  .slice(0, 2)
-                  .map((p) => p[0])
-                  .join("")}
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-[12px] text-ink">{s.name}</span>
-                <span className="block truncate text-[10px] text-muted">{s.role}</span>
-              </span>
-              <span className="shrink-0 font-mono text-[10px] text-faint">{s.password}</span>
-            </button>
-          ))}
-        </div>
       </div>
     </main>
   );

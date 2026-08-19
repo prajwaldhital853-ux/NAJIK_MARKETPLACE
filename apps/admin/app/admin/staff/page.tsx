@@ -20,7 +20,7 @@ export default function StaffPage() {
   return (
     <ResourcePage
       title="Admin & Staff Management"
-      summary="12 staff seats: Super Admin (admin@najik.com / najikadmin), ops, KYC, moderators, finance, support, ads, and regional desks for East and the Valley. Invite stays pending until first login. Disabled night-moderator can be reactivated from the drawer. Switch account from the top-right avatar."
+      summary="Staff accounts that can sign in to this panel. The signed-in operator is listed here."
       kpis={[
         { label: "Seats", value: staff.length, tone: "brand" },
         { label: "Active", value: staff.filter((s) => s.status === "active").length, tone: "green" },
@@ -40,7 +40,6 @@ export default function StaffPage() {
           <Kv label="Desk" value={s.roleKey} />
           <Kv label="City" value={s.city} />
           <Kv label="Last login" value={s.lastLogin} />
-          <Kv label="Demo password" value={s.password} />
         </>
       )}
     />

@@ -268,3 +268,4 @@ class ChatMessageWriteSerializer(serializers.Serializer):
 
 class ChatReportWriteSerializer(serializers.Serializer):
     reason = serializers.CharField(min_length=8, max_length=2000)
+    severity = serializers.ChoiceField(choices=["normal", "high"], default="normal", required=False)

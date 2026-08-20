@@ -7,10 +7,13 @@ def signatory_path(instance, filename):
 
 
 class BrandingConfig(models.Model):
-    """Singleton branding assets (ID card signatory, etc.)."""
+    """Singleton branding assets (ID card signatory, emergency contact, etc.)."""
 
     id = models.PositiveSmallIntegerField(primary_key=True, default=1, editable=False)
     authorized_signatory = models.ImageField(upload_to=signatory_path, blank=True)
+    emergency_phone = models.CharField(max_length=40, blank=True, default="01-5970123")
+    emergency_email = models.EmailField(blank=True, default="support@najik.com")
+    website = models.CharField(max_length=120, blank=True, default="www.najik.com")
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:

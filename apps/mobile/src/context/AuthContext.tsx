@@ -89,6 +89,8 @@ function userLiveKey(user: AppUser) {
     user.service_type,
     user.has_pending_edit,
     user.rejection_note,
+    user.staff_warning || "",
+    user.staff_warning_at || "",
   ].join("|");
 }
 

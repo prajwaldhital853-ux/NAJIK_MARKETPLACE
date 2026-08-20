@@ -245,7 +245,6 @@ function ReviewsBody() {
           { icon: "star-outline", label: "Ask review", onPress: () => Alert.alert("Request", "Demo: send a review link after a visit.") },
           { icon: "chatbubble-outline", label: "Reply all", onPress: () => Alert.alert("Replies", "Open unread reviews below.") },
           { icon: "share-social-outline", label: "Share", onPress: () => void Share.share({ message: "See my 4.9 rating on NAJIK" }) },
-          { icon: "flag-outline", label: "Report", onPress: () => Alert.alert("Report", "Flag a fake review in demo.") },
         ]}
       />
       <View style={{ marginHorizontal: 16, marginTop: 12, backgroundColor: "#fff", borderRadius: 16, padding: 14, ...shadow.card }}>

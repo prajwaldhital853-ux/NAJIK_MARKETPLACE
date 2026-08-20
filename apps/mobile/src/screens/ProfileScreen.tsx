@@ -8,6 +8,7 @@ import { useAppRefreshControl } from "../components/KeyboardScreen";
 import { PressScale } from "../components/PressScale";
 import { SellerHeroBanner } from "../components/SellerHeroBanner";
 import { SellerProfileEditModal } from "../components/SellerProfileEditModal";
+import { StaffWarningCard } from "../components/StaffWarningBanner";
 import { useAuth } from "../context/AuthContext";
 import { isPendingProvider, isProvider, isRejectedProvider, isVerifiedProvider } from "../demo";
 import { fetchMyListings } from "../listingsApi";
@@ -139,6 +140,7 @@ export function ProfileScreen() {
       <AppHeader right="bell" />
       <SellerProfileEditModal visible={editOpen} onClose={() => setEditOpen(false)} />
       <ScrollView refreshControl={refreshControl} contentContainerStyle={{ padding: 16, paddingBottom: 36 }} showsVerticalScrollIndicator={false}>
+        <StaffWarningCard />
         {pending ? (
           <View style={{ backgroundColor: colors.orangeSoft, borderRadius: 16, padding: 14, marginBottom: 14, ...shadow.card }}>
             <Text style={{ fontWeight: "800", color: colors.navy }}>Verification pending</Text>
@@ -347,6 +349,7 @@ function BuyerProfile() {
     <View style={{ flex: 1, backgroundColor: "#F7F8FA" }}>
       <AppHeader right="bell-settings" showLocation showPro={false} pinColor={GREEN} />
       <ScrollView refreshControl={refreshControl} contentContainerStyle={{ padding: 16, paddingBottom: 36 }} showsVerticalScrollIndicator={false}>
+        <StaffWarningCard />
         <PressScale
           onPress={() => {}}
           style={{

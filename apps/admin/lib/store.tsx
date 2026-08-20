@@ -43,11 +43,11 @@ import {
   listAppUsers,
   listProviderApplications,
   listStaffListings,
-  listChatReports,
+  listComplaints,
   patchAppUser,
   type ProviderApplication,
   type StaffListing,
-  type ChatReportTicket,
+  type ComplaintTicket,
 } from "./staff-api";
 import { ADMIN_POLL_MS, buildInbox, navBadges, readSeenInbox, writeSeenInbox, type InboxItem } from "./live-inbox";
 import { useSession } from "./session";
@@ -132,7 +132,7 @@ export function AdminStoreProvider({ children }: { children: React.ReactNode }) 
   const [liveActivity, setLiveActivity] = useState<Activity[]>([]);
   const [liveListings, setLiveListings] = useState<StaffListing[]>([]);
   const [liveApplications, setLiveApplications] = useState<ProviderApplication[]>([]);
-  const [liveReports, setLiveReports] = useState<ChatReportTicket[]>([]);
+  const [liveReports, setLiveReports] = useState<ComplaintTicket[]>([]);
   const [inboxReady, setInboxReady] = useState(false);
   const [properties, setProperties] = useState(PROPERTIES);
   const [jobs, setJobs] = useState(JOBS);
@@ -172,18 +172,18 @@ export function AdminStoreProvider({ children }: { children: React.ReactNode }) 
         return;
       }
       try {
-        const [rows, listings, applications, chatReports] = await Promise.all([
+        const [rows, listings, applications, complaints] = await Promise.all([
           listAppUsers(),
           listStaffListings(),
           listProviderApplications(),
-          listChatReports().catch(() => [] as ChatReportTicket[]),
+          listComplaints().catch(() => [] as ComplaintTicket[]),
         ]);
         if (!alive) return;
         setLiveUsers(rows.map(mapDirectoryUser));
         setLiveActivity(rows.map(mapDirectoryActivity));
         setLiveListings(listings);
         setLiveApplications(applications);
-        setLiveReports(chatReports);
+        setLiveReports(complaints);
       } catch {
         // Keep the last successful snapshot so a blip does not empty the inbox.
       } finally {

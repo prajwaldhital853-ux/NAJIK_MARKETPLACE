@@ -195,6 +195,26 @@ class ChatReportView(APIView):
             reporter_snapshot=admin_party(request.user),
             accused_snapshot=admin_party(accused),
         )
+        try:
+            from apps.reports.models import Complaint
+            from apps.reports.serializers import listing_snapshot as ls, party_snapshot as ps
+
+            Complaint.objects.create(
+                kind=Complaint.KIND_CHAT,
+                severity=serializer.validated_data.get("severity") or Complaint.SEVERITY_NORMAL,
+                reason=report.reason,
+                reporter=request.user,
+                accused=accused,
+                listing=listing,
+                chat_thread=thread,
+                chat_report=report,
+                transcript=report.transcript,
+                listing_snapshot=report.listing_snapshot or (ls(listing) if listing else {}),
+                reporter_snapshot=ps(request.user),
+                accused_snapshot=ps(accused),
+            )
+        except Exception:
+            pass
         return Response({"id": str(report.id), "status": report.status}, status=status.HTTP_201_CREATED)
 
 

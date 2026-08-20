@@ -251,7 +251,7 @@ def apply_pending_profile(app: ProviderApplication):
 
 
 def provider_id_card_payload(card, request=None, *, for_staff=False):
-    from apps.core.views.branding import signatory_absolute_uri
+    from apps.core.views.branding import card_branding_fields
 
     owner = card.owner
     app = getattr(owner, "provider_application", None)
@@ -270,6 +270,13 @@ def provider_id_card_payload(card, request=None, *, for_staff=False):
         joined = app.created_at
     elif getattr(owner, "date_joined", None):
         joined = owner.date_joined
+    branding = card_branding_fields(request) if request else {
+        "signature_uri": None,
+        "emergency_phone": "01-5970123",
+        "emergency_email": "support@najik.com",
+        "website": "www.najik.com",
+        "branding_updated_at": None,
+    }
     payload = {
         "id": str(card.id),
         "card_code": card.card_code,
@@ -288,11 +295,11 @@ def provider_id_card_payload(card, request=None, *, for_staff=False):
         "is_verified": bool(app and app.status == "verified"),
         "photo_uri": photo_uri,
         "verify_url": verify_url,
-        "signature_uri": signatory_absolute_uri(request) if request else None,
         "public_qr_uri": (
             request.build_absolute_uri(f"/api/cards/verify/{card.verify_token}/qr/") if request else None
         ),
         "created_at": card.created_at,
+        **branding,
     }
     if request and not for_staff:
         payload["qr_uri"] = request.build_absolute_uri("/api/cards/me/qr/")

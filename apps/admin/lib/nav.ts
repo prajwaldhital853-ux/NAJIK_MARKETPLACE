@@ -111,7 +111,9 @@ export const NAV: NavItem[] = [
     icon: "flag",
     children: [
       { href: "/admin/reports", label: "All reports" },
-      { href: "/admin/reports?status=open", label: "Open" },
+      { href: "/admin/reports?section=buyer", label: "Buyer complain" },
+      { href: "/admin/reports?section=seller", label: "Seller complain" },
+      { href: "/admin/reports?section=chat", label: "From chat" },
       { href: "/admin/reports?severity=high", label: "High severity" },
     ],
   },

@@ -6,6 +6,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Avatar } from "../components/Avatar";
 import { ListingListRow } from "../components/ClassifiedCard";
 import { useAppRefreshControl } from "../components/KeyboardScreen";
+import { ReportComplaintModal } from "../components/ReportComplaintModal";
+import { useAuth } from "../context/AuthContext";
 import { listingsToCatalog } from "../data/liveListings";
 import { fetchSellerProfile, type SellerPublicProfile } from "../listingsApi";
 import { subscribeAppRefresh } from "../listingsRefresh";
@@ -17,8 +19,10 @@ export function SellerProfileScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const insets = useSafeAreaInsets();
+  const { user } = useAuth();
   const userId = String(route.params?.userId ?? "");
   const [profile, setProfile] = useState<SellerPublicProfile | null>(null);
+  const [reportOpen, setReportOpen] = useState(false);
   const refreshControl = useAppRefreshControl();
 
   const load = useCallback(async () => {
@@ -47,7 +51,26 @@ export function SellerProfileScreen() {
           <Pressable onPress={() => navigation.goBack()} hitSlop={12} style={{ width: 32 }}>
             <Ionicons name="arrow-back" size={24} color="#111827" />
           </Pressable>
-          <Text style={{ fontWeight: "800", fontSize: 16 }}>Profile</Text>
+          <Text style={{ fontWeight: "800", fontSize: 16, flex: 1 }}>Profile</Text>
+          {userId && user?.id && String(userId) !== String(user.id) ? (
+            <Pressable
+              onPress={() => {
+                if (!user) {
+                  Alert.alert("Report", "Sign in to report this user.");
+                  return;
+                }
+                if (String(userId) === String(user.id)) {
+                  Alert.alert("Report", "You cannot report yourself.");
+                  return;
+                }
+                setReportOpen(true);
+              }}
+              hitSlop={10}
+              style={{ paddingHorizontal: 8, paddingVertical: 4 }}
+            >
+              <Text style={{ color: "#C62828", fontWeight: "800", fontSize: 13 }}>Report</Text>
+            </Pressable>
+          ) : null}
         </View>
       </View>
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 32 }} refreshControl={refreshControl}>
@@ -88,6 +111,13 @@ export function SellerProfileScreen() {
           <Text style={{ color: colors.muted, lineHeight: 20 }}>No approved listings yet.</Text>
         )}
       </ScrollView>
+      <ReportComplaintModal
+        visible={reportOpen}
+        onClose={() => setReportOpen(false)}
+        kind="user"
+        title={profile?.full_name || "User"}
+        accusedId={userId}
+      />
     </View>
   );
 }

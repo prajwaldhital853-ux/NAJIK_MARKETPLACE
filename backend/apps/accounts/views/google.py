@@ -27,6 +27,7 @@ def _google_payload(id_token: str) -> tuple[dict | None, str | None]:
         from google.auth.transport import requests as google_requests
     except ImportError:
         return None, "Google auth libraries are missing on the server."
+    last_exc = None
     for client_id in client_ids:
         try:
             payload = google_id_token.verify_oauth2_token(
@@ -35,14 +36,28 @@ def _google_payload(id_token: str) -> tuple[dict | None, str | None]:
                 audience=client_id,
             )
             return payload, None
-        except Exception:
+        except Exception as exc:
+            last_exc = exc
             continue
     try:
         payload = google_id_token.verify_oauth2_token(id_token, google_requests.Request())
+        aud = payload.get("aud")
+        if aud and aud not in client_ids:
+            return None, "Google client ID mismatch. Check GOOGLE_CLIENT_IDS."
         return payload, None
     except Exception as exc:
         logger.exception("Google id_token verify failed")
-        return None, f"Could not verify Google account: {exc}"
+        return None, f"Could not verify Google account: {last_exc or exc}"
+
+
+def _redirect_candidates(redirect_uri: str) -> list[str]:
+    raw = (redirect_uri or "").strip() or getattr(settings, "GOOGLE_REDIRECT_URI", "") or ""
+    candidates = []
+    for value in (raw, raw.rstrip("/"), f"{raw.rstrip('/')}/", getattr(settings, "GOOGLE_REDIRECT_URI", "")):
+        value = (value or "").strip()
+        if value and value not in candidates:
+            candidates.append(value)
+    return candidates or [raw]
 
 
 def _exchange_google_code(code: str, redirect_uri: str) -> tuple[dict | None, str | None]:
@@ -50,42 +65,55 @@ def _exchange_google_code(code: str, redirect_uri: str) -> tuple[dict | None, st
     secret = getattr(settings, "GOOGLE_CLIENT_SECRET", "") or ""
     if not client_ids or not secret:
         return None, "Google sign-in is not configured on the server."
-    body = urlencode(
-        {
-            "code": code,
-            "client_id": client_ids[0],
-            "client_secret": secret,
-            "redirect_uri": redirect_uri,
-            "grant_type": "authorization_code",
-        }
-    ).encode()
-    req = Request(
-        "https://oauth2.googleapis.com/token",
-        data=body,
-        headers={"Content-Type": "application/x-www-form-urlencoded"},
-        method="POST",
-    )
-    try:
-        with urlopen(req, timeout=15) as res:
-            data = json.loads(res.read().decode())
-    except HTTPError as exc:
-        detail = exc.read().decode(errors="replace")
-        logger.warning("Google token exchange HTTP %s: %s", exc.code, detail)
-        try:
-            err = json.loads(detail).get("error_description") or json.loads(detail).get("error")
-        except Exception:
-            err = detail
-        return None, f"Google rejected the sign-in code. {err or 'Try again.'}"
-    except Exception as exc:
-        logger.exception("Google token exchange failed")
-        return None, "Could not reach Google to finish sign-in."
-    token = (data.get("id_token") or "").strip()
-    if not token:
-        return None, "Google did not return an account token."
-    payload, err = _google_payload(token)
-    if payload:
-        return payload, None
-    return None, err or "Could not verify Google account."
+
+    last_err = "Google rejected the sign-in code. Try again."
+    for client_id in client_ids:
+        for redirect in _redirect_candidates(redirect_uri):
+            body = urlencode(
+                {
+                    "code": code,
+                    "client_id": client_id,
+                    "client_secret": secret,
+                    "redirect_uri": redirect,
+                    "grant_type": "authorization_code",
+                }
+            ).encode()
+            req = Request(
+                "https://oauth2.googleapis.com/token",
+                data=body,
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+                method="POST",
+            )
+            try:
+                with urlopen(req, timeout=15) as res:
+                    data = json.loads(res.read().decode())
+            except HTTPError as exc:
+                detail = exc.read().decode(errors="replace")
+                logger.warning("Google token exchange HTTP %s (%s): %s", exc.code, redirect, detail)
+                try:
+                    parsed = json.loads(detail)
+                    err = parsed.get("error_description") or parsed.get("error")
+                except Exception:
+                    err = detail
+                last_err = f"Google rejected the sign-in code. {err or 'Try again.'}"
+                # invalid_grant often means code already used — stop trying variants
+                if "invalid_grant" in (err or "").lower() or "invalid_grant" in detail.lower():
+                    return None, last_err
+                continue
+            except Exception:
+                logger.exception("Google token exchange failed")
+                last_err = "Could not reach Google to finish sign-in."
+                continue
+
+            token = (data.get("id_token") or "").strip()
+            if not token:
+                last_err = "Google did not return an account token."
+                continue
+            payload, err = _google_payload(token)
+            if payload:
+                return payload, None
+            last_err = err or "Could not verify Google account."
+    return None, last_err
 
 
 def _session_for_google_user(payload: dict, account_type: str, request):
@@ -146,21 +174,23 @@ class GoogleAuthView(APIView):
         token = (request.data.get("id_token") or "").strip()
         code = (request.data.get("code") or "").strip()
         redirect_uri = (request.data.get("redirect_uri") or "").strip() or getattr(settings, "GOOGLE_REDIRECT_URI", "")
-        payload = None
         if code:
             payload, err = _exchange_google_code(code, redirect_uri)
             if payload is None:
-                return Response({"detail": err or "Google sign-in could not be completed. Try again."}, status=status.HTTP_401_UNAUTHORIZED)
-        elif token:
+                return Response(
+                    {"detail": err or "Google sign-in could not be completed. Try again."},
+                    status=status.HTTP_401_UNAUTHORIZED,
+                )
+            return _session_for_google_user(payload, account_type, request)
+        if token:
             payload, err = _google_payload(token)
             if payload is None:
                 return Response(
                     {"detail": err or "Google sign-in is not configured."},
                     status=status.HTTP_503_SERVICE_UNAVAILABLE,
                 )
-        else:
-            return Response({"detail": "Missing Google sign-in code."}, status=status.HTTP_400_BAD_REQUEST)
-        return _session_for_google_user(payload, account_type, request)
+            return _session_for_google_user(payload, account_type, request)
+        return Response({"detail": "Missing Google sign-in code."}, status=status.HTTP_400_BAD_REQUEST)
 
 
 class GoogleAuthCallbackView(APIView):
@@ -169,4 +199,3 @@ class GoogleAuthCallbackView(APIView):
 
     def get(self, request):
         return Response({"ok": True})
-

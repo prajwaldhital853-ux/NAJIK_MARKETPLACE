@@ -16,8 +16,10 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         email = options["email"].lower().strip()
         password = options["password"]
-        if StaffUser.objects.filter(email__iexact=email).exists():
-            raise CommandError("A staff user with this email already exists.")
+        existing = StaffUser.objects.filter(email__iexact=email).first()
+        if existing:
+            self.stdout.write(self.style.WARNING(f"Super Admin already exists: {existing.email} (skipped)"))
+            return
         try:
             validate_password(password)
         except ValidationError as exc:

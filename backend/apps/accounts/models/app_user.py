@@ -59,6 +59,8 @@ class AppUser(AbstractBaseUser, PermissionsMixin):
         (STATUS_DEACTIVATED, "Deactivated"),
     )
     account_status = models.CharField(max_length=16, choices=STATUS_CHOICES, default=STATUS_ACTIVE)
+    staff_warning = models.TextField(blank=True, default="")
+    staff_warning_at = models.DateTimeField(null=True, blank=True)
 
     objects = AppUserManager()
 

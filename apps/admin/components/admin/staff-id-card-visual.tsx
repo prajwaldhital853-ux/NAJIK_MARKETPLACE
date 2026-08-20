@@ -1,12 +1,19 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Briefcase, Calendar, IdCard, Mail, Phone, User } from "lucide-react";
+import { Briefcase, Calendar, Globe, IdCard, Mail, Phone, ShieldCheck, User } from "lucide-react";
 import { fetchStaffImage, type ProviderIdCard } from "@/lib/staff-api";
 import { formatNptDate } from "@/lib/format";
 
 const GREEN = "#1B7D2C";
 const GREEN_LIGHT = "#7AC943";
+
+const TERMS = [
+  "This ID card is the property of NAJIK.",
+  "This card is non-transferable.",
+  "Use of this ID card is subject to NAJIK's terms and conditions.",
+  "If found, please return to NAJIK office or contact us.",
+];
 
 function phoneLabel(phone?: string) {
   if (!phone) return "—";
@@ -23,11 +30,13 @@ function StaffImage({
   className,
   alt,
   fallbackSrc,
+  blend,
 }: {
   uri?: string | null;
   className?: string;
   alt: string;
   fallbackSrc?: string;
+  blend?: boolean;
 }) {
   const [src, setSrc] = useState<string | null>(fallbackSrc || null);
 
@@ -41,7 +50,14 @@ function StaffImage({
       setSrc(uri);
       return;
     }
-    void fetchStaffImage(uri)
+    // Prefer URI as-is when it already has cache-bust (?v=) for public branding images.
+    const needsAuth = uri.includes("/api/admin/") || uri.includes("/api/verification/") || uri.includes("/api/cards/");
+    if (!needsAuth && uri.includes("/api/branding/")) {
+      setSrc(uri);
+      return;
+    }
+    const bust = uri.includes("?") ? `${uri}&t=${Date.now()}` : `${uri}?t=${Date.now()}`;
+    void fetchStaffImage(bust)
       .then((blobUrl) => {
         if (alive) setSrc(blobUrl || fallbackSrc || null);
       })
@@ -60,7 +76,14 @@ function StaffImage({
       </div>
     );
   }
-  return <img src={src} alt={alt} className={className} style={{ mixBlendMode: "multiply" }} />;
+  return (
+    <img
+      src={src}
+      alt={alt}
+      className={className}
+      style={blend ? { mixBlendMode: "multiply" } : undefined}
+    />
+  );
 }
 
 function DetailLine({
@@ -81,14 +104,30 @@ function DetailLine({
   );
 }
 
+function SectionPill({ label }: { label: string }) {
+  return (
+    <div className="mx-auto w-fit rounded-full bg-[#1B7D2C] px-4 py-1.5">
+      <p className="text-center text-[10px] font-bold tracking-[0.06em] text-white">{label}</p>
+    </div>
+  );
+}
+
 function FrontCard({ card }: { card: ProviderIdCard }) {
   const blocked = card.access_status !== "approved";
   const qr = card.qr_uri || card.public_qr_uri;
+  const signKey = String(card.branding_updated_at || card.signature_uri || "");
 
   return (
     <article className="relative overflow-hidden rounded-2xl border border-line bg-white text-ink shadow-sm">
-      <svg className="pointer-events-none absolute right-0 top-0 h-[78px] w-full" viewBox="0 0 360 78" preserveAspectRatio="none" aria-hidden>
-        <path d="M150 0 H360 V62 C295 78 210 70 150 0 Z" fill={GREEN} />
+      {/* Top-right brand corner — flush to card edges (SS2). */}
+      <svg
+        className="pointer-events-none absolute -right-px -top-px z-[1] h-[74px] w-[43%]"
+        viewBox="0 0 140 72"
+        preserveAspectRatio="none"
+        aria-hidden
+      >
+        <path d="M0 0 C48 6 92 34 140 72 L140 66 C96 32 52 4 0 0 Z" fill={GREEN_LIGHT} />
+        <path d="M0 0 H140 V72 C92 34 48 6 0 0 Z" fill={GREEN} />
       </svg>
       {blocked ? (
         <div className="pointer-events-none absolute inset-0 z-20 overflow-hidden">
@@ -104,11 +143,11 @@ function FrontCard({ card }: { card: ProviderIdCard }) {
         </div>
       ) : null}
 
-      <div className="relative z-[1] px-4 pb-2 pt-5 text-center">
-        <p className="text-[18px] font-black tracking-[0.08em]">NAJIK</p>
-        <p className="mt-1 text-[9px] font-semibold tracking-[0.16em] text-muted">— EVERYTHING NEAR YOU —</p>
+      <div className="relative z-[2] px-4 pb-2 pt-4 text-center">
+        <p className="text-[26px] font-black tracking-[0.1em]">NAJIK</p>
+        <p className="mt-1 text-[10px] font-semibold tracking-[0.16em] text-muted">— EVERYTHING NEAR YOU —</p>
         <div className="mx-auto mt-3 h-[112px] w-[112px] overflow-hidden rounded-full border-[3px] border-[#1B7D2C]">
-          <StaffImage uri={card.photo_uri} alt={card.full_name} className="h-full w-full object-cover !mix-blend-normal" />
+          <StaffImage uri={card.photo_uri} alt={card.full_name} className="h-full w-full object-cover" />
         </div>
         <p className="mt-3 text-[16px] font-black uppercase tracking-wide">{card.full_name || "Seller"}</p>
         <p className="mt-1 text-[11px] font-bold uppercase" style={{ color: GREEN }}>
@@ -116,7 +155,7 @@ function FrontCard({ card }: { card: ProviderIdCard }) {
         </p>
       </div>
 
-      <div className="relative z-[1] px-5 pb-2">
+      <div className="relative z-[2] px-5 pb-1">
         <DetailLine icon={<IdCard size={14} />} label="Provider ID" value={card.card_code} />
         <DetailLine icon={<Briefcase size={14} />} label="Category" value={card.category || "—"} />
         <DetailLine icon={<Phone size={14} />} label="Phone" value={phoneLabel(card.phone)} />
@@ -124,25 +163,31 @@ function FrontCard({ card }: { card: ProviderIdCard }) {
         <DetailLine icon={<Calendar size={14} />} label="Joined On" value={joinedLabel(card.joined_on)} />
       </div>
 
-      <div className="relative mt-1 h-[112px]">
-        <svg className="absolute inset-0 h-full w-full" viewBox="0 0 360 112" preserveAspectRatio="none" aria-hidden>
-          <path d="M0 112 V48 C65 18 137 72 209 46 C281 22 324 38 360 28 V112 Z" fill={GREEN} />
-          <path d="M0 112 V62 C72 36 144 78 216 54 C281 34 324 48 360 42 V112 Z" fill={GREEN_LIGHT} />
+      {/* Footer: QR in green (left), signature in white (right) — SS2. */}
+      <div className="relative mt-2 h-[128px]">
+        <svg className="absolute inset-0 h-full w-full" viewBox="0 0 360 128" preserveAspectRatio="none" aria-hidden>
+          <path
+            d="M0 10 C79 -3 151 70 223 92 C281 110 324 118 360 122 L360 113 C324 109 281 100 223 82 C151 58 79 -10 0 3 Z"
+            fill={GREEN_LIGHT}
+          />
+          <path
+            d="M0 128 V10 C79 -3 151 70 223 92 C281 110 324 118 360 122 V128 Z"
+            fill={GREEN}
+          />
         </svg>
-        <div className="relative z-[1] flex h-full items-end justify-between px-4 pb-3.5">
-          <div className="h-16 w-16 overflow-hidden rounded-md bg-white p-1">
-            <StaffImage uri={qr} alt="QR" className="h-full w-full object-contain !mix-blend-normal" />
-          </div>
-          <div className="flex min-w-[110px] flex-col items-center">
-            <StaffImage
-              uri={card.signature_uri}
-              fallbackSrc="/id-card/authorized-signatory.png"
-              alt="Authorized signatory"
-              className="h-9 w-[110px] object-contain"
-            />
-            <div className="mt-1 mb-1 h-[1.5px] w-[108px] bg-[#1B7D2C]" />
-            <p className="text-[10px] font-semibold text-ink">Authorized Signatory</p>
-          </div>
+        <div className="absolute bottom-4 left-3.5 z-[1] h-[74px] w-[74px] overflow-hidden rounded-[10px] bg-white p-1.5">
+          <StaffImage uri={qr} alt="QR" className="h-full w-full object-contain" />
+        </div>
+        <div className="absolute right-4 top-2 z-[2] flex min-w-[124px] flex-col items-center">
+          <StaffImage
+            key={signKey}
+            uri={card.signature_uri}
+            fallbackSrc="/id-card/authorized-signatory.png"
+            alt="Authorized signatory"
+            className="h-[42px] w-[120px] object-contain"
+          />
+          <div className="mb-1 mt-0.5 h-[1.5px] w-[112px] bg-[#1B7D2C]" />
+          <p className="text-[10px] font-semibold text-ink">Authorized Signatory</p>
         </div>
       </div>
     </article>
@@ -152,6 +197,9 @@ function FrontCard({ card }: { card: ProviderIdCard }) {
 function BackCard({ card }: { card: ProviderIdCard }) {
   const blocked = card.access_status !== "approved";
   const qr = card.qr_uri || card.public_qr_uri;
+  const phone = card.emergency_phone || "01-5970123";
+  const email = card.emergency_email || "support@najik.com";
+  const website = (card.website || "www.najik.com").replace(/^https?:\/\//, "");
 
   return (
     <article className="relative overflow-hidden rounded-2xl border border-line bg-white text-ink shadow-sm">
@@ -168,38 +216,76 @@ function BackCard({ card }: { card: ProviderIdCard }) {
           ))}
         </div>
       ) : null}
-      <div className="bg-[#1B7D2C] px-4 py-7 text-center text-white">
-        <p className="text-[18px] font-black tracking-[0.08em]">NAJIK</p>
-        <p className="mt-1 text-[9px] font-semibold tracking-[0.16em] text-white/90">EVERYTHING NEAR YOU</p>
+
+      {/* Header with brand mark from SS1 */}
+      <div className="relative bg-[#1B7D2C] px-4 pb-10 pt-5 text-center text-white">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src="/id-card/back-brand.png"
+          alt="NAJIK"
+          className="relative mx-auto h-[108px] w-auto max-w-[220px] object-contain"
+        />
+        <svg className="absolute bottom-[-1px] left-0 w-full" viewBox="0 0 360 28" preserveAspectRatio="none" aria-hidden>
+          <path d="M0 28 V14 C90 28 180 0 270 14 C315 21 340 18 360 12 V28 Z" fill="#fff" />
+        </svg>
       </div>
-      <div className="m-3 overflow-hidden rounded-xl border border-line">
-        <div className="bg-[#1B7D2C] px-3 py-2 text-[11px] font-bold text-white">TERMS & CONDITIONS</div>
-        <div className="space-y-1 px-3 py-2.5 text-[11px] leading-relaxed text-muted">
-          <p>• This ID is property of NAJIK.</p>
-          <p>• Non-transferable. Misuse may lead to account suspension.</p>
-          <p>• Follow NAJIK marketplace terms at all times.</p>
-          <p>• Return or destroy if your account is closed.</p>
+
+      <div className="px-5 pb-2 pt-1">
+        <SectionPill label="TERMS & CONDITIONS" />
+        <ul className="mt-3 space-y-2">
+          {TERMS.map((line) => (
+            <li key={line} className="flex gap-2 text-[11px] leading-[15px] text-[#1F2937]">
+              <span className="mt-[5px] h-1.5 w-1.5 shrink-0 rounded-full bg-[#1B7D2C]" />
+              <span>{line}</span>
+            </li>
+          ))}
+        </ul>
+
+        <div className="my-4 h-px bg-[#1B7D2C]"></div>
+
+        <SectionPill label="EMERGENCY CONTACT" />
+        <div className="mt-3 space-y-2 px-1">
+          <p className="flex items-center gap-2 text-[12px] font-semibold text-ink">
+            <Phone size={14} className="text-[#1B7D2C]" />
+            {phone}
+          </p>
+          <p className="flex items-center gap-2 text-[12px] font-semibold text-ink">
+            <Mail size={14} className="text-[#1B7D2C]" />
+            {email}
+          </p>
+        </div>
+
+        <div className="mt-5 flex flex-col items-center">
+          <p className="mb-2 text-[12px] font-black tracking-[0.08em]" style={{ color: GREEN }}>
+            SCAN TO VERIFY
+          </p>
+          <div className="h-[132px] w-[132px] overflow-hidden rounded-xl border-[2.5px] border-[#1B7D2C] bg-white p-1.5">
+            <StaffImage uri={qr} alt="Verify QR" className="h-full w-full object-contain" />
+          </div>
+          <div className="mt-3 flex items-center gap-2">
+            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#1B7D2C] text-white">
+              <ShieldCheck size={16} />
+            </span>
+            <div>
+              <p className="text-[13px] font-black leading-none" style={{ color: GREEN }}>
+                {card.is_verified ? "VERIFIED" : "PENDING"}
+              </p>
+              <p className="mt-0.5 text-[11px] font-medium text-ink">Valid ID</p>
+            </div>
+          </div>
         </div>
       </div>
-      <div className="mx-3 mb-3 overflow-hidden rounded-xl border border-line">
-        <div className="bg-[#1B7D2C] px-3 py-2 text-[11px] font-bold text-white">EMERGENCY CONTACT</div>
-        <div className="space-y-1 px-3 py-2.5 text-[12px] text-ink">
-          <p>01-5970123</p>
-          <p>support@najik.com</p>
-        </div>
-      </div>
-      <div className="flex flex-col items-center px-4 pb-4 pt-1">
-        <p className="mb-2 text-[11px] font-bold uppercase tracking-wide" style={{ color: GREEN }}>
-          Scan to verify
+
+      {/* Footer with top curve */}
+      <div className="relative mt-4 bg-[#1B7D2C] px-4 pb-3.5 pt-8 text-center text-white">
+        <svg className="absolute left-0 top-[-1px] w-full" viewBox="0 0 360 28" preserveAspectRatio="none" aria-hidden>
+          <path d="M0 0 V14 C90 0 180 28 270 14 C315 7 340 10 360 16 V0 Z" fill="#fff" />
+        </svg>
+        <p className="relative flex items-center justify-center gap-2 text-[12px] font-semibold">
+          <Globe size={14} />
+          {website}
         </p>
-        <div className="h-32 w-32 overflow-hidden rounded-xl border-2 border-[#1B7D2C] bg-white p-1.5">
-          <StaffImage uri={qr} alt="Verify QR" className="h-full w-full object-contain !mix-blend-normal" />
-        </div>
-        <p className="mt-2 text-[12px] font-black" style={{ color: GREEN }}>
-          {card.is_verified ? "VERIFIED" : "PENDING"} · Valid ID
-        </p>
       </div>
-      <div className="bg-[#1B7D2C] py-2.5 text-center text-[12px] font-semibold text-white">www.najik.com</div>
     </article>
   );
 }

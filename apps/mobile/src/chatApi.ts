@@ -94,12 +94,12 @@ export async function blockChatThread(threadId: string) {
   );
 }
 
-export async function reportChatThread(threadId: string, reason: string) {
+export async function reportChatThread(threadId: string, reason: string, severity: "normal" | "high" = "normal") {
   return withAppAuth((token) =>
     api<{ id: string; status: string }>(`/api/chat/threads/${threadId}/report/`, {
       method: "POST",
       token,
-      body: JSON.stringify({ reason }),
+      body: JSON.stringify({ reason, severity }),
     }),
   );
 }

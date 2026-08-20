@@ -4,15 +4,27 @@ import { useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { StaffIdCardVisual } from "@/components/admin/staff-id-card-visual";
 import { PageHeader, SummaryStrip } from "@/components/admin/page-frame";
-import { Btn, StatusBadge } from "@/components/admin/ui";
+import { Btn, Field, StatusBadge, inputClass } from "@/components/admin/ui";
 import { formatNptDateTime, formatNptTime } from "@/lib/format";
 import { ADMIN_POLL_MS } from "@/lib/live-inbox";
 import { useSession } from "@/lib/session";
+import { useAdmin } from "@/lib/store";
 import {
+  fetchBranding,
+  fetchStaffImage,
   listProviderIdCards,
   patchProviderIdCard,
+  updateBranding,
   type ProviderIdCard,
 } from "@/lib/staff-api";
+
+async function fileToDataUri(file: File) {
+  const buffer = await file.arrayBuffer();
+  const bytes = new Uint8Array(buffer);
+  let binary = "";
+  for (let i = 0; i < bytes.length; i += 1) binary += String.fromCharCode(bytes[i]);
+  return `data:${file.type || "image/png"};base64,${btoa(binary)}`;
+}
 
 const TABS = [
   { value: "requested", label: "Requests" },
@@ -39,6 +51,7 @@ function Info({ label, value }: { label: string; value: string }) {
 
 export default function IdCardsPage() {
   const { apiSession } = useSession();
+  const { toast } = useAdmin();
   const params = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
@@ -47,6 +60,27 @@ export default function IdCardsPage() {
   const [error, setError] = useState("");
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(params.get("id"));
+  const [signatoryPreview, setSignatoryPreview] = useState("/id-card/authorized-signatory.png");
+  const [emergencyPhone, setEmergencyPhone] = useState("01-5970123");
+  const [emergencyEmail, setEmergencyEmail] = useState("support@najik.com");
+  const [website, setWebsite] = useState("www.najik.com");
+  const [brandBusy, setBrandBusy] = useState(false);
+
+  async function loadBranding() {
+    if (!apiSession) return;
+    try {
+      const data = await fetchBranding();
+      setEmergencyPhone(data.emergency_phone || "01-5970123");
+      setEmergencyEmail(data.emergency_email || "support@najik.com");
+      setWebsite(data.website || "www.najik.com");
+      if (data.signatory_uri) {
+        const blob = await fetchStaffImage(`${data.signatory_uri}?t=${Date.now()}`);
+        setSignatoryPreview(blob || `${data.signatory_uri}?t=${Date.now()}`);
+      }
+    } catch {
+      /* keep defaults */
+    }
+  }
 
   async function load() {
     if (!apiSession) return;
@@ -73,9 +107,45 @@ export default function IdCardsPage() {
       return;
     }
     void load();
+    void loadBranding();
     const id = window.setInterval(() => void load(), ADMIN_POLL_MS);
     return () => window.clearInterval(id);
   }, [apiSession]);
+
+  async function onSignatoryFile(file?: File | null) {
+    if (!file) return;
+    setBrandBusy(true);
+    try {
+      const saved = await updateBranding({ signatory_uri: await fileToDataUri(file) });
+      if (saved.signatory_uri) {
+        const blob = await fetchStaffImage(`${saved.signatory_uri}?t=${Date.now()}`);
+        setSignatoryPreview(blob || `${saved.signatory_uri}?t=${Date.now()}`);
+      }
+      await load();
+      toast("Signature updated on all seller ID cards.");
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Could not upload signature.");
+    } finally {
+      setBrandBusy(false);
+    }
+  }
+
+  async function saveEmergencyContact() {
+    setBrandBusy(true);
+    try {
+      await updateBranding({
+        emergency_phone: emergencyPhone.trim(),
+        emergency_email: emergencyEmail.trim(),
+        website: website.trim(),
+      });
+      await load();
+      toast("Emergency contact updated on all seller ID cards.");
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Could not save emergency contact.");
+    } finally {
+      setBrandBusy(false);
+    }
+  }
 
   useEffect(() => {
     const id = params.get("id");
@@ -153,6 +223,45 @@ export default function IdCardsPage() {
           { label: "Blocked", value: blocked.length, tone: "red" },
         ]}
       />
+
+      <section className="card-glow mb-4 grid gap-4 rounded-2xl border border-line bg-card p-5 lg:grid-cols-[220px_1fr]">
+        <div>
+          <h2 className="text-sm font-semibold text-ink">Authorized signatory</h2>
+          <p className="mt-1 text-xs text-muted">Shown on every seller ID card front. Changes apply to active cards immediately.</p>
+          <div className="mt-3 flex h-24 items-center justify-center rounded-xl border border-line bg-white p-3">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={signatoryPreview} alt="Authorized signatory" className="max-h-full max-w-full object-contain" />
+          </div>
+          <input
+            type="file"
+            accept="image/png,image/jpeg,image/webp"
+            disabled={brandBusy || !apiSession}
+            onChange={(event) => void onSignatoryFile(event.target.files?.[0])}
+            className="mt-3 block w-full text-xs text-ink"
+          />
+        </div>
+        <div>
+          <h2 className="text-sm font-semibold text-ink">Emergency contact (card back)</h2>
+          <p className="mt-1 text-xs text-muted">Updates phone, email, and website on all seller ID card backs.</p>
+          <div className="mt-3 grid gap-3 sm:grid-cols-3">
+            <Field label="Phone">
+              <input className={inputClass} value={emergencyPhone} onChange={(e) => setEmergencyPhone(e.target.value)} />
+            </Field>
+            <Field label="Email">
+              <input className={inputClass} value={emergencyEmail} onChange={(e) => setEmergencyEmail(e.target.value)} />
+            </Field>
+            <Field label="Website">
+              <input className={inputClass} value={website} onChange={(e) => setWebsite(e.target.value)} />
+            </Field>
+          </div>
+          <div className="mt-3">
+            <Btn disabled={brandBusy || !apiSession} onClick={() => void saveEmergencyContact()}>
+              {brandBusy ? "Saving…" : "Save contact for all cards"}
+            </Btn>
+          </div>
+        </div>
+      </section>
+
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap gap-1">
           {TABS.map((item) => (

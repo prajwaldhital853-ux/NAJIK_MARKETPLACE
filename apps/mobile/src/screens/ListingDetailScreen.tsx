@@ -23,6 +23,7 @@ import { classifiedMore, ConditionPill, LINE, ListingGrid, listingTags, postedLa
 import { OsmWebMap } from "../components/OsmWebMap";
 import { KeyboardScreen, useKeyboardScroll } from "../components/KeyboardScreen";
 import { PressScale } from "../components/PressScale";
+import { ReportComplaintModal } from "../components/ReportComplaintModal";
 import { useAuth } from "../context/AuthContext";
 import { isProvider } from "../demo";
 import { catalogMeta, listingById, type CatalogItem } from "../data/catalog";
@@ -146,6 +147,7 @@ function ListingBody({
   const [reviewText, setReviewText] = useState("");
   const [rating, setRating] = useState(5);
   const [busy, setBusy] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
   const marketplace = item.key === "used" || item.key === "electronics";
 
   useEffect(() => {
@@ -411,7 +413,27 @@ function ListingBody({
           );
         })}
         <View style={{ flex: 1 }} />
-        <Pressable onPress={() => classifiedMore(item)} hitSlop={8} style={{ padding: 10 }}>
+        <Pressable
+          onPress={() =>
+            classifiedMore(item, () => {
+              if (isOwner) {
+                Alert.alert("Report", "You cannot report your own listing.");
+                return;
+              }
+              if (!user) {
+                Alert.alert("Report", "Sign in to report this listing.");
+                return;
+              }
+              if (!/^[0-9a-f-]{36}$/i.test(String(listingId))) {
+                Alert.alert("Report", "This demo listing cannot be reported.");
+                return;
+              }
+              setReportOpen(true);
+            })
+          }
+          hitSlop={8}
+          style={{ padding: 10 }}
+        >
           <Ionicons name="ellipsis-vertical" size={16} color="#6B7280" />
         </Pressable>
       </View>
@@ -580,6 +602,13 @@ function ListingBody({
           />
         </View>
       </Modal>
+      <ReportComplaintModal
+        visible={reportOpen}
+        onClose={() => setReportOpen(false)}
+        kind="listing"
+        title={item.title}
+        listingId={String(listingId)}
+      />
     </>
   );
 }

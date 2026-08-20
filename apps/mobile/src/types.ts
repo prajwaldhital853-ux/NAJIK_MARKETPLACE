@@ -30,6 +30,8 @@ export type AppUser = {
   rejection_note?: string;
   profile_data?: Record<string, string>;
   date_joined?: string;
+  staff_warning?: string;
+  staff_warning_at?: string | null;
 };
 
 export type DealType = "For Sale" | "For Rent";

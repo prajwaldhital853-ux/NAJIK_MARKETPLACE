@@ -123,6 +123,8 @@ class AppUserPublicSerializer(serializers.ModelSerializer):
             "contact",
             "profile_data",
             "date_joined",
+            "staff_warning",
+            "staff_warning_at",
         )
         read_only_fields = fields
 

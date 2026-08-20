@@ -1,6 +1,4 @@
-import base64
 import io
-import mimetypes
 
 import qrcode
 from django.http import HttpResponse
@@ -27,22 +25,6 @@ def _qr_png_bytes(data: str) -> bytes:
 
 def _qr_png_response(data: str) -> HttpResponse:
     return HttpResponse(_qr_png_bytes(data), content_type="image/png")
-
-
-def _qr_data_uri(data: str) -> str:
-    return "data:image/png;base64," + base64.b64encode(_qr_png_bytes(data)).decode("ascii")
-
-
-def _file_data_uri(field) -> str:
-    if not field:
-        return ""
-    try:
-        raw = field.open("rb").read()
-        content_type, _ = mimetypes.guess_type(field.name)
-        mime = content_type or "image/jpeg"
-        return f"data:{mime};base64," + base64.b64encode(raw).decode("ascii")
-    except Exception:
-        return ""
 
 
 class ProviderIdCardMeView(APIView):
@@ -93,79 +75,14 @@ class ProviderIdCardMePrintView(APIView):
                 {"detail": "Download and print are blocked until admin approves your request."},
                 status=status.HTTP_403_FORBIDDEN,
             )
-        data = provider_id_card_payload(card, request=request)
-        app = getattr(request.user, "provider_application", None)
-        photo = _file_data_uri(app.photo if app else None)
-        verify_url = data["verify_url"]
-        qr = _qr_data_uri(verify_url)
-        joined = ""
-        if data.get("joined_on"):
-            try:
-                joined = data["joined_on"].strftime("%d %b %Y")
-            except Exception:
-                joined = str(data["joined_on"])[:10]
-        status_label = "VERIFIED" if data["is_verified"] else "PENDING"
-        html = f"""<!doctype html>
-<html><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>{data['card_code']}</title>
-<style>
-body{{font-family:Arial,sans-serif;background:#eef2f0;margin:0;padding:16px;color:#111}}
-.wrap{{display:flex;flex-wrap:wrap;gap:18px;justify-content:center}}
-.card{{width:320px;background:#fff;border-radius:18px;overflow:hidden;border:1px solid #d7e3db}}
-.head{{text-align:center;padding:16px 12px 8px}}
-.brand{{font-weight:800;font-size:22px;letter-spacing:1px}}
-.tag{{font-size:10px;letter-spacing:1px;margin-top:4px}}
-.photo{{width:110px;height:110px;border-radius:55px;object-fit:cover;border:3px solid #1B7D2C;display:block;margin:8px auto;background:#e7f6ec}}
-.name{{text-align:center;font-weight:800;font-size:18px;margin-top:8px}}
-.role{{text-align:center;color:#1B7D2C;font-weight:700;font-size:12px}}
-.rows{{padding:12px 18px 8px;font-size:12px}}
-.row{{margin:6px 0}} .label{{color:#64748b}}
-.foot{{background:linear-gradient(180deg,#1B7D2C,#0f5a1e);color:#fff;padding:14px;display:flex;justify-content:space-between;align-items:flex-end;min-height:78px}}
-.qr{{width:64px;height:64px;background:#fff;padding:4px;border-radius:6px}}
-.back-top{{background:#1B7D2C;color:#fff;text-align:center;padding:28px 12px}}
-.section{{margin:12px 14px;border:1px solid #d7e3db;border-radius:10px;overflow:hidden}}
-.section h3{{margin:0;background:#1B7D2C;color:#fff;font-size:11px;padding:8px 10px}}
-.section div{{padding:10px;font-size:11px;line-height:1.45;color:#334155}}
-.verify{{text-align:center;padding:10px}}
-@media print {{ body{{background:#fff}} .card{{break-inside:avoid}} }}
-</style></head><body>
-<div class="wrap">
-  <div class="card">
-    <div class="head"><div class="brand">NAJIK</div><div class="tag">— EVERYTHING NEAR YOU —</div>
-      <img class="photo" src="{photo}"/>
-      <div class="name">{data['full_name']}</div><div class="role">SERVICE PROVIDER</div>
-    </div>
-    <div class="rows">
-      <div class="row"><span class="label">Provider ID:</span> {data['card_code']}</div>
-      <div class="row"><span class="label">Category:</span> {data['category'] or '—'}</div>
-      <div class="row"><span class="label">Phone:</span> {data['phone'] or '—'}</div>
-      <div class="row"><span class="label">Email:</span> {data['email'] or '—'}</div>
-      <div class="row"><span class="label">Joined On:</span> {joined or '—'}</div>
-    </div>
-    <div class="foot">
-      <img class="qr" src="{qr}"/>
-      <div style="text-align:right;font-size:10px">Authorized Signatory</div>
-    </div>
-  </div>
-  <div class="card">
-    <div class="back-top"><div class="brand" style="color:#fff">NAJIK</div><div class="tag">EVERYTHING NEAR YOU</div></div>
-    <div class="section"><h3>TERMS & CONDITIONS</h3><div>
-      • This ID is property of NAJIK.<br/>
-      • Non-transferable. Misuse may lead to account suspension.<br/>
-      • Follow NAJIK marketplace terms at all times.<br/>
-      • Return or destroy if your account is closed.
-    </div></div>
-    <div class="section"><h3>EMERGENCY CONTACT</h3><div>01-5970123<br/>support@najik.com</div></div>
-    <div class="verify">
-      <div style="color:#1B7D2C;font-weight:700;font-size:12px;margin-bottom:8px">SCAN TO VERIFY</div>
-      <img class="qr" style="width:120px;height:120px;margin:0 auto;display:block" src="{qr}"/>
-      <div style="color:#1B7D2C;font-weight:800;margin-top:8px">{status_label} · Valid ID</div>
-    </div>
-  </div>
-</div>
-<script>window.onload=function(){{setTimeout(function(){{window.print()}},400)}}</script>
-</body></html>"""
-        return HttpResponse(html, content_type="text/html")
+        from apps.verification.id_card_pdf import build_id_card_pdf
+
+        pdf_bytes = build_id_card_pdf(card, request)
+        filename = f"najik-id-{card.card_code}.pdf".replace(" ", "-")
+        response = HttpResponse(pdf_bytes, content_type="application/pdf")
+        response["Content-Disposition"] = f'attachment; filename="{filename}"'
+        response["Content-Length"] = str(len(pdf_bytes))
+        return response
 
 
 class PublicIdCardVerifyView(APIView):

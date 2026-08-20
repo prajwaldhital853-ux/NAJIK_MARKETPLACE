@@ -67,7 +67,13 @@ export function GoogleSignInModal({
   function capture(url: string) {
     if (done.current) return;
     const hit = googleResultFromUrl(url);
-    if (!hit?.code || codeSent.current === hit.code) return;
+    if (!hit) return;
+    if (hit.error) {
+      done.current = true;
+      onClose();
+      return;
+    }
+    if (!hit.code || codeSent.current === hit.code) return;
     done.current = true;
     codeSent.current = hit.code;
     onCode(hit.code);

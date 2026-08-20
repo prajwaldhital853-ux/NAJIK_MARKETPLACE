@@ -1,6 +1,6 @@
 import { relativeTime } from "./format";
 import type { User } from "./demo-data";
-import type { ProviderApplication, StaffListing, ChatReportTicket } from "./staff-api";
+import type { ProviderApplication, StaffListing, ComplaintTicket } from "./staff-api";
 
 export const ADMIN_POLL_MS = 5000;
 export const OPEN_INBOX_KEY = "najik_admin_open_inbox";
@@ -82,16 +82,19 @@ export function listingLabel(category: string) {
   return labels[category] || "Listing";
 }
 
-export function isOpenChatReport(row: ChatReportTicket) {
+export function isOpenComplaint(row: ComplaintTicket) {
   return row.status === "open" || row.status === "under_review";
 }
+
+/** @deprecated use isOpenComplaint */
+export const isOpenChatReport = isOpenComplaint;
 
 export function buildInbox(
   users: User[],
   listings: StaffListing[],
   applications: ProviderApplication[],
   seen: Iterable<string> = [],
-  reports: ChatReportTicket[] = [],
+  reports: ComplaintTicket[] = [],
 ): InboxItem[] {
   const seenSet = seen instanceof Set ? seen : new Set(seen);
   const appOwnerIds = new Set(applications.filter(isPendingApplication).map((row) => row.owner_id).filter(Boolean));
@@ -136,14 +139,15 @@ export function buildInbox(
     });
   });
 
-  reports.filter(isOpenChatReport).forEach((row) => {
+  reports.filter(isOpenComplaint).forEach((row) => {
     const reporter = row.reporter?.full_name || "A user";
-    const accused = row.accused?.full_name || "another user";
+    const accused = row.accused?.full_name || (row.kind === "listing" ? "a listing" : "another user");
+    const kindLabel = row.kind === "listing" ? "listing" : row.kind === "chat" ? "chat" : "user";
     items.push({
       id: `report-${row.id}`,
       kind: "report",
-      title: `${reporter} reported ${accused}`,
-      detail: (row.reason || row.listing?.title || "Chat complaint").slice(0, 120),
+      title: row.severity === "high" ? `High: ${reporter} reported ${accused}` : `${reporter} reported ${accused}`,
+      detail: (row.reason || row.listing?.title || `${kindLabel} complaint`).slice(0, 120),
       href: `/admin/reports?id=${row.id}`,
       time: relativeTime(row.created_at),
       at: Date.parse(row.created_at) || 0,
@@ -160,7 +164,7 @@ export function navBadges(
   listings: StaffListing[],
   applications: ProviderApplication[],
   seen: Iterable<string> = [],
-  reports: ChatReportTicket[] = [],
+  reports: ComplaintTicket[] = [],
 ) {
   const seenSet = seen instanceof Set ? seen : new Set(seen);
   const pendingListings = listings.filter(isPendingListing);
@@ -172,7 +176,11 @@ export function navBadges(
   const pendingBuyers = pendingUsers.filter((user) => user.role === "buyer").length;
   const pendingProviders = pendingUsers.filter((user) => user.role === "provider").length;
   const other = byCat("vehicles") + byCat("business") + byCat("nearby");
-  const openReports = reports.filter(isOpenChatReport).filter((row) => !seenSet.has(`report-${row.id}`)).length;
+  const openReports = reports.filter(isOpenComplaint).filter((row) => !seenSet.has(`report-${row.id}`)).length;
+  const highReports = reports.filter((row) => isOpenComplaint(row) && row.severity === "high").length;
+  const openBuyer = reports.filter((row) => isOpenComplaint(row) && row.kind !== "chat" && row.reporter?.account_type !== "provider").length;
+  const openSeller = reports.filter((row) => isOpenComplaint(row) && row.kind !== "chat" && row.reporter?.account_type === "provider").length;
+  const openChat = reports.filter((row) => isOpenComplaint(row) && row.kind === "chat").length;
   const inboxCount = buildInbox(users, listings, applications, seenSet, reports).length;
 
   return {
@@ -198,5 +206,9 @@ export function navBadges(
     "/admin/notifications": inboxCount,
     "/admin/reports": openReports,
     "/admin/reports?status=open": openReports,
+    "/admin/reports?severity=high": highReports,
+    "/admin/reports?section=buyer": openBuyer,
+    "/admin/reports?section=seller": openSeller,
+    "/admin/reports?section=chat": openChat,
   } as Record<string, number>;
 }

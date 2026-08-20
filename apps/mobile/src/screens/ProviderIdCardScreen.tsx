@@ -1,5 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useNavigation } from "@react-navigation/native";
+import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -7,20 +7,32 @@ import {
   Dimensions,
   Image,
   ScrollView,
-  Share,
   Text,
   View,
 } from "react-native";
-import * as WebBrowser from "expo-web-browser";
 import { AppHeader } from "../components/AppHeader";
 import { AuthImage } from "../components/AuthImage";
 import { IdCardFrontVisual } from "../components/IdCardFrontVisual";
 import { PressScale } from "../components/PressScale";
-import { fetchMyIdCard, requestIdCardDownload, type ProviderIdCard } from "../idCardApi";
+import {
+  downloadMyIdCardPdf,
+  fetchMyIdCard,
+  requestIdCardDownload,
+  shareIdCardPdf,
+  type ProviderIdCard,
+} from "../idCardApi";
+import { friendlyError } from "../api";
 import { colors, shadow } from "../theme";
 
 const GREEN = "#1B7D2C";
 const CARD_W = Math.min(Dimensions.get("window").width - 32, 360);
+
+const TERMS = [
+  "This ID card is the property of NAJIK.",
+  "This card is non-transferable.",
+  "Use of this ID card is subject to NAJIK’s terms and conditions.",
+  "If found, please return to NAJIK office or contact us.",
+];
 
 function Watermark({ label }: { label: string }) {
   return (
@@ -58,7 +70,20 @@ function Watermark({ label }: { label: string }) {
   );
 }
 
+function SectionPill({ label }: { label: string }) {
+  return (
+    <View style={{ alignSelf: "center", backgroundColor: GREEN, borderRadius: 999, paddingHorizontal: 14, paddingVertical: 6 }}>
+      <Text style={{ color: "#fff", fontWeight: "800", fontSize: 10, letterSpacing: 0.6 }}>{label}</Text>
+    </View>
+  );
+}
+
 function BackCard({ card, blocked }: { card: ProviderIdCard; blocked: boolean }) {
+  const phone = card.emergency_phone || "01-5970123";
+  const email = card.emergency_email || "support@najik.com";
+  const website = (card.website || "www.najik.com").replace(/^https?:\/\//, "");
+  const qr = card.public_qr_uri || card.qr_uri;
+
   return (
     <View
       style={{
@@ -74,53 +99,112 @@ function BackCard({ card, blocked }: { card: ProviderIdCard; blocked: boolean })
       }}
     >
       {blocked ? <Watermark label="DOWNLOAD BLOCKED" /> : null}
-      <View style={{ backgroundColor: GREEN, paddingVertical: 28, alignItems: "center" }}>
-        <Image source={require("../../assets/logo.png")} style={{ width: 52, height: 44 }} resizeMode="contain" />
-        <Text style={{ color: "#fff", fontWeight: "900", fontSize: 20, marginTop: 8, letterSpacing: 1 }}>NAJIK</Text>
-        <Text style={{ color: "rgba(255,255,255,0.9)", fontSize: 10, marginTop: 4, letterSpacing: 1.2 }}>EVERYTHING NEAR YOU</Text>
+
+      <View style={{ backgroundColor: GREEN, paddingTop: 18, paddingBottom: 34, alignItems: "center", position: "relative" }}>
+        <Image
+          source={require("../../assets/id-card/back-brand.png")}
+          style={{ width: 200, height: 100 }}
+          resizeMode="contain"
+        />
+        <View
+          style={{
+            position: "absolute",
+            left: 0,
+            right: 0,
+            bottom: -1,
+            height: 22,
+            backgroundColor: "#fff",
+            borderTopLeftRadius: 40,
+            borderTopRightRadius: 40,
+          }}
+        />
       </View>
 
-      <View style={{ margin: 14, borderRadius: 10, overflow: "hidden", borderWidth: 1, borderColor: "#D7E3DB" }}>
-        <View style={{ backgroundColor: GREEN, paddingVertical: 8, paddingHorizontal: 10 }}>
-          <Text style={{ color: "#fff", fontWeight: "800", fontSize: 11 }}>TERMS & CONDITIONS</Text>
+      <View style={{ paddingHorizontal: 18, paddingTop: 4, paddingBottom: 8 }}>
+        <SectionPill label="TERMS & CONDITIONS" />
+        <View style={{ marginTop: 12, gap: 8 }}>
+          {TERMS.map((line) => (
+            <View key={line} style={{ flexDirection: "row", gap: 8 }}>
+              <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: GREEN, marginTop: 5 }} />
+              <Text style={{ flex: 1, color: "#1F2937", fontSize: 11, lineHeight: 15 }}>{line}</Text>
+            </View>
+          ))}
         </View>
-        <View style={{ padding: 10 }}>
-          <Text style={{ color: "#334155", fontSize: 11, lineHeight: 16 }}>
-            • This ID is property of NAJIK.{"\n"}
-            • Non-transferable. Misuse may lead to account suspension.{"\n"}
-            • Follow NAJIK marketplace terms at all times.{"\n"}
-            • Return or destroy if your account is closed.
+
+        <View style={{ height: 1, backgroundColor: GREEN, marginVertical: 14 }} />
+
+        <SectionPill label="EMERGENCY CONTACT" />
+        <View style={{ marginTop: 12, gap: 8, paddingHorizontal: 4 }}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+            <Ionicons name="call" size={14} color={GREEN} />
+            <Text style={{ color: "#111", fontWeight: "700", fontSize: 12 }}>{phone}</Text>
+          </View>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+            <Ionicons name="mail" size={14} color={GREEN} />
+            <Text style={{ color: "#111", fontWeight: "700", fontSize: 12 }}>{email}</Text>
+          </View>
+        </View>
+
+        <View style={{ alignItems: "center", marginTop: 18 }}>
+          <Text style={{ color: GREEN, fontWeight: "900", fontSize: 12, letterSpacing: 1, marginBottom: 10 }}>
+            SCAN TO VERIFY
           </Text>
+          {qr ? (
+            <View
+              style={{
+                width: 132,
+                height: 132,
+                borderRadius: 12,
+                borderWidth: 2.5,
+                borderColor: GREEN,
+                backgroundColor: "#fff",
+                padding: 6,
+                overflow: "hidden",
+              }}
+            >
+              <AuthImage uri={qr} style={{ width: "100%", height: "100%" }} resizeMode="contain" />
+            </View>
+          ) : null}
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 12 }}>
+            <View
+              style={{
+                width: 30,
+                height: 30,
+                borderRadius: 15,
+                backgroundColor: GREEN,
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <Ionicons name="shield-checkmark" size={16} color="#fff" />
+            </View>
+            <View>
+              <Text style={{ color: GREEN, fontWeight: "900", fontSize: 13 }}>
+                {card.is_verified ? "VERIFIED" : "PENDING"}
+              </Text>
+              <Text style={{ color: "#111", fontWeight: "600", fontSize: 11 }}>Valid ID</Text>
+            </View>
+          </View>
         </View>
       </View>
 
-      <View style={{ marginHorizontal: 14, borderRadius: 10, overflow: "hidden", borderWidth: 1, borderColor: "#D7E3DB" }}>
-        <View style={{ backgroundColor: GREEN, paddingVertical: 8, paddingHorizontal: 10 }}>
-          <Text style={{ color: "#fff", fontWeight: "800", fontSize: 11 }}>EMERGENCY CONTACT</Text>
+      <View style={{ backgroundColor: GREEN, marginTop: 16, paddingTop: 22, paddingBottom: 14, alignItems: "center", position: "relative" }}>
+        <View
+          style={{
+            position: "absolute",
+            left: 0,
+            right: 0,
+            top: -1,
+            height: 22,
+            backgroundColor: "#fff",
+            borderBottomLeftRadius: 40,
+            borderBottomRightRadius: 40,
+          }}
+        />
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+          <Ionicons name="globe-outline" size={14} color="#fff" />
+          <Text style={{ color: "#fff", fontWeight: "700", fontSize: 12 }}>{website}</Text>
         </View>
-        <View style={{ padding: 10, gap: 6 }}>
-          <Text style={{ color: "#334155", fontSize: 12 }}>01-5970123</Text>
-          <Text style={{ color: "#334155", fontSize: 12 }}>support@najik.com</Text>
-        </View>
-      </View>
-
-      <View style={{ alignItems: "center", paddingVertical: 16 }}>
-        <Text style={{ color: GREEN, fontWeight: "800", fontSize: 12, marginBottom: 10 }}>SCAN TO VERIFY</Text>
-        {card.public_qr_uri || card.qr_uri ? (
-          <AuthImage
-            uri={card.public_qr_uri || card.qr_uri || undefined}
-            style={{ width: 132, height: 132, borderRadius: 10, borderWidth: 2, borderColor: GREEN, backgroundColor: "#fff" }}
-            resizeMode="contain"
-          />
-        ) : null}
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 10 }}>
-          <Ionicons name="shield-checkmark" size={18} color={GREEN} />
-          <Text style={{ color: GREEN, fontWeight: "900" }}>{card.is_verified ? "VERIFIED" : "PENDING"} · Valid ID</Text>
-        </View>
-      </View>
-
-      <View style={{ backgroundColor: GREEN, paddingVertical: 12, alignItems: "center" }}>
-        <Text style={{ color: "#fff", fontWeight: "700", fontSize: 12 }}>www.najik.com</Text>
       </View>
     </View>
   );
@@ -131,6 +215,7 @@ export function ProviderIdCardScreen() {
   const [card, setCard] = useState<ProviderIdCard | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [downloading, setDownloading] = useState(false);
   const [error, setError] = useState("");
 
   const load = useCallback(async () => {
@@ -147,6 +232,12 @@ export function ProviderIdCardScreen() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void load();
+    }, [load]),
+  );
 
   const blocked = !card?.can_download;
   const requested = card?.access_status === "requested";
@@ -171,17 +262,15 @@ export function ProviderIdCardScreen() {
       );
       return;
     }
-    setBusy(true);
+    if (downloading) return;
+    setDownloading(true);
     try {
-      await Share.share({
-        message: `NAJIK Service Provider ID\n${card.full_name}\nID: ${card.card_code}\nCategory: ${card.category || "—"}\nVerify: ${card.verify_url}`,
-        title: "NAJIK ID Card",
-      });
-      await WebBrowser.openBrowserAsync(card.verify_url);
+      const uri = await downloadMyIdCardPdf(card.card_code);
+      await shareIdCardPdf(uri);
     } catch (err) {
-      Alert.alert("Share failed", err instanceof Error ? err.message : "Try again.");
+      Alert.alert("Download failed", friendlyError(err, "Could not download the ID card PDF."));
     } finally {
-      setBusy(false);
+      setDownloading(false);
     }
   }
 
@@ -248,17 +337,25 @@ export function ProviderIdCardScreen() {
 
                 <PressScale
                   onPress={() => void downloadOrPrint()}
+                  disabled={downloading || !card.can_download}
                   style={{
                     height: 50,
                     borderRadius: 14,
                     backgroundColor: card.can_download ? GREEN : "#CBD5E1",
                     alignItems: "center",
                     justifyContent: "center",
-                    opacity: busy ? 0.7 : 1,
+                    flexDirection: "row",
+                    gap: 10,
+                    opacity: downloading ? 0.85 : 1,
                   }}
                 >
+                  {downloading ? <ActivityIndicator color="#fff" size="small" /> : null}
                   <Text style={{ color: "#fff", fontWeight: "800" }}>
-                    {card.can_download ? "Download / Print" : "Download / Print (locked)"}
+                    {downloading
+                      ? "Downloading…"
+                      : card.can_download
+                        ? "Download / Print"
+                        : "Download / Print (locked)"}
                   </Text>
                 </PressScale>
               </View>

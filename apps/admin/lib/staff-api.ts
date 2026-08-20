@@ -300,6 +300,84 @@ export async function patchChatReport(
   });
 }
 
+export type ComplaintParty = {
+  id?: string;
+  full_name?: string;
+  account_type?: string;
+  phone?: string | null;
+  email?: string | null;
+  is_active?: boolean;
+  account_status?: string;
+  staff_warning?: string;
+  staff_warning_at?: string | null;
+};
+
+export type ComplaintTicket = {
+  id: string;
+  kind: "user" | "listing" | "chat" | string;
+  severity: "normal" | "high" | string;
+  status: string;
+  reason: string;
+  reporter: ComplaintParty;
+  accused: ComplaintParty;
+  listing: {
+    id?: string | null;
+    title?: string;
+    price?: string;
+    location?: string;
+    owner_id?: string | null;
+    status?: string;
+  };
+  chat_thread_id?: string | null;
+  chat_report_id?: string | null;
+  transcript: {
+    id: string;
+    sender_id: string;
+    sender_name: string;
+    kind: string;
+    text: string;
+    created_at: string;
+  }[];
+  listing_snapshot?: Record<string, unknown>;
+  reporter_snapshot?: ComplaintParty;
+  accused_snapshot?: ComplaintParty;
+  admin_note: string;
+  warning_sent_to: string;
+  warning_message: string;
+  created_at: string;
+  updated_at: string;
+  resolved_at?: string | null;
+};
+
+export async function listComplaints(params?: { status?: string; severity?: string; kind?: string }) {
+  const qs = new URLSearchParams();
+  if (params?.status) qs.set("status", params.status);
+  if (params?.severity) qs.set("severity", params.severity);
+  if (params?.kind) qs.set("kind", params.kind);
+  const suffix = qs.toString() ? `?${qs}` : "";
+  return staffRequest<ComplaintTicket[]>(`/api/admin/reports/${suffix}`);
+}
+
+export async function fetchComplaint(id: string) {
+  return staffRequest<ComplaintTicket>(`/api/admin/reports/${id}/`);
+}
+
+export async function patchComplaint(
+  id: string,
+  body: {
+    status?: string;
+    admin_note?: string;
+    action?: string;
+    warning_message?: string;
+    warning_note?: string;
+  },
+) {
+  return staffRequest<ComplaintTicket>(`/api/admin/reports/${id}/`, {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
+}
+
 export type AppNotice = {
   id: string;
   title: string;
@@ -360,6 +438,10 @@ export type ProviderIdCard = {
   qr_uri?: string | null;
   public_qr_uri?: string | null;
   signature_uri?: string | null;
+  emergency_phone?: string;
+  emergency_email?: string;
+  website?: string;
+  branding_updated_at?: string | null;
   created_at: string;
   owner_id: string;
   owner_name: string;
@@ -387,13 +469,31 @@ export async function patchProviderIdCard(id: string, action: "approve" | "revok
   });
 }
 
+export type BrandingConfig = {
+  signatory_uri?: string | null;
+  emergency_phone?: string;
+  emergency_email?: string;
+  website?: string;
+  updated_at?: string;
+};
+
 export async function fetchBranding() {
-  return staffRequest<{ signatory_uri?: string | null; updated_at?: string }>("/api/branding/admin/");
+  return staffRequest<BrandingConfig>("/api/branding/admin/");
 }
 
-export async function uploadSignatory(image_uri: string) {
-  return staffRequest<{ signatory_uri?: string | null; updated_at?: string }>("/api/branding/admin/", {
+export async function updateBranding(payload: {
+  signatory_uri?: string;
+  emergency_phone?: string;
+  emergency_email?: string;
+  website?: string;
+}) {
+  return staffRequest<BrandingConfig>("/api/branding/admin/", {
     method: "POST",
-    body: JSON.stringify({ signatory_uri: image_uri }),
+    body: JSON.stringify(payload),
   });
+}
+
+/** @deprecated use updateBranding */
+export async function uploadSignatory(image_uri: string) {
+  return updateBranding({ signatory_uri: image_uri });
 }

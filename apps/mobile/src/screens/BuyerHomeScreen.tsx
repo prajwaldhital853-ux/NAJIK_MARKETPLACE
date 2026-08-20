@@ -7,6 +7,7 @@ import { AppHeader } from "../components/AppHeader";
 import { ListingGrid } from "../components/ClassifiedCard";
 import { KeyboardScreen, useKeyboardScroll } from "../components/KeyboardScreen";
 import { PressScale } from "../components/PressScale";
+import { StaffWarningCard } from "../components/StaffWarningBanner";
 import { useBuyerLocation } from "../context/BuyerLocationContext";
 import { homeCategoryKey, type CatalogItem } from "../data/catalog";
 import { listingsToCatalog } from "../data/liveListings";
@@ -70,6 +71,7 @@ function BuyerHomeBody({
 
   return (
     <>
+      <StaffWarningCard />
       <View
         style={{
           flexDirection: "row",

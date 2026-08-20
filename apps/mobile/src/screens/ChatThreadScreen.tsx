@@ -20,11 +20,11 @@ import { Audio } from "expo-av";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AuthImage } from "../components/AuthImage";
 import { PressScale } from "../components/PressScale";
+import { ReportComplaintModal } from "../components/ReportComplaintModal";
 import {
   blockChatThread,
   fetchAuthedDataUri,
   fetchChatThread,
-  reportChatThread,
   sendChatMessage,
   type ChatMessage,
   type ChatThread,
@@ -62,7 +62,6 @@ export function ChatThreadScreen() {
   const [draft, setDraft] = useState("");
   const [placeOpen, setPlaceOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
-  const [reportReason, setReportReason] = useState("");
   const [placeQ, setPlaceQ] = useState("");
   const [hits, setHits] = useState<PlaceHit[]>([]);
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
@@ -368,31 +367,13 @@ export function ChatThreadScreen() {
         </Pressable>
       </Modal>
 
-      <Modal visible={reportOpen} animationType="fade" transparent onRequestClose={() => setReportOpen(false)}>
-        <Pressable style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.35)", justifyContent: "center", padding: 20 }} onPress={() => setReportOpen(false)}>
-          <Pressable style={{ backgroundColor: "#fff", borderRadius: 16, padding: 16 }} onPress={() => undefined}>
-            <Text style={{ fontWeight: "800", fontSize: 16 }}>Report this chat</Text>
-            <Text style={{ color: "#6B7280", fontSize: 12, marginTop: 6 }}>
-              The full conversation and both account details go to NAJIK admin for review. Admin can take action on either account.
-            </Text>
-            <ReportField value={reportReason} onChange={setReportReason} />
-            <PressScale
-              onPress={() => {
-                void reportChatThread(id, reportReason.trim())
-                  .then(() => {
-                    setReportOpen(false);
-                    setReportReason("");
-                    Alert.alert("Reported", "Admin will review this chat.");
-                  })
-                  .catch((err) => Alert.alert("Report", err instanceof Error ? err.message : "Could not report."));
-              }}
-              style={{ marginTop: 12, backgroundColor: "#E53935", borderRadius: 12, padding: 12, alignItems: "center" }}
-            >
-              <Text style={{ color: "#fff", fontWeight: "800" }}>Send report</Text>
-            </PressScale>
-          </Pressable>
-        </Pressable>
-      </Modal>
+      <ReportComplaintModal
+        visible={reportOpen}
+        onClose={() => setReportOpen(false)}
+        kind="chat"
+        title={thread?.listing_title || "Chat"}
+        threadId={id}
+      />
     </View>
   );
 }
@@ -413,18 +394,6 @@ function PhotoViewer({ uri, onClose }: { uri: string | null; onClose: () => void
         ) : null}
       </View>
     </Modal>
-  );
-}
-
-function ReportField({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  return (
-    <TextInput
-      value={value}
-      onChangeText={onChange}
-      placeholder="What went wrong?"
-      multiline
-      style={{ marginTop: 12, minHeight: 90, borderWidth: 1, borderColor: "#E6E8EC", borderRadius: 12, padding: 10, textAlignVertical: "top" }}
-    />
   );
 }
 

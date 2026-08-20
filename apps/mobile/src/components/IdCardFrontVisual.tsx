@@ -3,7 +3,6 @@ import Svg, { Path } from "react-native-svg";
 import { Image, Text, View } from "react-native";
 import { AuthImage } from "./AuthImage";
 import { NajikWordmark } from "./NajikWordmark";
-import { colors } from "../theme";
 
 const GREEN = "#1B7D2C";
 const GREEN_LIGHT = "#7AC943";
@@ -51,28 +50,44 @@ function DetailRow({
   );
 }
 
-function TopCurve({ width }: { width: number }) {
+/** Top-right corner accent flush with card edges (SS2). Parent overflow clips to radius. */
+function TopRightCorner({ width }: { width: number }) {
+  const h = Math.round(width * 0.52);
   return (
-    <Svg width={width} height={78} style={{ position: "absolute", top: 0, right: 0 }} viewBox={`0 0 ${width} 78`}>
-      <Path d={`M ${width * 0.42} 0 H ${width} V 62 C ${width * 0.82} 78 ${width * 0.58} 70 ${width * 0.42} 0 Z`} fill={GREEN} />
+    <Svg
+      width={width + 2}
+      height={h + 2}
+      viewBox="0 0 140 72"
+      style={{ position: "absolute", top: -1, right: -1, zIndex: 1 }}
+      pointerEvents="none"
+    >
+      <Path d="M0 0 C48 6 92 34 140 72 L140 66 C96 32 52 4 0 0 Z" fill={GREEN_LIGHT} />
+      <Path d="M0 0 H140 V72 C92 34 48 6 0 0 Z" fill={GREEN} />
     </Svg>
   );
 }
 
-function BottomWave({ width }: { width: number }) {
-  const h = 108;
+/** Bottom wave matching SS2: high on left, swoops down to right, light lip on top edge. */
+function BottomWave({ width, height }: { width: number; height: number }) {
+  const w = width;
+  const h = height;
+  const main = `M0 ${h} V ${h * 0.08} C ${w * 0.22} ${h * -0.02} ${w * 0.42} ${h * 0.55} ${w * 0.62} ${h * 0.72} C ${w * 0.78} ${h * 0.86} ${w * 0.9} ${h * 0.92} ${w} ${h * 0.95} V ${h} Z`;
+  const lip = `M0 ${h * 0.08} C ${w * 0.22} ${h * -0.02} ${w * 0.42} ${h * 0.55} ${w * 0.62} ${h * 0.72} C ${w * 0.78} ${h * 0.86} ${w * 0.9} ${h * 0.92} ${w} ${h * 0.95} L ${w} ${h * 0.88} C ${w * 0.9} ${h * 0.85} ${w * 0.78} ${h * 0.78} ${w * 0.62} ${h * 0.64} C ${w * 0.42} ${h * 0.46} ${w * 0.22} ${h * -0.08} 0 ${h * 0.02} Z`;
+
   return (
-    <Svg width={width} height={h} viewBox={`0 0 ${width} ${h}`} style={{ position: "absolute", left: 0, bottom: 0 }}>
-      <Path
-        d={`M0 ${h} V 48 C ${width * 0.18} 18 ${width * 0.38} 72 ${width * 0.58} 46 C ${width * 0.78} 22 ${width * 0.9} 38 ${width} 28 V ${h} Z`}
-        fill={GREEN}
-      />
-      <Path
-        d={`M0 ${h} V 62 C ${width * 0.2} 36 ${width * 0.4} 78 ${width * 0.6} 54 C ${width * 0.78} 34 ${width * 0.9} 48 ${width} 42 V ${h} Z`}
-        fill={GREEN_LIGHT}
-      />
+    <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} style={{ position: "absolute", left: 0, bottom: 0 }}>
+      <Path d={lip} fill={GREEN_LIGHT} />
+      <Path d={main} fill={GREEN} />
     </Svg>
   );
+}
+
+/** Public branding image — no auth header needed; URI already includes ?v= cache bust. */
+function SignatureImage({ uri, style }: { uri?: string | null; style: object }) {
+  if (uri) {
+    return <Image key={uri} source={{ uri }} style={style} resizeMode="contain" />;
+  }
+  return <Image source={DEFAULT_SIGN} style={style} resizeMode="contain" />;
 }
 
 export type IdCardFrontData = {
@@ -86,6 +101,7 @@ export type IdCardFrontData = {
   qr_uri?: string | null;
   public_qr_uri?: string | null;
   signature_uri?: string | null;
+  branding_updated_at?: string | null;
 };
 
 export function IdCardFrontVisual({
@@ -98,6 +114,8 @@ export function IdCardFrontVisual({
   watermark?: boolean;
 }) {
   const qr = card.qr_uri || card.public_qr_uri;
+  const footerH = 128;
+  const cornerW = Math.round(width * 0.42);
 
   return (
     <View
@@ -110,7 +128,9 @@ export function IdCardFrontVisual({
         borderColor: "#D7E3DB",
       }}
     >
-      <TopCurve width={width} />
+      {/* Top-right brand corner — flush to card edges (SS2). */}
+      <TopRightCorner width={cornerW} />
+
       {watermark ? (
         <View pointerEvents="none" style={{ position: "absolute", left: 0, right: 0, top: 0, bottom: 0, zIndex: 30 }}>
           {Array.from({ length: 8 }).map((_, row) => (
@@ -134,9 +154,9 @@ export function IdCardFrontVisual({
         </View>
       ) : null}
 
-      <View style={{ paddingTop: 18, paddingHorizontal: 18, alignItems: "center", zIndex: 2 }}>
-        <NajikWordmark scale={0.52} />
-        <View style={{ marginTop: 12 }}>
+      <View style={{ paddingTop: 16, paddingHorizontal: 18, alignItems: "center", zIndex: 2 }}>
+        <NajikWordmark scale={0.72} />
+        <View style={{ marginTop: 14 }}>
           {card.photo_uri ? (
             <AuthImage
               uri={card.photo_uri}
@@ -166,7 +186,7 @@ export function IdCardFrontVisual({
         <Text style={{ marginTop: 4, fontSize: 12, fontWeight: "800", color: GREEN }}>SERVICE PROVIDER</Text>
       </View>
 
-      <View style={{ paddingHorizontal: 20, paddingTop: 10, paddingBottom: 8, zIndex: 2 }}>
+      <View style={{ paddingHorizontal: 20, paddingTop: 10, paddingBottom: 2, zIndex: 2 }}>
         <DetailRow icon="person" label="Provider ID" value={card.card_code} />
         <DetailRow icon="briefcase" label="Category" value={card.category || "—"} />
         <DetailRow icon="call" label="Phone" value={formatPhone(card.phone)} />
@@ -174,30 +194,38 @@ export function IdCardFrontVisual({
         <DetailRow icon="calendar" label="Joined On" value={formatJoined(card.joined_on)} />
       </View>
 
-      <View style={{ height: 118, marginTop: 4, justifyContent: "flex-end" }}>
-        <BottomWave width={width} />
-        <View
-          style={{
-            zIndex: 3,
-            paddingHorizontal: 16,
-            paddingBottom: 14,
-            flexDirection: "row",
-            alignItems: "flex-end",
-            justifyContent: "space-between",
-          }}
-        >
-          <View style={{ width: 68, height: 68, borderRadius: 8, backgroundColor: "#fff", padding: 4, overflow: "hidden" }}>
+      {/* Footer: QR in green (left), signature in white (right) — SS2. */}
+      <View style={{ height: footerH, marginTop: 8 }}>
+        <BottomWave width={width} height={footerH} />
+
+        <View style={{ position: "absolute", left: 14, bottom: 16, zIndex: 3 }}>
+          <View
+            style={{
+              width: 74,
+              height: 74,
+              borderRadius: 10,
+              backgroundColor: "#fff",
+              padding: 5,
+              overflow: "hidden",
+            }}
+          >
             {qr ? <AuthImage uri={qr} style={{ width: "100%", height: "100%" }} resizeMode="contain" /> : null}
           </View>
-          <View style={{ alignItems: "center", minWidth: 110 }}>
-            {card.signature_uri ? (
-              <AuthImage uri={card.signature_uri} style={{ width: 110, height: 36 }} resizeMode="contain" />
-            ) : (
-              <Image source={DEFAULT_SIGN} style={{ width: 110, height: 36 }} resizeMode="contain" />
-            )}
-            <View style={{ width: 108, height: 1.5, backgroundColor: GREEN, marginTop: 2, marginBottom: 3 }} />
-            <Text style={{ fontSize: 10, fontWeight: "600", color: "#111" }}>Authorized Signatory</Text>
-          </View>
+        </View>
+
+        <View
+          style={{
+            position: "absolute",
+            right: 16,
+            top: 8,
+            zIndex: 4,
+            alignItems: "center",
+            minWidth: 124,
+          }}
+        >
+          <SignatureImage uri={card.signature_uri} style={{ width: 120, height: 42 }} />
+          <View style={{ width: 112, height: 1.5, backgroundColor: GREEN, marginTop: 2, marginBottom: 3 }} />
+          <Text style={{ fontSize: 10, fontWeight: "600", color: "#111" }}>Authorized Signatory</Text>
         </View>
       </View>
     </View>

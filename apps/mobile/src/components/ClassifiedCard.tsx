@@ -15,10 +15,16 @@ const PAD = 16;
 const GAP = 11;
 export const LISTING_CARD_W = (SCREEN_W - PAD * 2 - GAP) / 2;
 
-export function classifiedMore(item: CatalogItem) {
+export function classifiedMore(item: CatalogItem, onReport?: () => void) {
   Alert.alert(item.title, undefined, [
     { text: "Share", onPress: () => void Share.share({ message: `${item.title} · ${item.price}\n${item.location}` }) },
-    { text: "Report ad", onPress: () => Alert.alert("Report", "Demo: this ad was flagged.") },
+    {
+      text: "Report ad",
+      onPress: () => {
+        if (onReport) onReport();
+        else Alert.alert("Report", "Open the listing to report this ad.");
+      },
+    },
     { text: "Hide", style: "destructive" },
     { text: "Cancel", style: "cancel" },
   ]);

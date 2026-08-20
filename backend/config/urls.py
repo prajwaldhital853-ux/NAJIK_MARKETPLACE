@@ -3,9 +3,12 @@ from django.urls import include, path, re_path
 from django.conf import settings
 from django.views.static import serve
 
+from apps.core.views.ok import OkView
+
 urlpatterns = [
     path("django-admin/", admin.site.urls),
     path("api/health/", include("apps.core.urls")),
+    path("api/ok/", OkView.as_view(), name="ok"),
     path("api/branding/", include("apps.core.branding_urls")),
     path("api/auth/", include("apps.accounts.urls")),
     path("api/admin/auth/", include("apps.staff.urls")),

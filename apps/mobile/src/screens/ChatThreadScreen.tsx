@@ -1,16 +1,17 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Alert,
   AppState,
+  Dimensions,
   FlatList,
   Image,
   Keyboard,
   Linking,
   Modal,
-  Platform,
   Pressable,
+  ScrollView,
   Text,
   TextInput,
   View,
@@ -30,10 +31,13 @@ import {
 } from "../chatApi";
 import { mapsDirectionsUrl, requestUserPoint, reverseGeocode, searchPlaces, type PlaceHit } from "../geo";
 import { subscribeAppRefresh } from "../listingsRefresh";
-import { openListing } from "../navigation/browse";
+import { openListing, openSellerProfile } from "../navigation/browse";
 import { choosePhoto } from "../pickPhoto";
+import { colors } from "../theme";
 
-const GREEN = "#1B7D2C";
+const GREEN = colors.greenDeep;
+const BG = colors.bg;
+let lastKeyboardCover = 280;
 
 function lastSeenLabel(iso?: string | null, online?: boolean) {
   if (online) return "Online";
@@ -64,10 +68,12 @@ export function ChatThreadScreen() {
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
   const [pendingImage, setPendingImage] = useState<string | null>(null);
   const [pendingVoice, setPendingVoice] = useState<string | null>(null);
-  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const [keyboardLift, setKeyboardLift] = useState(0);
+  const [photoUri, setPhotoUri] = useState<string | null>(null);
   const messagesRef = useRef<ChatMessage[]>([]);
   messagesRef.current = messages;
   const listRef = useRef<FlatList<ChatMessage>>(null);
+  const stickToBottom = useRef(true);
 
   const load = useCallback(async (incremental = false) => {
     if (!id) return;
@@ -105,15 +111,25 @@ export function ChatThreadScreen() {
   }, [id, load]);
 
   useEffect(() => {
-    const show = Keyboard.addListener(Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow", (event) => {
-      setKeyboardHeight(event.endCoordinates.height);
-    });
-    const hide = Keyboard.addListener(Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide", () => {
-      setKeyboardHeight(0);
-    });
+    const cover = (event: { endCoordinates: { height: number; screenY: number } }) => {
+      const { height, screenY } = event.endCoordinates;
+      const screenH = Dimensions.get("screen").height;
+      const winH = Dimensions.get("window").height;
+      const next = Math.max(height || 0, screenH - screenY, winH - screenY, 0);
+      if (next >= 120) {
+        lastKeyboardCover = next;
+        setKeyboardLift(next);
+      }
+    };
+    const show = Keyboard.addListener("keyboardDidShow", cover);
+    const willShow = Keyboard.addListener("keyboardWillShow", cover);
+    const hide = Keyboard.addListener("keyboardDidHide", () => setKeyboardLift(0));
+    const willHide = Keyboard.addListener("keyboardWillHide", () => setKeyboardLift(0));
     return () => {
       show.remove();
+      willShow.remove();
       hide.remove();
+      willHide.remove();
     };
   }, []);
 
@@ -121,6 +137,8 @@ export function ChatThreadScreen() {
     try {
       const msg = await sendChatMessage(id, body);
       setMessages((prev) => (prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]));
+      stickToBottom.current = true;
+      requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true }));
       if (body.kind === "text") setDraft("");
       if (body.kind === "image") setPendingImage(null);
       if (body.kind === "voice") setPendingVoice(null);
@@ -208,23 +226,25 @@ export function ChatThreadScreen() {
   }
 
   const blocked = Boolean(thread?.blocked_by_me || thread?.blocked_me);
-  const threadData = useMemo(() => [...messages].reverse(), [messages]);
   const canSend = Boolean(draft.trim() || pendingImage || pendingVoice);
 
   return (
-    <View style={{ flex: 1, backgroundColor: "#ECE5DD", paddingBottom: keyboardHeight }}>
-      <View style={{ paddingTop: insets.top + 4, backgroundColor: "#fff", borderBottomWidth: 1, borderBottomColor: "#EEF0F3" }}>
+    <View style={{ flex: 1, backgroundColor: BG, paddingBottom: keyboardLift }}>
+      <View style={{ paddingTop: insets.top + 4, backgroundColor: colors.white, borderBottomWidth: 1, borderBottomColor: colors.border }}>
         <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 10, paddingBottom: 10, gap: 8 }}>
           <Pressable onPress={() => navigation.goBack()} hitSlop={12} style={{ width: 32 }}>
             <Ionicons name="arrow-back" size={24} color="#111827" />
           </Pressable>
           <View style={{ flex: 1 }}>
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-              <Text style={{ fontWeight: "800", fontSize: 16 }} numberOfLines={1}>
+            <Pressable
+              onPress={() => thread?.other.id && openSellerProfile(navigation, thread.other.id)}
+              style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
+            >
+              <Text style={{ fontWeight: "800", fontSize: 16, flexShrink: 1 }} numberOfLines={1}>
                 {thread?.other.full_name || "Chat"}
               </Text>
               <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: thread?.other.online ? "#22C55E" : "#D1D5DB" }} />
-            </View>
+            </Pressable>
             <Text style={{ color: "#6B7280", fontSize: 11 }}>{lastSeenLabel(thread?.other.last_seen, thread?.other.online)}</Text>
           </View>
           <PressScale onPress={callListing} style={{ padding: 6 }}>
@@ -272,22 +292,37 @@ export function ChatThreadScreen() {
 
       <FlatList
         ref={listRef}
-        inverted
-        data={threadData}
+        data={messages}
         keyExtractor={(item) => item.id}
-        keyboardShouldPersistTaps="handled"
-        keyboardDismissMode="on-drag"
-        contentContainerStyle={{ paddingHorizontal: 8, paddingVertical: 6 }}
-        renderItem={({ item }) => <Bubble msg={item} />}
+        style={{ flex: 1 }}
+        keyboardShouldPersistTaps="always"
+        keyboardDismissMode="none"
+        scrollEventThrottle={16}
+        onScroll={(event) => {
+          const { contentOffset, layoutMeasurement, contentSize } = event.nativeEvent;
+          stickToBottom.current = contentOffset.y + layoutMeasurement.height >= contentSize.height - 80;
+        }}
+        onContentSizeChange={() => {
+          if (stickToBottom.current) listRef.current?.scrollToEnd({ animated: false });
+        }}
+        contentContainerStyle={{
+          flexGrow: 1,
+          justifyContent: messages.length ? undefined : "center",
+          paddingHorizontal: 10,
+          paddingTop: 10,
+          paddingBottom: 12,
+        }}
+        renderItem={({ item }) => <Bubble msg={item} onOpenPhoto={setPhotoUri} />}
         ListEmptyComponent={
-          <View style={{ padding: 24, transform: [{ scaleY: -1 }] }}>
-            <Text style={{ textAlign: "center", color: "#6B7280" }}>No messages yet. Say hello below.</Text>
-          </View>
+          <Text style={{ textAlign: "center", color: colors.muted, paddingHorizontal: 32, lineHeight: 20 }}>
+            No messages yet. Say hello below.
+          </Text>
         }
       />
 
+      <View>
       {blocked ? (
-        <Text style={{ textAlign: "center", color: "#6B7280", padding: 12, backgroundColor: "#fff" }}>
+        <Text style={{ textAlign: "center", color: colors.muted, padding: 12, backgroundColor: colors.white }}>
           {thread?.blocked_by_me ? "You blocked this conversation. You can still report it." : "This conversation is blocked."}
         </Text>
       ) : (
@@ -298,15 +333,16 @@ export function ChatThreadScreen() {
           recording={Boolean(recording)}
           pendingImage={pendingImage}
           pendingVoice={pendingVoice}
-          keyboardPad={0}
-          safeBottom={keyboardHeight > 0 ? 8 : insets.bottom}
+          safeBottom={keyboardLift > 0 ? 6 : insets.bottom}
           canSend={canSend}
+          onFocusInput={() => setKeyboardLift(lastKeyboardCover)}
           onSend={() => void sendComposer()}
           onQuick={(text) => void send({ kind: "text", text })}
           onPhoto={() => choosePhoto((image) => {
             setPendingImage(image);
             setPendingVoice(null);
           })}
+          onOpenPendingPhoto={() => pendingImage && setPhotoUri(pendingImage)}
           onVoice={() => void toggleRecord()}
           onPlace={() => setPlaceOpen(true)}
           onClearAttach={() => {
@@ -315,6 +351,9 @@ export function ChatThreadScreen() {
           }}
         />
       )}
+      </View>
+
+      <PhotoViewer uri={photoUri} onClose={() => setPhotoUri(null)} />
 
       <Modal visible={placeOpen} animationType="fade" transparent onRequestClose={() => setPlaceOpen(false)}>
         <Pressable style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.35)", justifyContent: "flex-end" }} onPress={() => setPlaceOpen(false)}>
@@ -355,6 +394,25 @@ export function ChatThreadScreen() {
         </Pressable>
       </Modal>
     </View>
+  );
+}
+
+function PhotoViewer({ uri, onClose }: { uri: string | null; onClose: () => void }) {
+  return (
+    <Modal visible={Boolean(uri)} animationType="fade" transparent onRequestClose={onClose}>
+      <View style={{ flex: 1, backgroundColor: "#000" }}>
+        <Pressable onPress={onClose} style={{ position: "absolute", top: 48, right: 16, zIndex: 2, padding: 8 }}>
+          <Ionicons name="close" size={28} color="#fff" />
+        </Pressable>
+        {uri ? (
+          uri.startsWith("http") ? (
+            <AuthImage uri={uri} style={{ flex: 1, width: "100%" }} resizeMode="contain" />
+          ) : (
+            <Image source={{ uri }} style={{ flex: 1, width: "100%" }} resizeMode="contain" />
+          )
+        ) : null}
+      </View>
+    </Modal>
   );
 }
 
@@ -405,15 +463,16 @@ function ComposerBar({
   recording,
   pendingImage,
   pendingVoice,
-  keyboardPad,
   safeBottom,
   canSend,
   onSend,
   onQuick,
   onPhoto,
+  onOpenPendingPhoto,
   onVoice,
   onPlace,
   onClearAttach,
+  onFocusInput,
 }: {
   replies: string[];
   draft: string;
@@ -421,43 +480,45 @@ function ComposerBar({
   recording: boolean;
   pendingImage: string | null;
   pendingVoice: string | null;
-  keyboardPad: number;
   safeBottom: number;
   canSend: boolean;
   onSend: () => void;
   onQuick: (text: string) => void;
   onPhoto: () => void;
+  onOpenPendingPhoto: () => void;
   onVoice: () => void;
   onPlace: () => void;
   onClearAttach: () => void;
+  onFocusInput: () => void;
 }) {
-  const bottomPad = keyboardPad > 0 ? 8 : Math.max(safeBottom, 8);
   return (
     <View
       style={{
-        backgroundColor: "#F0F2F5",
+        backgroundColor: colors.white,
         borderTopWidth: 1,
-        borderTopColor: "#E6E8EC",
-        paddingBottom: bottomPad,
+        borderTopColor: colors.border,
+        paddingBottom: Math.max(safeBottom, 8),
         paddingTop: 8,
         paddingHorizontal: 8,
       }}
     >
       {replies.length && !pendingImage && !pendingVoice && !recording ? (
-        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 8 }} contentContainerStyle={{ gap: 6, paddingRight: 8 }}>
           {replies.map((item) => (
-            <PressScale key={item} onPress={() => onQuick(item)} style={{ backgroundColor: "#E7F6EC", borderRadius: 14, paddingHorizontal: 10, paddingVertical: 6 }}>
+            <PressScale key={item} onPress={() => onQuick(item)} style={{ backgroundColor: colors.greenSoft, borderRadius: 14, paddingHorizontal: 10, paddingVertical: 6 }}>
               <Text style={{ color: GREEN, fontWeight: "700", fontSize: 12 }}>{item}</Text>
             </PressScale>
           ))}
-        </View>
+        </ScrollView>
       ) : null}
       {pendingImage ? (
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 8, backgroundColor: "#fff", borderRadius: 14, padding: 8 }}>
-          <Image source={{ uri: pendingImage }} style={{ width: 56, height: 56, borderRadius: 10 }} />
-          <Text style={{ flex: 1, fontWeight: "700", color: "#111827" }}>Photo ready. Tap send.</Text>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 8, backgroundColor: colors.greenPale, borderRadius: 14, padding: 8 }}>
+          <PressScale onPress={onOpenPendingPhoto}>
+            <Image source={{ uri: pendingImage }} style={{ width: 64, height: 64, borderRadius: 10 }} />
+          </PressScale>
+          <Text style={{ flex: 1, fontWeight: "700", color: colors.navy }}>Tap photo to view full size, then send.</Text>
           <PressScale onPress={onClearAttach} style={{ padding: 6 }}>
-            <Ionicons name="close-circle" size={22} color="#9AA0A6" />
+            <Ionicons name="close-circle" size={22} color={colors.muted} />
           </PressScale>
         </View>
       ) : null}
@@ -491,6 +552,7 @@ function ComposerBar({
           onChangeText={setDraft}
           placeholder={pendingImage ? "Add a caption" : pendingVoice ? "Add a caption" : "Message"}
           editable={!recording}
+          onFocus={onFocusInput}
           style={{ flex: 1, minHeight: 42, maxHeight: 120, borderWidth: 1, borderColor: "#E6E8EC", borderRadius: 22, paddingHorizontal: 14, paddingVertical: 10, backgroundColor: "#fff" }}
           multiline
         />
@@ -567,21 +629,27 @@ function VoiceWave({ uri, mine, seed }: { uri: string | null; mine: boolean; see
   );
 }
 
-function Bubble({ msg }: { msg: ChatMessage }) {
+function Bubble({ msg, onOpenPhoto }: { msg: ChatMessage; onOpenPhoto: (uri: string) => void }) {
   const mine = msg.mine;
   return (
     <View style={{ alignSelf: mine ? "flex-end" : "flex-start", maxWidth: "78%", marginVertical: 1 }}>
       <View
         style={{
-          backgroundColor: mine ? GREEN : "#fff",
+          backgroundColor: mine ? GREEN : colors.white,
           borderRadius: 16,
           borderBottomRightRadius: mine ? 4 : 16,
           borderBottomLeftRadius: mine ? 16 : 4,
           paddingHorizontal: 10,
           paddingVertical: 6,
+          borderWidth: mine ? 0 : 1,
+          borderColor: colors.border,
         }}
       >
-        {msg.kind === "image" && msg.image_url ? <AuthImage uri={msg.image_url} style={{ width: 196, height: 140, borderRadius: 10, marginBottom: 4 }} /> : null}
+        {msg.kind === "image" && msg.image_url ? (
+          <Pressable onPress={() => onOpenPhoto(msg.image_url!)}>
+            <AuthImage uri={msg.image_url} style={{ width: 196, height: 140, borderRadius: 10, marginBottom: 4 }} />
+          </Pressable>
+        ) : null}
         {msg.kind === "voice" ? <VoiceWave uri={msg.voice_url} mine={mine} seed={msg.id} /> : null}
         {msg.kind === "location" && msg.lat != null && msg.lng != null ? (
           <PressScale

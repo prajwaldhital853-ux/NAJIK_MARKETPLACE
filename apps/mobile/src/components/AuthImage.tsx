@@ -5,9 +5,11 @@ import { optionalAppAccessToken } from "../authApi";
 export function AuthImage({
   uri,
   style,
+  resizeMode = "cover",
 }: {
   uri?: string | null;
   style?: StyleProp<ImageStyle>;
+  resizeMode?: "cover" | "contain" | "stretch" | "center";
 }) {
   const [src, setSrc] = useState<string | null | undefined>(undefined);
 
@@ -47,5 +49,5 @@ export function AuthImage({
   }, [uri]);
 
   if (!uri || !src) return null;
-  return <Image source={{ uri: src }} style={style} />;
+  return <Image source={{ uri: src }} style={style} resizeMode={resizeMode} />;
 }

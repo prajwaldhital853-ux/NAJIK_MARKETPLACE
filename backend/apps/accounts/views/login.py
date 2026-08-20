@@ -17,6 +17,7 @@ from apps.accounts.serializers.auth import (
     AppTokenSerializer,
     AppUserPublicSerializer,
     LoginSerializer,
+    wrong_role_payload,
 )
 from apps.accounts.throttles import LoginRateThrottle
 
@@ -67,6 +68,9 @@ class LoginView(APIView):
                     )
             return Response({"detail": detail}, status=status.HTTP_401_UNAUTHORIZED)
         user = serializer.validated_data["user"]
+        expected = request.data.get("account_type")
+        if expected in (user.ACCOUNT_USER, user.ACCOUNT_PROVIDER) and user.account_type != expected:
+            return Response(wrong_role_payload(user.account_type), status=status.HTTP_409_CONFLICT)
         record_success(key or str(user.id))
         tokens = AppTokenSerializer.for_user(user)
         user = type(user).objects.select_related("provider_application").get(pk=user.pk)

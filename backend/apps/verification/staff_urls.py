@@ -4,6 +4,8 @@ from apps.verification.views import (
     StaffApplicationDetailView,
     StaffApplicationFileView,
     StaffApplicationListView,
+    StaffIdCardDetailView,
+    StaffIdCardListView,
 )
 
 urlpatterns = [
@@ -14,4 +16,6 @@ urlpatterns = [
         StaffApplicationFileView.as_view(),
         name="staff-application-file",
     ),
+    path("cards/", StaffIdCardListView.as_view(), name="staff-id-cards"),
+    path("cards/<uuid:pk>/", StaffIdCardDetailView.as_view(), name="staff-id-card-detail"),
 ]

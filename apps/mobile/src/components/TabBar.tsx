@@ -12,7 +12,7 @@ import { colors, shadow } from "../theme";
 const buyerTabs = [
   { key: "Home", label: "Home", icon: "home-outline", activeIcon: "home" },
   { key: "Explore", label: "Explore", icon: "search-outline", activeIcon: "search" },
-  { key: "Post", label: "Post", icon: "add" },
+  { key: "Messages", label: "Messages", icon: "chatbubbles-outline", activeIcon: "chatbubbles" },
   { key: "Saved", label: "Saved", icon: "heart-outline", activeIcon: "heart" },
   { key: "Profile", label: "Profile", icon: "person-outline", activeIcon: "person" },
 ] as const;
@@ -43,6 +43,7 @@ export function TabBar({ state, navigation }: BottomTabBarProps) {
 
   function go(name: string) {
     if (active === name) return;
+    if (!state.routes.some((route) => route.name === name)) return;
     setActive(name);
     navigation.dispatch(TabActions.jumpTo(name));
   }
@@ -73,7 +74,7 @@ export function TabBar({ state, navigation }: BottomTabBarProps) {
       >
         {tabs.map((tab) => {
           const focused = active === tab.key;
-          if (tab.key === "Post") {
+          if (seller && tab.key === "Post") {
             return (
               <View key={tab.key} style={{ flex: 1, alignItems: "center" }}>
                 <Pressable

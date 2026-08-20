@@ -4,11 +4,13 @@ import { noteForcedOffline } from "./sessionKick";
 export class ApiError extends Error {
   status: number;
   retryAfter?: number;
+  code?: string;
 
-  constructor(message: string, status: number, retryAfter?: number) {
+  constructor(message: string, status: number, retryAfter?: number, code?: string) {
     super(message);
     this.status = status;
     this.retryAfter = retryAfter;
+    this.code = code;
   }
 }
 
@@ -85,7 +87,12 @@ export async function api<T>(
         : typeof nested === "number"
           ? nested
           : undefined;
-    const err = new ApiError(firstError(data), response.status, retryAfter);
+    const err = new ApiError(
+      firstError(data),
+      response.status,
+      retryAfter,
+      typeof (data as { code?: unknown }).code === "string" ? (data as { code: string }).code : undefined,
+    );
     noteForcedOffline(err.message, err.status);
     throw err;
   }

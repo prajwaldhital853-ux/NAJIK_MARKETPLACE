@@ -1,51 +1,134 @@
 "use client";
 
-import { useAdmin } from "@/lib/store";
+import { useCallback, useEffect, useState } from "react";
 import { PageHeader, SummaryStrip } from "@/components/admin/page-frame";
 import { Btn, Field, StatusBadge, inputClass } from "@/components/admin/ui";
 import { InboxList } from "@/components/admin/inbox-list";
-import { useState } from "react";
+import { formatNptDateTime } from "@/lib/format";
+import { ADMIN_POLL_MS } from "@/lib/live-inbox";
+import { useSession } from "@/lib/session";
+import { useAdmin } from "@/lib/store";
+import {
+  createAppNotice,
+  deleteAppNotice,
+  fetchStaffImage,
+  listAppNotices,
+  setAppNoticeActive,
+  type AppNotice,
+} from "@/lib/staff-api";
+
+const AUDIENCES = [
+  { value: "all", label: "All users (buyers + sellers)" },
+  { value: "buyer", label: "Buyers only" },
+  { value: "provider", label: "Sellers only" },
+] as const;
+
+async function fileToDataUri(file: File) {
+  const buffer = await file.arrayBuffer();
+  const bytes = new Uint8Array(buffer);
+  let binary = "";
+  for (let i = 0; i < bytes.length; i += 1) binary += String.fromCharCode(bytes[i]);
+  const base64 = btoa(binary);
+  const type = file.type || "image/jpeg";
+  return `data:${type};base64,${base64}`;
+}
 
 export default function NotificationsPage() {
-  const { notices, add, patch, toast, inbox, inboxCount } = useAdmin();
+  const { apiSession } = useSession();
+  const { toast, inbox, inboxCount } = useAdmin();
+  const [notices, setNotices] = useState<AppNotice[]>([]);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
-  const [audience, setAudience] = useState("All users");
-  const [channel, setChannel] = useState<"push" | "email" | "in-app">("push");
+  const [audience, setAudience] = useState<(typeof AUDIENCES)[number]["value"]>("all");
+  const [imageUri, setImageUri] = useState("");
+  const [imageName, setImageName] = useState("");
 
-  function compose(status: "draft" | "scheduled" | "sent") {
-    if (!title.trim()) return;
-    add("notices", {
-      id: `n${Date.now()}`,
-      title,
-      body,
-      audience,
-      channel,
-      status,
-      time: status === "sent" ? "Just now" : "Queued",
-      reads: status === "sent" ? 1 : 0,
-    });
-    toast(status === "sent" ? "Notification sent." : "Saved.");
-    setTitle("");
-    setBody("");
+  const load = useCallback(async () => {
+    if (!apiSession) return;
+    try {
+      setNotices(await listAppNotices());
+      setError("");
+    } catch (err) {
+      setNotices([]);
+      setError(err instanceof Error ? err.message : "Could not load notices.");
+    }
+  }, [apiSession]);
+
+  useEffect(() => {
+    if (!apiSession) {
+      setNotices([]);
+      setError("Sign in with a staff account to send in-app notices.");
+      return;
+    }
+    void load();
+    const id = window.setInterval(() => void load(), ADMIN_POLL_MS);
+    return () => window.clearInterval(id);
+  }, [apiSession, load]);
+
+  async function send() {
+    if (!title.trim()) {
+      toast("Add a title.");
+      return;
+    }
+    setBusy(true);
+    try {
+      await createAppNotice({
+        title: title.trim(),
+        body: body.trim(),
+        audience,
+        ...(imageUri ? { image_uri: imageUri } : {}),
+      });
+      toast("In-app notice sent. It shows when matching users open the app.");
+      setTitle("");
+      setBody("");
+      setImageUri("");
+      setImageName("");
+      await load();
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Could not send notice.");
+    } finally {
+      setBusy(false);
+    }
   }
+
+  async function onPickImage(file: File | null) {
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      toast("Choose a JPEG, PNG, or WebP image.");
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      toast("Image must be 2 MB or smaller.");
+      return;
+    }
+    try {
+      setImageUri(await fileToDataUri(file));
+      setImageName(file.name);
+    } catch {
+      toast("Could not read that image.");
+    }
+  }
+
+  const active = notices.filter((n) => n.is_active);
 
   return (
     <div>
       <PageHeader
         title="Notifications"
-        summary="New buyer signups, seller KYC, listings waiting for review, and chat complaints."
+        summary="Send in-app notices to all users, buyers only, or sellers only. Notices appear when the app opens until you remove them here."
       />
       <SummaryStrip
         items={[
-          { label: "Waiting", value: inboxCount, tone: "amber" },
-          { label: "Notices", value: notices.length, tone: "brand" },
-          { label: "Sent", value: notices.filter((n) => n.status === "sent").length, tone: "green" },
-          { label: "Scheduled", value: notices.filter((n) => n.status === "scheduled").length, tone: "amber" },
-          { label: "Drafts", value: notices.filter((n) => n.status === "draft").length, tone: "brand" },
-          { label: "Reads (sum)", value: notices.reduce((s, n) => s + n.reads, 0), tone: "green" },
+          { label: "Waiting inbox", value: inboxCount, tone: "amber" },
+          { label: "Active notices", value: active.length, tone: "green" },
+          { label: "Total notices", value: notices.length, tone: "brand" },
+          { label: "Buyers targeted", value: notices.filter((n) => n.audience === "buyer" && n.is_active).length, tone: "brand" },
+          { label: "Sellers targeted", value: notices.filter((n) => n.audience === "provider" && n.is_active).length, tone: "amber" },
         ]}
       />
+
       <section className="mb-4 overflow-hidden rounded-2xl border border-line bg-card">
         <div className="border-b border-line px-4 py-3 text-sm font-semibold text-ink">
           Live queue {inboxCount ? `(${inboxCount})` : ""}
@@ -53,71 +136,153 @@ export default function NotificationsPage() {
         <InboxList items={inbox} />
       </section>
 
+      {error ? <p className="mb-4 text-sm text-red">{error}</p> : null}
+
       <div className="grid gap-4 xl:grid-cols-3">
         <div className="space-y-3 xl:col-span-2">
+          {notices.length === 0 && !error ? (
+            <section className="card-glow rounded-2xl border border-line bg-card p-6 text-sm text-muted">
+              No in-app notices yet. Compose one on the right — it will appear in the mobile app for the chosen audience.
+            </section>
+          ) : null}
           {notices.map((n) => (
-            <article key={n.id} className="card-glow rounded-2xl border border-line bg-card p-4">
-              <div className="flex flex-wrap items-start justify-between gap-2">
-                <div>
-                  <p className="font-semibold text-ink">{n.title}</p>
-                  <p className="mt-1 text-sm text-muted">{n.body}</p>
-                </div>
-                <StatusBadge status={n.status} />
-              </div>
-              <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-muted">
-                <span>{n.audience}</span>
-                <span className="capitalize">{n.channel}</span>
-                <span>{n.time}</span>
-                <span>{n.reads.toLocaleString()} reads</span>
-                {n.status !== "sent" ? (
-                  <Btn
-                    onClick={() => {
-                      patch("notices", n.id, { status: "sent", time: "Just now", reads: Math.max(n.reads, 1) });
-                      toast(`Sent “${n.title}”.`);
-                    }}
-                  >
-                    Send now
-                  </Btn>
-                ) : null}
-              </div>
-            </article>
+            <NoticeCard
+              key={n.id}
+              notice={n}
+              onRemove={async () => {
+                try {
+                  await deleteAppNotice(n.id);
+                  toast("Notice removed. It will no longer show in the app.");
+                  await load();
+                } catch (err) {
+                  toast(err instanceof Error ? err.message : "Could not remove.");
+                }
+              }}
+              onToggle={async () => {
+                try {
+                  await setAppNoticeActive(n.id, !n.is_active);
+                  toast(n.is_active ? "Notice paused." : "Notice active again.");
+                  await load();
+                } catch (err) {
+                  toast(err instanceof Error ? err.message : "Could not update.");
+                }
+              }}
+            />
           ))}
         </div>
+
         <aside className="card-glow h-fit rounded-2xl border border-line bg-card p-4">
-          <h2 className="text-sm font-semibold text-ink">Compose</h2>
+          <h2 className="text-sm font-semibold text-ink">Send in-app notice</h2>
+          <p className="mt-1 text-xs text-muted">
+            Text only, or add an image. Shows centered when matching users open the app.
+          </p>
           <div className="mt-3 space-y-3">
             <Field label="Title">
-              <input className={inputClass} value={title} onChange={(e) => setTitle(e.target.value)} />
+              <input className={inputClass} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Announcement title" />
             </Field>
-            <Field label="Body">
-              <textarea className={inputClass} rows={4} value={body} onChange={(e) => setBody(e.target.value)} />
+            <Field label="Message (optional)">
+              <textarea
+                className={inputClass}
+                rows={4}
+                value={body}
+                onChange={(e) => setBody(e.target.value)}
+                placeholder="Details for the user…"
+              />
             </Field>
             <Field label="Audience">
-              <select className={inputClass} value={audience} onChange={(e) => setAudience(e.target.value)}>
-                {["All users", "All sellers", "Pending providers", "Staff · KYC", "Staff · Super"].map((a) => (
-                  <option key={a}>{a}</option>
+              <select className={inputClass} value={audience} onChange={(e) => setAudience(e.target.value as typeof audience)}>
+                {AUDIENCES.map((a) => (
+                  <option key={a.value} value={a.value}>
+                    {a.label}
+                  </option>
                 ))}
               </select>
             </Field>
-            <Field label="Channel">
-              <select className={inputClass} value={channel} onChange={(e) => setChannel(e.target.value as typeof channel)}>
-                <option value="push">Push</option>
-                <option value="email">Email</option>
-                <option value="in-app">In-app</option>
-              </select>
+            <Field label="Image (optional)">
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                className="block w-full text-xs text-muted file:mr-3 file:rounded-lg file:border-0 file:bg-brand-soft file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-brand"
+                onChange={(e) => void onPickImage(e.target.files?.[0] || null)}
+              />
+              {imageUri ? (
+                <div className="mt-2 overflow-hidden rounded-xl border border-line bg-elevated">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={imageUri} alt="Preview" className="max-h-40 w-full object-contain" />
+                  <div className="flex items-center justify-between gap-2 px-2 py-1.5 text-[11px] text-muted">
+                    <span className="truncate">{imageName || "Image attached"}</span>
+                    <button type="button" className="font-semibold text-red" onClick={() => { setImageUri(""); setImageName(""); }}>
+                      Remove
+                    </button>
+                  </div>
+                </div>
+              ) : null}
             </Field>
-            <div className="flex flex-wrap gap-2">
-              <Btn onClick={() => compose("sent")}>Send</Btn>
-              <Btn kind="ghost" onClick={() => compose("scheduled")}>
-                Schedule
-              </Btn>
-              <Btn kind="ghost" onClick={() => compose("draft")}>
-                Draft
-              </Btn>
-            </div>
+            <Btn onClick={() => void send()} disabled={busy}>
+              {busy ? "Sending…" : "Send to app"}
+            </Btn>
           </div>
         </aside>
       </div>
     </div>
+  );
+}
+
+function NoticeCard({
+  notice,
+  onRemove,
+  onToggle,
+}: {
+  notice: AppNotice;
+  onRemove: () => void;
+  onToggle: () => void;
+}) {
+  const [preview, setPreview] = useState("");
+
+  useEffect(() => {
+    if (!notice.image_uri) {
+      setPreview("");
+      return;
+    }
+    let alive = true;
+    let objectUrl = "";
+    void fetchStaffImage(notice.image_uri).then((url) => {
+      objectUrl = url;
+      if (alive) setPreview(url);
+      else if (url) URL.revokeObjectURL(url);
+    });
+    return () => {
+      alive = false;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [notice.image_uri]);
+
+  return (
+    <article className="card-glow rounded-2xl border border-line bg-card p-4 text-ink">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div className="min-w-0 flex-1">
+          <p className="font-semibold text-ink">{notice.title}</p>
+          {notice.body ? <p className="mt-1 whitespace-pre-wrap text-sm text-muted">{notice.body}</p> : null}
+        </div>
+        <StatusBadge status={notice.is_active ? "live" : "paused"} />
+      </div>
+      {preview ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={preview} alt="" className="mt-3 max-h-48 w-full rounded-xl border border-line object-cover" />
+      ) : null}
+      <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-muted">
+        <span>{notice.audience_label}</span>
+        <span>In-app</span>
+        <span>{formatNptDateTime(notice.created_at)}</span>
+      </div>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <Btn kind="ghost" onClick={onToggle}>
+          {notice.is_active ? "Pause" : "Activate"}
+        </Btn>
+        <Btn kind="danger" onClick={onRemove}>
+          Remove from app
+        </Btn>
+      </div>
+    </article>
   );
 }

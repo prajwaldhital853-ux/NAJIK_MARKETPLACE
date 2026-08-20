@@ -41,6 +41,7 @@ class AppUser(AbstractBaseUser, PermissionsMixin):
     phone = models.CharField(max_length=15, unique=True, null=True, blank=True)
     google_sub = models.CharField(max_length=64, unique=True, null=True, blank=True)
     full_name = models.CharField(max_length=150, blank=True)
+    address = models.CharField(max_length=255, blank=True, default="")
     account_type = models.CharField(max_length=16, choices=ACCOUNT_CHOICES, default=ACCOUNT_USER)
     is_active = models.BooleanField(default=True)
     is_staff = models.BooleanField(default=False)

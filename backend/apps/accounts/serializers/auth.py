@@ -13,6 +13,27 @@ from apps.accounts.lockout import normalize_identifier
 from apps.accounts.models import AppUser, PasswordResetToken
 
 GENERIC_AUTH_ERROR = "Invalid credentials."
+USE_PROVIDER_LOGIN = "use_provider_login"
+USE_BUYER_LOGIN = "use_buyer_login"
+
+
+class WrongAccountType(Exception):
+    def __init__(self, account_type: str):
+        self.account_type = account_type
+        self.code = USE_PROVIDER_LOGIN if account_type == AppUser.ACCOUNT_PROVIDER else USE_BUYER_LOGIN
+        self.detail = (
+            "This Google or phone account is registered as a service provider. Open the service provider page to sign in."
+            if account_type == AppUser.ACCOUNT_PROVIDER
+            else "This account is a buyer account. Sign in from the user page."
+        )
+        super().__init__(self.detail)
+
+
+def wrong_role_payload(account_type: str) -> dict:
+    err = WrongAccountType(account_type)
+    return {"detail": err.detail, "code": err.code}
+
+
 BLOCKED_AUTH_ERROR = (
     "This account is blocked. A NAJIK admin paused it, so you cannot sign in "
     "until they reactivate the account."
@@ -76,6 +97,10 @@ class AppUserPublicSerializer(serializers.ModelSerializer):
     address = serializers.SerializerMethodField()
     photo_uri = serializers.SerializerMethodField()
     has_pending_edit = serializers.SerializerMethodField()
+    needs_profile = serializers.SerializerMethodField()
+    rejection_note = serializers.SerializerMethodField()
+    contact = serializers.SerializerMethodField()
+    profile_data = serializers.SerializerMethodField()
 
     class Meta:
         model = AppUser
@@ -84,15 +109,19 @@ class AppUserPublicSerializer(serializers.ModelSerializer):
             "email",
             "phone",
             "full_name",
+            "address",
             "account_type",
             "phone_verified",
             "email_verified",
+            "needs_profile",
             "verification_status",
             "application_id",
             "service_type",
-            "address",
             "photo_uri",
             "has_pending_edit",
+            "rejection_note",
+            "contact",
+            "profile_data",
             "date_joined",
         )
         read_only_fields = fields
@@ -121,7 +150,16 @@ class AppUserPublicSerializer(serializers.ModelSerializer):
 
     def get_address(self, obj: AppUser):
         app = self._app(obj)
-        return app.address if app else None
+        if app and app.address:
+            return app.address
+        return obj.address or ""
+
+    def get_needs_profile(self, obj: AppUser) -> bool:
+        if obj.account_type != AppUser.ACCOUNT_USER:
+            return False
+        if not obj.google_sub:
+            return False
+        return not bool((obj.full_name or "").strip() and obj.phone and (obj.address or "").strip())
 
     def get_photo_uri(self, obj: AppUser):
         request = self.context.get("request")
@@ -139,6 +177,18 @@ class AppUserPublicSerializer(serializers.ModelSerializer):
     def get_has_pending_edit(self, obj: AppUser):
         app = self._app(obj)
         return bool(app and app.has_pending_profile_edit())
+
+    def get_rejection_note(self, obj: AppUser):
+        app = self._app(obj)
+        return (app.rejection_note if app else "") or ""
+
+    def get_contact(self, obj: AppUser):
+        app = self._app(obj)
+        return (app.contact if app else "") or ""
+
+    def get_profile_data(self, obj: AppUser):
+        app = self._app(obj)
+        return (app.profile_data if app else {}) or {}
 
 
 class RegisterSerializer(serializers.Serializer):
@@ -191,6 +241,7 @@ class RegisterSerializer(serializers.Serializer):
 class LoginSerializer(serializers.Serializer):
     identifier = serializers.CharField()
     password = serializers.CharField(write_only=True, max_length=128, style={"input_type": "password"})
+    account_type = serializers.ChoiceField(choices=AppUser.ACCOUNT_CHOICES, required=False)
 
     def validate(self, attrs):
         raw = attrs["identifier"].strip()

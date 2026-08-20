@@ -8,6 +8,10 @@ export function contactVerified(user?: AppUser | null) {
   return Boolean(user?.phone_verified || user?.email_verified);
 }
 
+export function needsBuyerProfile(user?: AppUser | null) {
+  return Boolean(user && user.account_type === "user" && user.needs_profile);
+}
+
 export function needsContactVerify(user?: AppUser | null) {
   return isProvider(user) && !contactVerified(user);
 }

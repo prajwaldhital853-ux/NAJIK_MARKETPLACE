@@ -99,7 +99,7 @@ export function RoleWelcomeScreen() {
               description="Offer your services, reach more customers and grow your business."
               button="Continue as Service Provider"
               icon="briefcase"
-              onPress={() => navigation.navigate("Register", { accountType: "provider" })}
+              onPress={() => navigation.navigate("ProviderRegister")}
             />
           </View>
 

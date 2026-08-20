@@ -29,6 +29,8 @@ class ProviderApplicationSerializer(serializers.ModelSerializer):
     nagrita_uri = serializers.SerializerMethodField()
     nagrita_back_uri = serializers.SerializerMethodField()
     photo_uri = serializers.SerializerMethodField()
+    nation_card_uri = serializers.SerializerMethodField()
+    other_document_uri = serializers.SerializerMethodField()
     pending_photo_uri = serializers.SerializerMethodField()
     pending_nagrita_uri = serializers.SerializerMethodField()
     pending_nagrita_back_uri = serializers.SerializerMethodField()
@@ -60,6 +62,10 @@ class ProviderApplicationSerializer(serializers.ModelSerializer):
             "nagrita_uri",
             "nagrita_back_uri",
             "photo_uri",
+            "nation_card_uri",
+            "other_document_uri",
+            "profile_data",
+            "rejection_note",
             "pending_photo_uri",
             "pending_nagrita_uri",
             "pending_nagrita_back_uri",
@@ -78,6 +84,16 @@ class ProviderApplicationSerializer(serializers.ModelSerializer):
 
     def get_photo_uri(self, obj):
         return self._file_uri(obj, "photo")
+
+    def get_nation_card_uri(self, obj):
+        if not obj.nation_card:
+            return None
+        return self._file_uri(obj, "nation_card")
+
+    def get_other_document_uri(self, obj):
+        if not obj.other_document:
+            return None
+        return self._file_uri(obj, "other_document")
 
     def get_pending_photo_uri(self, obj):
         if not obj.pending_photo:
@@ -116,6 +132,8 @@ class ProviderApplicationCreateSerializer(serializers.Serializer):
     nagrita_uri = serializers.CharField()
     nagrita_back_uri = serializers.CharField()
     photo_uri = serializers.CharField()
+    nation_card_uri = serializers.CharField()
+    other_document_uri = serializers.CharField(required=False, allow_blank=True)
 
     def validate_nagrita_uri(self, value):
         return file_from_data_uri(value, "nagrita")
@@ -126,22 +144,42 @@ class ProviderApplicationCreateSerializer(serializers.Serializer):
     def validate_photo_uri(self, value):
         return file_from_data_uri(value, "photo")
 
+    def validate_nation_card_uri(self, value):
+        return file_from_data_uri(value, "nation_card")
+
+    def validate_other_document_uri(self, value):
+        if not (value or "").strip():
+            return None
+        return file_from_data_uri(value, "other_document")
+
     def create(self, validated_data):
         nagrita = validated_data.pop("nagrita_uri")
         nagrita_back = validated_data.pop("nagrita_back_uri")
         photo = validated_data.pop("photo_uri")
-        return ProviderApplication.objects.create(
+        nation_card = validated_data.pop("nation_card_uri")
+        other_document = validated_data.pop("other_document_uri", None)
+        app = ProviderApplication(
             **validated_data,
             nagrita=nagrita,
             nagrita_back=nagrita_back,
             photo=photo,
+            nation_card=nation_card,
         )
+        if other_document:
+            app.other_document = other_document
+        app.save()
+        return app
 
 
 class ProviderApplicationStatusSerializer(serializers.Serializer):
     status = serializers.ChoiceField(
-        choices=(ProviderApplication.STATUS_VERIFIED, ProviderApplication.STATUS_REJECTED)
+        choices=(
+            ProviderApplication.STATUS_PENDING,
+            ProviderApplication.STATUS_VERIFIED,
+            ProviderApplication.STATUS_REJECTED,
+        )
     )
+    rejection_note = serializers.CharField(required=False, allow_blank=True, max_length=1000)
 
 
 class ProviderProfileEditSerializer(serializers.Serializer):
@@ -152,6 +190,9 @@ class ProviderProfileEditSerializer(serializers.Serializer):
     nagrita_uri = serializers.CharField(required=False, allow_blank=True)
     nagrita_back_uri = serializers.CharField(required=False, allow_blank=True)
     photo_uri = serializers.CharField(required=False, allow_blank=True)
+    nation_card_uri = serializers.CharField(required=False, allow_blank=True)
+    other_document_uri = serializers.CharField(required=False, allow_blank=True)
+    profile_data = serializers.DictField(required=False)
 
     def validate_nagrita_uri(self, value):
         if not value:
@@ -167,6 +208,16 @@ class ProviderProfileEditSerializer(serializers.Serializer):
         if not value:
             return None
         return file_from_data_uri(value, "photo")
+
+    def validate_nation_card_uri(self, value):
+        if not value:
+            return None
+        return file_from_data_uri(value, "nation_card")
+
+    def validate_other_document_uri(self, value):
+        if not value:
+            return None
+        return file_from_data_uri(value, "other_document")
 
 
 def clear_pending_profile(app: ProviderApplication):
@@ -197,3 +248,73 @@ def apply_pending_profile(app: ProviderApplication):
         app.owner.full_name = app.full_name
         app.owner.save(update_fields=["full_name"])
     return app
+
+
+def provider_id_card_payload(card, request=None, *, for_staff=False):
+    from apps.core.views.branding import signatory_absolute_uri
+
+    owner = card.owner
+    app = getattr(owner, "provider_application", None)
+    photo_uri = None
+    if request and app and app.photo:
+        if for_staff:
+            photo_uri = request.build_absolute_uri(
+                f"/api/admin/verification/applications/{app.id}/file/photo/"
+            )
+        else:
+            photo_uri = request.build_absolute_uri("/api/verification/applications/me/file/photo/")
+    verify_path = f"/api/cards/verify/{card.verify_token}/"
+    verify_url = request.build_absolute_uri(verify_path) if request else verify_path
+    joined = None
+    if app and app.created_at:
+        joined = app.created_at
+    elif getattr(owner, "date_joined", None):
+        joined = owner.date_joined
+    payload = {
+        "id": str(card.id),
+        "card_code": card.card_code,
+        "access_status": card.access_status,
+        "can_download": card.can_download,
+        "requested_at": card.requested_at,
+        "approved_at": card.approved_at,
+        "staff_note": card.staff_note,
+        "full_name": (app.full_name if app else None) or owner.full_name or "",
+        "role_label": "SERVICE PROVIDER",
+        "category": (app.service_type if app else "") or "",
+        "phone": (app.phone if app else None) or owner.phone or "",
+        "email": (app.email if app else None) or owner.email or "",
+        "joined_on": joined,
+        "kyc_status": app.status if app else "none",
+        "is_verified": bool(app and app.status == "verified"),
+        "photo_uri": photo_uri,
+        "verify_url": verify_url,
+        "signature_uri": signatory_absolute_uri(request) if request else None,
+        "public_qr_uri": (
+            request.build_absolute_uri(f"/api/cards/verify/{card.verify_token}/qr/") if request else None
+        ),
+        "created_at": card.created_at,
+    }
+    if request and not for_staff:
+        payload["qr_uri"] = request.build_absolute_uri("/api/cards/me/qr/")
+    return payload
+
+
+def staff_id_card_payload(card, request=None):
+    data = provider_id_card_payload(card, request=request, for_staff=True)
+    owner = card.owner
+    app = getattr(owner, "provider_application", None)
+    data["owner_id"] = str(card.owner_id)
+    data["owner_name"] = owner.full_name or ""
+    data["address"] = (app.address if app else None) or getattr(owner, "address", "") or ""
+    data["contact"] = (app.contact if app else "") or ""
+    data["application_id"] = str(app.id) if app else None
+    data["profile_data"] = (app.profile_data if app else {}) or {}
+    data["rejection_note"] = (app.rejection_note if app else "") or ""
+    data["phone_verified"] = bool(getattr(owner, "phone_verified", False))
+    data["email_verified"] = bool(getattr(owner, "email_verified", False))
+    data["owner_phone"] = owner.phone or ""
+    data["owner_email"] = owner.email or ""
+    data["account_status"] = getattr(owner, "account_status", "active") or "active"
+    if request:
+        data["qr_uri"] = request.build_absolute_uri(f"/api/cards/verify/{card.verify_token}/qr/")
+    return data

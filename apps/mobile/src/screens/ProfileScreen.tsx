@@ -12,7 +12,7 @@ import { useAuth } from "../context/AuthContext";
 import { isPendingProvider, isProvider, isRejectedProvider, isVerifiedProvider } from "../demo";
 import { fetchMyListings } from "../listingsApi";
 import { subscribeListingsChanged } from "../listingsRefresh";
-import { openSellerPage } from "../navigation/browse";
+import { openProviderIdCard, openSellerPage } from "../navigation/browse";
 import { choosePhoto } from "../pickPhoto";
 import { colors, shadow } from "../theme";
 
@@ -27,6 +27,23 @@ function memberSince(iso?: string) {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "—";
   return d.toLocaleString("en-US", { month: "short", year: "numeric" });
+}
+
+function prettyProfileKey(key: string) {
+  return key
+    .split("_")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function DetailRow({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={{ flexDirection: "row", paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: "#F0F1F3" }}>
+      <Text style={{ width: 120, color: colors.muted, fontSize: 12 }}>{label}</Text>
+      <Text style={{ flex: 1, fontWeight: "600", fontSize: 13, color: colors.navy }}>{value}</Text>
+    </View>
+  );
 }
 
 const servicesBase: {
@@ -49,9 +66,10 @@ const actions: {
   bg: string;
   title: string;
   tab?: string;
-  page?: "promotions" | "services" | "earnings" | "messages" | "kyc" | "settings";
+  page?: "promotions" | "services" | "earnings" | "messages" | "kyc" | "settings" | "idcard";
 }[] = [
   { icon: "add", color: "#fff", bg: "#1B7D2C", title: "Add New Listing", tab: "Post" },
+  { icon: "id-card", color: "#1B7D2C", bg: "#E4F6EA", title: "My ID Card", page: "idcard" },
   { icon: "settings", color: "#7C3AED", bg: "#F1E9FF", title: "Manage Services", page: "services" },
   { icon: "megaphone", color: "#EA580C", bg: "#FFF1E0", title: "Promote Listing", page: "promotions" },
   { icon: "stats-chart", color: "#1B7D2C", bg: "#E4F6EA", title: "Earnings Report", page: "earnings" },
@@ -109,16 +127,16 @@ export function ProfileScreen() {
   }));
 
   function openEdit() {
-    if (!verified) {
-      Alert.alert("Wait for verification", "You can edit name, address and documents after admin verifies you.");
+    if (verified || rejected) {
+      setEditOpen(true);
       return;
     }
-    setEditOpen(true);
+    Alert.alert("Wait for verification", "You can edit name, address and documents after admin verifies you, or if your application was rejected.");
   }
 
   return (
     <View style={{ flex: 1, backgroundColor: "#F7F8FA" }}>
-      <AppHeader right="bell" showLocation />
+      <AppHeader right="bell" />
       <SellerProfileEditModal visible={editOpen} onClose={() => setEditOpen(false)} />
       <ScrollView refreshControl={refreshControl} contentContainerStyle={{ padding: 16, paddingBottom: 36 }} showsVerticalScrollIndicator={false}>
         {pending ? (
@@ -132,7 +150,24 @@ export function ProfileScreen() {
         {rejected ? (
           <View style={{ backgroundColor: colors.redSoft, borderRadius: 16, padding: 14, marginBottom: 14, ...shadow.card }}>
             <Text style={{ fontWeight: "800", color: colors.navy }}>Application rejected</Text>
-            <Text style={{ color: colors.muted, marginTop: 4, fontSize: 13 }}>You cannot post services until a new application is approved.</Text>
+            <Text style={{ color: colors.muted, marginTop: 4, fontSize: 13 }}>
+              {user?.rejection_note?.trim()
+                ? user.rejection_note
+                : "You cannot post services until a new application is approved."}
+            </Text>
+            <PressScale
+              onPress={openEdit}
+              style={{
+                marginTop: 12,
+                alignSelf: "flex-start",
+                backgroundColor: GREEN,
+                borderRadius: 12,
+                paddingHorizontal: 14,
+                paddingVertical: 10,
+              }}
+            >
+              <Text style={{ color: "#fff", fontWeight: "800" }}>Edit and resubmit</Text>
+            </PressScale>
           </View>
         ) : null}
 
@@ -156,6 +191,21 @@ export function ProfileScreen() {
           onPress={openEdit}
           onCamera={openEdit}
         />
+
+        <View style={{ marginTop: 14, backgroundColor: "#fff", borderRadius: 16, padding: 14, ...shadow.card }}>
+          <Text style={{ fontWeight: "800", color: colors.navy, marginBottom: 10 }}>Profile details</Text>
+          <DetailRow label="Full name" value={user?.full_name || "—"} />
+          <DetailRow label="Phone" value={user?.phone || "—"} />
+          <DetailRow label="Email" value={user?.email || "—"} />
+          <DetailRow label="Address" value={user?.address || "—"} />
+          <DetailRow label="Contact" value={user?.contact || "—"} />
+          <DetailRow label="Service" value={String(user?.service_type || "—")} />
+          {Object.entries(user?.profile_data || {})
+            .filter(([, value]) => String(value || "").trim())
+            .map(([key, value]) => (
+              <DetailRow key={key} label={prettyProfileKey(key)} value={String(value)} />
+            ))}
+        </View>
 
         <View style={{ marginTop: 10, backgroundColor: "#0D4A2A", borderRadius: 14, paddingVertical: 12, flexDirection: "row" }}>
           {stats.map((item, index) => (
@@ -216,6 +266,10 @@ export function ProfileScreen() {
             <PressScale
               key={item.title}
               onPress={() => {
+                if (item.page === "idcard") {
+                  openProviderIdCard(navigation);
+                  return;
+                }
                 if (item.page) openSellerPage(navigation, item.page);
                 else if (item.tab) navigation.jumpTo(item.tab);
               }}

@@ -85,7 +85,24 @@ export type FeedQuery = {
   verified?: boolean;
   min_rating?: number;
   place?: string;
+  owner?: string;
 };
+
+export type SellerPublicProfile = {
+  id: string;
+  full_name: string;
+  account_type: "user" | "provider";
+  phone: string;
+  email: string;
+  address: string;
+  service_type: string;
+  photo_url: string | null;
+  listings: ApiListing[];
+};
+
+export async function fetchSellerProfile(id: string) {
+  return withAppAuth((token) => api<SellerPublicProfile>(`/api/listings/sellers/${id}/`, { token }));
+}
 
 export async function fetchListingFeed(categoryOrQuery?: string | FeedQuery) {
   const params = new URLSearchParams();

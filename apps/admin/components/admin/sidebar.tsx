@@ -72,7 +72,11 @@ export function Sidebar({
   const search = searchParams.toString();
   const { badges } = useAdmin();
   const [open, setOpen] = useState<string>(() => {
-    const match = NAV.find((n) => n.href !== "/admin" && pathname.startsWith(n.href));
+    const match = NAV.find((n) => {
+      if (n.href === "/admin") return false;
+      if (pathname.startsWith(n.href)) return true;
+      return Boolean(n.children?.some((c) => pathname.startsWith(c.href.split("?")[0])));
+    });
     return match?.href || "/admin";
   });
 

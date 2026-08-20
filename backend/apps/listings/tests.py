@@ -112,7 +112,7 @@ class ListingModerationTests(TestCase):
         self.assertEqual(posted.status_code, 403)
 
     def test_pending_listing_hidden_from_feed_until_approved(self):
-        _, p, _ = self.verified_provider()
+        _, p, addr = self.verified_provider()
         posted = self.client.post("/api/listings/me/", self.payload(p), format="json")
         self.assertEqual(posted.status_code, 201, posted.data)
         self.assertEqual(posted.data["status"], "pending")
@@ -174,6 +174,28 @@ class ListingModerationTests(TestCase):
         self.assertEqual(len(feed.data), 1)
         self.assertEqual(feed.data[0]["title"], "Updated house in Lahan")
         self.assertEqual(Listing.objects.get(pk=listing_id).status, Listing.STATUS_APPROVED)
+        owner_id = feed.data[0]["owner_id"]
+        by_owner = anon.get(f"/api/listings/feed/?owner={owner_id}")
+        self.assertEqual(len(by_owner.data), 1)
+        empty = anon.get("/api/listings/feed/?owner=00000000-0000-0000-0000-000000000000")
+        self.assertEqual(empty.data, [])
+
+        buyer = APIClient()
+        signed = buyer.post(
+            "/api/auth/register/",
+            {"full_name": "Buyer One", "password": PASS, "account_type": "user", "phone": phone()},
+            format="json",
+        )
+        self.assertEqual(signed.status_code, 201, signed.data)
+        buyer.credentials(HTTP_AUTHORIZATION=f"Bearer {signed.data['access']}")
+        profile = buyer.get(f"/api/listings/sellers/{owner_id}/")
+        self.assertEqual(profile.status_code, 200, profile.data)
+        self.assertEqual(profile.data["full_name"], "Seller One")
+        self.assertEqual(profile.data["phone"], p)
+        self.assertEqual(profile.data["email"], addr)
+        self.assertEqual(profile.data["address"], "Lahan-10, Siraha")
+        self.assertEqual(len(profile.data["listings"]), 1)
+        self.assertTrue(profile.data["photo_url"])
 
     def test_approved_edit_stays_live_until_admin_approves(self):
         _, p, _ = self.verified_provider()

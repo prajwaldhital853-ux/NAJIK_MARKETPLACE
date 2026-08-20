@@ -1,6 +1,15 @@
 export type AccountType = "user" | "provider";
 export type VerificationStatus = "none" | "pending" | "verified" | "rejected";
-export type ProviderServiceType = "Real Estate" | "Job Poster" | "Vehicles" | "Local Services" | "Used Items" | "Other";
+export type ProviderServiceType =
+  | "Property"
+  | "Job"
+  | "Electronics"
+  | "Vehicles"
+  | "Local Services"
+  | "Used Items"
+  | "Other"
+  | "Real Estate"
+  | "Job Poster";
 
 export type AppUser = {
   id?: string;
@@ -16,8 +25,10 @@ export type AppUser = {
   nagrita_uri?: string;
   photo_uri?: string;
   phone_verified?: boolean;
-  email_verified?: boolean;
+  needs_profile?: boolean;
   has_pending_edit?: boolean;
+  rejection_note?: string;
+  profile_data?: Record<string, string>;
   date_joined?: string;
 };
 

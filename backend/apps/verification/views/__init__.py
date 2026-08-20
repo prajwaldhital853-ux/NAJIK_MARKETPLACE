@@ -12,7 +12,7 @@ from apps.accounts.permissions import IsAppUser
 from apps.accounts.throttles import SellerApplyRateThrottle
 from apps.staff.authentication import StaffJWTAuthentication
 from apps.staff.permissions import IsStaffUser
-from apps.verification.models import ProviderApplication
+from apps.verification.models import ProviderApplication, ensure_provider_id_card
 from apps.verification.serializers import (
     ProviderApplicationCreateSerializer,
     ProviderApplicationSerializer,
@@ -21,6 +21,31 @@ from apps.verification.serializers import (
     apply_pending_profile,
     clear_pending_profile,
 )
+from apps.verification.views.id_card import (
+    ProviderIdCardMePrintView,
+    ProviderIdCardMeQrView,
+    ProviderIdCardMeView,
+    PublicIdCardVerifyQrView,
+    PublicIdCardVerifyView,
+    StaffIdCardDetailView,
+    StaffIdCardListView,
+)
+
+__all__ = [
+    "ProviderApplicationMeView",
+    "ProviderApplicationMeFileView",
+    "StaffApplicationListView",
+    "StaffApplicationDetailView",
+    "StaffApplicationFileView",
+    "ProviderIdCardMeView",
+    "ProviderIdCardMeQrView",
+    "ProviderIdCardMePrintView",
+    "PublicIdCardVerifyView",
+    "PublicIdCardVerifyQrView",
+    "StaffIdCardListView",
+    "StaffIdCardDetailView",
+]
+
 
 
 def kyc_file_field(app, kind):
@@ -28,6 +53,8 @@ def kyc_file_field(app, kind):
         "nagrita": app.nagrita,
         "nagrita_back": app.nagrita_back,
         "photo": app.photo,
+        "nation_card": app.nation_card,
+        "other_document": app.other_document,
         "pending_nagrita": app.pending_nagrita,
         "pending_nagrita_back": app.pending_nagrita_back,
         "pending_photo": app.pending_photo,
@@ -65,6 +92,7 @@ class ProviderApplicationMeView(APIView):
         serializer = ProviderApplicationCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         app = serializer.save(owner=request.user)
+        ensure_provider_id_card(request.user)
         return Response(
             ProviderApplicationSerializer(app, context={"request": request}).data,
             status=status.HTTP_201_CREATED,
@@ -78,7 +106,37 @@ class ProviderApplicationMeView(APIView):
         except ProviderApplication.DoesNotExist:
             return Response({"detail": "Submit your application first."}, status=status.HTTP_400_BAD_REQUEST)
         if app.status != ProviderApplication.STATUS_VERIFIED:
-            return Response({"detail": "Wait until your account is verified before editing."}, status=status.HTTP_400_BAD_REQUEST)
+            # Rejected providers can resubmit updated details for another review.
+            if app.status != ProviderApplication.STATUS_REJECTED:
+                return Response({"detail": "Wait until your account is verified before editing."}, status=status.HTTP_400_BAD_REQUEST)
+            serializer = ProviderProfileEditSerializer(data=request.data)
+            serializer.is_valid(raise_exception=True)
+            data = serializer.validated_data
+            for field in ("full_name", "address", "contact", "service_type"):
+                if field in data:
+                    setattr(app, field, data[field])
+                    if field == "full_name":
+                        request.user.full_name = data[field]
+                    if field == "address":
+                        request.user.address = data[field]
+            if data.get("nagrita_uri"):
+                app.nagrita = data["nagrita_uri"]
+            if data.get("nagrita_back_uri"):
+                app.nagrita_back = data["nagrita_back_uri"]
+            if data.get("photo_uri"):
+                app.photo = data["photo_uri"]
+            if data.get("nation_card_uri"):
+                app.nation_card = data["nation_card_uri"]
+            if data.get("other_document_uri"):
+                app.other_document = data["other_document_uri"]
+            if "profile_data" in data:
+                app.profile_data = data["profile_data"] or {}
+            app.status = ProviderApplication.STATUS_PENDING
+            app.rejection_note = ""
+            app.reviewed_at = None
+            app.save()
+            request.user.save(update_fields=["full_name", "address"])
+            return Response(ProviderApplicationSerializer(app, context={"request": request}).data)
         serializer = ProviderProfileEditSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
@@ -134,15 +192,51 @@ class StaffApplicationDetailView(APIView):
         if app.has_pending_profile_edit() and app.status == ProviderApplication.STATUS_VERIFIED:
             if next_status == ProviderApplication.STATUS_VERIFIED:
                 apply_pending_profile(app)
-            else:
+                app.reviewed_at = timezone.now()
+                app.save(update_fields=["reviewed_at"])
+                app.refresh_from_db()
+                return Response(ProviderApplicationSerializer(app, context={"request": request}).data)
+            note = (serializer.validated_data.get("rejection_note") or "").strip()
+            # Note present → revoke the whole KYC; empty note → drop only the pending edit.
+            if next_status == ProviderApplication.STATUS_REJECTED and note:
                 clear_pending_profile(app)
+                app.status = ProviderApplication.STATUS_REJECTED
+                app.rejection_note = note
+                app.reviewed_at = timezone.now()
+                app.save(update_fields=["status", "rejection_note", "reviewed_at"])
+                return Response(ProviderApplicationSerializer(app, context={"request": request}).data)
+            clear_pending_profile(app)
             app.reviewed_at = timezone.now()
             app.save(update_fields=["reviewed_at"])
             app.refresh_from_db()
             return Response(ProviderApplicationSerializer(app, context={"request": request}).data)
+        if next_status == ProviderApplication.STATUS_PENDING:
+            if app.status != ProviderApplication.STATUS_REJECTED:
+                return Response(
+                    {"detail": "Only rejected applications can be reactivated to pending."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            app.status = ProviderApplication.STATUS_PENDING
+            app.rejection_note = ""
+            app.reviewed_at = None
+            app.save(update_fields=["status", "rejection_note", "reviewed_at"])
+            return Response(ProviderApplicationSerializer(app, context={"request": request}).data)
+        if next_status == ProviderApplication.STATUS_REJECTED:
+            note = (serializer.validated_data.get("rejection_note") or "").strip()
+            if app.status == ProviderApplication.STATUS_VERIFIED and not note:
+                return Response(
+                    {"detail": "Add a rejection note explaining why this verified KYC is being revoked."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            app.status = next_status
+            app.reviewed_at = timezone.now()
+            app.rejection_note = note
+            app.save(update_fields=["status", "reviewed_at", "rejection_note"])
+            return Response(ProviderApplicationSerializer(app, context={"request": request}).data)
         app.status = next_status
         app.reviewed_at = timezone.now()
-        app.save(update_fields=["status", "reviewed_at"])
+        app.rejection_note = ""
+        app.save(update_fields=["status", "reviewed_at", "rejection_note"])
         return Response(ProviderApplicationSerializer(app, context={"request": request}).data)
 
 

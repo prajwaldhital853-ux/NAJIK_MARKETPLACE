@@ -1,1 +1,3 @@
-# Models for this feature will be added when the feature is built.
+from apps.notifications.models.notice import AppNotice
+
+__all__ = ["AppNotice"]

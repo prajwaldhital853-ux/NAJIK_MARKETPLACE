@@ -77,6 +77,7 @@ class SellerKycTests(TestCase):
             "nagrita_uri": PIXEL_PNG,
             "nagrita_back_uri": PIXEL_PNG,
             "photo_uri": PIXEL_PNG,
+            "nation_card_uri": PIXEL_PNG,
         }
 
     def staff_client(self):
@@ -180,14 +181,70 @@ class SellerKycTests(TestCase):
         app_id = apply.data["id"]
         patched = staff.patch(
             f"/api/admin/verification/applications/{app_id}/",
-            {"status": "rejected"},
+            {"status": "rejected", "rejection_note": "Documents unclear"},
             format="json",
         )
         self.assertEqual(patched.status_code, 200)
         me = self.client.get("/api/auth/me/")
         self.assertEqual(me.data["verification_status"], "rejected")
+        self.assertEqual(me.data["rejection_note"], "Documents unclear")
 
-    def test_staff_cannot_reopen_to_pending(self):
+    def test_staff_can_reject_verified_kyc_with_note(self):
+        res, p, addr = self.register_provider(verified=True)
+        apply = self.client.post(
+            "/api/verification/applications/me/",
+            self.apply_payload(p, addr),
+            format="json",
+        )
+        staff = self.staff_client()
+        app_id = apply.data["id"]
+        staff.patch(
+            f"/api/admin/verification/applications/{app_id}/",
+            {"status": "verified"},
+            format="json",
+        )
+        denied = staff.patch(
+            f"/api/admin/verification/applications/{app_id}/",
+            {"status": "rejected"},
+            format="json",
+        )
+        self.assertEqual(denied.status_code, 400)
+        revoked = staff.patch(
+            f"/api/admin/verification/applications/{app_id}/",
+            {"status": "rejected", "rejection_note": "Please upload clearer nation card"},
+            format="json",
+        )
+        self.assertEqual(revoked.status_code, 200, revoked.data)
+        self.assertEqual(revoked.data["status"], "rejected")
+        self.assertEqual(revoked.data["rejection_note"], "Please upload clearer nation card")
+        me = self.client.get("/api/auth/me/")
+        self.assertEqual(me.data["verification_status"], "rejected")
+        self.assertEqual(me.data["rejection_note"], "Please upload clearer nation card")
+
+    def test_staff_can_reactivate_rejected(self):
+        res, p, addr = self.register_provider(verified=True)
+        apply = self.client.post(
+            "/api/verification/applications/me/",
+            self.apply_payload(p, addr),
+            format="json",
+        )
+        staff = self.staff_client()
+        app_id = apply.data["id"]
+        staff.patch(
+            f"/api/admin/verification/applications/{app_id}/",
+            {"status": "rejected", "rejection_note": "Blurry docs"},
+            format="json",
+        )
+        reopen = staff.patch(
+            f"/api/admin/verification/applications/{app_id}/",
+            {"status": "pending"},
+            format="json",
+        )
+        self.assertEqual(reopen.status_code, 200, reopen.data)
+        self.assertEqual(reopen.data["status"], "pending")
+        self.assertEqual(reopen.data.get("rejection_note") or "", "")
+
+    def test_staff_cannot_reopen_verified_to_pending(self):
         res, p, addr = self.register_provider(verified=True)
         apply = self.client.post(
             "/api/verification/applications/me/",

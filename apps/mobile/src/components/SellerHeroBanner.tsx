@@ -157,7 +157,6 @@ export function SellerHeroBanner({
   pending,
   rejected,
   variant = "home",
-  location = "Lahan, Siraha",
   showPosted,
   onPress,
   onCamera,
@@ -248,27 +247,6 @@ export function SellerHeroBanner({
 
   return (
     <View>
-      <View
-        style={{
-          alignSelf: "flex-start",
-          marginBottom: f(0.012, 5),
-          flexDirection: "row",
-          alignItems: "center",
-          backgroundColor: "#fff",
-          borderWidth: 1,
-          borderColor: "#E2E5EA",
-          paddingHorizontal: 14,
-          paddingVertical: 7,
-          borderRadius: 20,
-          gap: 6,
-          ...shadow.card,
-        }}
-      >
-        <Ionicons name="location" size={14} color="#1B7D2C" />
-        <Text style={{ fontWeight: "600", color: colors.text, fontSize: 13 }}>{location}</Text>
-        <Ionicons name="chevron-down" size={13} color="#8A8F98" />
-      </View>
-
       <View style={{ width: W, height: G_BOT, overflow: "hidden", borderBottomLeftRadius: R, borderBottomRightRadius: R }}>
         <Image
           source={scene.src}

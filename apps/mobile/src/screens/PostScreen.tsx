@@ -163,6 +163,22 @@ export function PostScreen() {
     return `Next: ${STEPS[step].next}`;
   }, [step, promote]);
 
+  useEffect(() => {
+    if (skipGeocode.current) {
+      skipGeocode.current = false;
+      return;
+    }
+    const text = location.trim();
+    if (text.length < 2) {
+      setPlaceHits([]);
+      return;
+    }
+    const timer = setTimeout(() => {
+      void searchPlaces(text, 12).then(setPlaceHits);
+    }, 280);
+    return () => clearTimeout(timer);
+  }, [location]);
+
   if (isProvider(user) && !canPostServices(user)) {
     const rejected = user?.verification_status === "rejected";
     return (
@@ -235,23 +251,6 @@ export function PostScreen() {
     if (hit.city) setCity(hit.city);
     if (hit.district) setDistrict(hit.district);
   }
-
-  useEffect(() => {
-    if (skipGeocode.current) {
-      skipGeocode.current = false;
-      return;
-    }
-    const text = location.trim();
-    if (text.length < 2) {
-      setPlaceHits([]);
-      return;
-    }
-    const timer = setTimeout(() => {
-      void searchPlaces(text, 12).then(setPlaceHits);
-    }, 280);
-    return () => clearTimeout(timer);
-  }, [location]);
-
   async function pickPhotos() {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {

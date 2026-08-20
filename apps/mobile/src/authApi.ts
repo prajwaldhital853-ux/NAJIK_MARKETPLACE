@@ -1,4 +1,5 @@
 import { api, ApiError } from "./api";
+import { GOOGLE_REDIRECT_URI } from "./config";
 import { getAppAccessToken, getAppRefreshToken, saveAppTokens } from "./auth";
 import { accessTokenFresh } from "./jwt";
 import type { AccountType, AppUser } from "./types";
@@ -87,12 +88,37 @@ export async function registerAccount(body: {
   return persist(data);
 }
 
-export async function loginAccount(identifier: string, password: string) {
+export async function loginAccount(identifier: string, password: string, accountType?: AccountType) {
   const data = await api<AuthPayload>("/api/auth/login/", {
     method: "POST",
-    body: JSON.stringify({ identifier, password }),
+    body: JSON.stringify({ identifier, password, ...(accountType ? { account_type: accountType } : {}) }),
   });
   return persist(data);
+}
+
+export async function loginWithGoogle(
+  payload: { idToken?: string; code?: string; redirectUri?: string },
+  accountType: AccountType = "user",
+) {
+  const data = await api<AuthPayload>("/api/auth/google/", {
+    method: "POST",
+    body: JSON.stringify({
+      account_type: accountType,
+      ...(payload.idToken ? { id_token: payload.idToken } : {}),
+      ...(payload.code ? { code: payload.code, redirect_uri: payload.redirectUri || GOOGLE_REDIRECT_URI } : {}),
+    }),
+  });
+  return persist(data);
+}
+
+export async function completeBuyerProfile(payload: { full_name: string; phone: string; address: string }) {
+  return withAppAuth((token) =>
+    api<AppUser>("/api/auth/me/", {
+      method: "PATCH",
+      token,
+      body: JSON.stringify(payload),
+    }),
+  );
 }
 
 export async function fetchMe(token: string) {
@@ -109,6 +135,36 @@ export async function logoutAccount(refresh: string, token: string | null) {
   } catch {
     // Still wipe local keys.
   }
+}
+
+export async function requestGuestOtp(identifier: string) {
+  return api("/api/auth/otp/guest-request/", {
+    method: "POST",
+    body: JSON.stringify({ purpose: "phone", identifier }),
+  });
+}
+
+export async function completeProviderRegister(payload: {
+  code: string;
+  password: string;
+  full_name: string;
+  phone: string;
+  email: string;
+  address: string;
+  contact: string;
+  service_type: string;
+  nagrita_uri: string;
+  nagrita_back_uri: string;
+  photo_uri: string;
+  nation_card_uri: string;
+  other_document_uri?: string;
+  profile_data?: Record<string, string>;
+}) {
+  const data = await api<AuthPayload>("/api/auth/register/provider/complete/", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+  return persist(data);
 }
 
 export async function requestOtp(purpose: "phone" | "email", identifier?: string) {
@@ -167,6 +223,9 @@ export async function updateSellerProfile(payload: {
   nagrita_uri?: string;
   nagrita_back_uri?: string;
   photo_uri?: string;
+  nation_card_uri?: string;
+  other_document_uri?: string;
+  profile_data?: Record<string, string>;
 }) {
   return withAppAuth((token) =>
     api("/api/verification/applications/me/", {
@@ -187,6 +246,8 @@ export async function submitSellerApplication(payload: {
   nagrita_uri: string;
   nagrita_back_uri: string;
   photo_uri: string;
+  nation_card_uri: string;
+  other_document_uri?: string;
 }) {
   return withAppAuth((token) =>
     api("/api/verification/applications/me/", {

@@ -1,4 +1,5 @@
 import mimetypes
+import re
 
 from django.http import FileResponse
 from rest_framework import status
@@ -9,15 +10,33 @@ from rest_framework import serializers
 from apps.accounts.authentication import AppJWTAuthentication
 from apps.accounts.models import AppUser
 from apps.accounts.permissions import IsAppUser
-from apps.accounts.serializers.auth import AppUserPublicSerializer
+from apps.accounts.serializers.auth import AppUserPublicSerializer, identity_taken_message, normalize_phone
 from apps.verification.serializers import file_from_data_uri
+
+PHONE_RE = re.compile(r"9\d{9}")
 
 
 class MePhotoPatchSerializer(serializers.Serializer):
-    photo_uri = serializers.CharField()
+    photo_uri = serializers.CharField(required=False)
+    full_name = serializers.CharField(required=False, allow_blank=True, max_length=150)
+    phone = serializers.CharField(required=False, allow_blank=True, max_length=15)
+    address = serializers.CharField(required=False, allow_blank=True, max_length=255)
 
     def validate_photo_uri(self, value):
         return file_from_data_uri(value, "avatar")
+
+    def validate_phone(self, value):
+        if not value:
+            return None
+        phone = normalize_phone(value)
+        if not PHONE_RE.fullmatch(phone):
+            raise serializers.ValidationError("Enter a valid Nepal mobile number.")
+        return phone
+
+    def validate(self, attrs):
+        if not any(key in self.initial_data for key in ("photo_uri", "full_name", "phone", "address")):
+            raise serializers.ValidationError("Nothing to update.")
+        return attrs
 
 
 class MeView(APIView):
@@ -30,15 +49,36 @@ class MeView(APIView):
 
     def patch(self, request):
         user = AppUser.objects.select_related("provider_application").get(pk=request.user.pk)
-        if user.account_type == user.ACCOUNT_PROVIDER:
+        serializer = MePhotoPatchSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        if user.account_type == user.ACCOUNT_PROVIDER and "photo_uri" in data:
             return Response(
                 {"detail": "Service providers update their photo from profile edit, which admin must verify."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        serializer = MePhotoPatchSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        user.avatar = serializer.validated_data["photo_uri"]
-        user.save(update_fields=["avatar"])
+        updates = []
+        if data.get("photo_uri") is not None:
+            user.avatar = data["photo_uri"]
+            updates.append("avatar")
+        if "full_name" in data and data.get("full_name") is not None:
+            user.full_name = (data.get("full_name") or "").strip()
+            updates.append("full_name")
+        if "address" in data and data.get("address") is not None:
+            user.address = (data.get("address") or "").strip()
+            updates.append("address")
+        if "phone" in data:
+            phone = data.get("phone")
+            if phone:
+                existing = AppUser.objects.filter(phone=phone).exclude(pk=user.pk).first()
+                if existing:
+                    return Response({"detail": identity_taken_message(existing, "phone")}, status=status.HTTP_400_BAD_REQUEST)
+                user.phone = phone
+                updates.append("phone")
+        if not updates:
+            return Response({"detail": "Nothing to update."}, status=status.HTTP_400_BAD_REQUEST)
+        user.save(update_fields=updates)
+        user = AppUser.objects.select_related("provider_application").get(pk=user.pk)
         return Response(AppUserPublicSerializer(user, context={"request": request}).data)
 
 

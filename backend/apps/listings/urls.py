@@ -9,10 +9,14 @@ from apps.listings.views import (
     ListingPublicDetailView,
     ListingReviewView,
     ListingSaveView,
+    PublicSellerPhotoView,
+    PublicSellerProfileView,
 )
 
 urlpatterns = [
     path("feed/", ListingFeedView.as_view(), name="listing-feed"),
+    path("sellers/<uuid:pk>/photo/", PublicSellerPhotoView.as_view(), name="listing-seller-photo"),
+    path("sellers/<uuid:pk>/", PublicSellerProfileView.as_view(), name="listing-seller-profile"),
     path("me/", ListingMineView.as_view(), name="listing-mine"),
     path("me/<uuid:pk>/", ListingMineDetailView.as_view(), name="listing-mine-detail"),
     path("<uuid:pk>/comments/", ListingCommentView.as_view(), name="listing-comments"),

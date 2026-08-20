@@ -1,0 +1,323 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { StaffIdCardVisual } from "@/components/admin/staff-id-card-visual";
+import { PageHeader, SummaryStrip } from "@/components/admin/page-frame";
+import { Btn, StatusBadge } from "@/components/admin/ui";
+import { formatNptDateTime, formatNptTime } from "@/lib/format";
+import { ADMIN_POLL_MS } from "@/lib/live-inbox";
+import { useSession } from "@/lib/session";
+import {
+  listProviderIdCards,
+  patchProviderIdCard,
+  type ProviderIdCard,
+} from "@/lib/staff-api";
+
+const TABS = [
+  { value: "requested", label: "Requests" },
+  { value: "approved", label: "Approved" },
+  { value: "blocked", label: "Blocked" },
+  { value: "all", label: "All" },
+] as const;
+
+type Tab = (typeof TABS)[number]["value"];
+
+function tabFromParams(raw: string | null): Tab {
+  if (raw === "requested" || raw === "approved" || raw === "blocked") return raw;
+  return "all";
+}
+
+function Info({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <dt className="text-[11px] font-medium text-muted">{label}</dt>
+      <dd className="text-sm font-semibold text-ink">{value || "—"}</dd>
+    </div>
+  );
+}
+
+export default function IdCardsPage() {
+  const { apiSession } = useSession();
+  const params = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+  const filter = tabFromParams(params.get("status"));
+  const [items, setItems] = useState<ProviderIdCard[]>([]);
+  const [error, setError] = useState("");
+  const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(params.get("id"));
+
+  async function load() {
+    if (!apiSession) return;
+    try {
+      const rows = await listProviderIdCards();
+      setItems(rows);
+      setUpdatedAt(new Date());
+      setError("");
+      const ownerParam = params.get("owner");
+      if (ownerParam && !params.get("id")) {
+        const match = rows.find((row) => row.owner_id === ownerParam);
+        if (match) setSelectedId(match.id);
+      }
+    } catch (err) {
+      setItems([]);
+      setError(err instanceof Error ? err.message : "Could not load ID cards.");
+    }
+  }
+
+  useEffect(() => {
+    if (!apiSession) {
+      setItems([]);
+      setError("Sign in with a staff account to manage seller ID cards.");
+      return;
+    }
+    void load();
+    const id = window.setInterval(() => void load(), ADMIN_POLL_MS);
+    return () => window.clearInterval(id);
+  }, [apiSession]);
+
+  useEffect(() => {
+    const id = params.get("id");
+    if (id) setSelectedId(id);
+  }, [params]);
+
+  function setFilter(next: Tab) {
+    const qs = new URLSearchParams();
+    if (next !== "all") qs.set("status", next);
+    if (selectedId) qs.set("id", selectedId);
+    const suffix = qs.toString();
+    router.replace(suffix ? `${pathname}?${suffix}` : pathname);
+  }
+
+  function openCard(id: string) {
+    setSelectedId(id);
+    const qs = new URLSearchParams();
+    if (filter !== "all") qs.set("status", filter);
+    qs.set("id", id);
+    router.replace(`${pathname}?${qs.toString()}`);
+  }
+
+  function closeCard() {
+    setSelectedId(null);
+    const qs = new URLSearchParams();
+    if (filter !== "all") qs.set("status", filter);
+    const suffix = qs.toString();
+    router.replace(suffix ? `${pathname}?${suffix}` : pathname);
+  }
+
+  async function act(id: string, action: "approve" | "revoke" | "block") {
+    try {
+      await patchProviderIdCard(id, action);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not update card access.");
+    }
+  }
+
+  const requested = items.filter((i) => i.access_status === "requested");
+  const approved = items.filter((i) => i.access_status === "approved");
+  const blocked = items.filter((i) => i.access_status === "blocked");
+
+  const visible = useMemo(() => {
+    if (filter === "requested") return requested;
+    if (filter === "approved") return approved;
+    if (filter === "blocked") return blocked;
+    return items;
+  }, [filter, items, requested, approved, blocked]);
+
+  const selected = items.find((row) => row.id === selectedId) || null;
+  const profileRows = Object.entries(selected?.profile_data || {}).filter(([, value]) => String(value || "").trim());
+
+  return (
+    <div>
+      <PageHeader
+        title="Seller ID cards"
+        crumb="Dashboard / KYC / ID cards"
+        summary="Open any seller’s ID to review the visual card and full account details before approving download / print."
+        extra={
+          <button
+            type="button"
+            onClick={() => void load()}
+            className="rounded-xl border border-line bg-card px-3 py-2 text-sm font-semibold text-ink"
+          >
+            Refresh
+          </button>
+        }
+      />
+      <SummaryStrip
+        items={[
+          { label: "Cards", value: items.length, tone: "brand" },
+          { label: "Requests", value: requested.length, tone: "amber" },
+          { label: "Approved", value: approved.length, tone: "green" },
+          { label: "Blocked", value: blocked.length, tone: "red" },
+        ]}
+      />
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap gap-1">
+          {TABS.map((item) => (
+            <button
+              key={item.value}
+              type="button"
+              onClick={() => setFilter(item.value)}
+              className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                filter === item.value ? "bg-brand text-white" : "border border-line text-ink"
+              }`}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+        {updatedAt ? <p className="text-[11px] text-muted">Updated {formatNptTime(updatedAt.toISOString())}</p> : null}
+      </div>
+      {error ? <p className="mb-4 text-sm text-red">{error}</p> : null}
+      {visible.length === 0 && !error ? (
+        <section className="card-glow rounded-2xl border border-line bg-card p-6 text-sm text-muted">
+          No ID cards in this filter.
+        </section>
+      ) : null}
+      <div className="space-y-3">
+        {visible.map((card) => (
+          <section key={card.id} className="card-glow rounded-2xl border border-line bg-card p-4 text-ink">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="text-lg font-medium">{card.full_name || card.owner_name}</p>
+                <p className="text-sm text-muted">{card.card_code}</p>
+                <p className="mt-1 text-xs text-muted">
+                  {card.category || "—"} · {card.phone || "—"} · {card.email || "—"}
+                </p>
+                {card.requested_at ? (
+                  <p className="mt-1 text-xs text-amber">Requested {formatNptDateTime(card.requested_at)}</p>
+                ) : null}
+              </div>
+              <div className="flex flex-col items-end gap-2">
+                <StatusBadge status={card.access_status} />
+                <StatusBadge status={card.is_verified ? "verified" : card.kyc_status} />
+              </div>
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Btn kind="ghost" onClick={() => openCard(card.id)}>
+                See user ID card
+              </Btn>
+              {card.access_status !== "approved" ? (
+                <Btn onClick={() => void act(card.id, "approve")}>Approve download / print</Btn>
+              ) : null}
+              {card.access_status === "approved" ? (
+                <Btn kind="ghost" onClick={() => void act(card.id, "revoke")}>
+                  Revoke access
+                </Btn>
+              ) : null}
+              {card.access_status !== "blocked" ? (
+                <Btn kind="danger" onClick={() => void act(card.id, "block")}>
+                  Block
+                </Btn>
+              ) : null}
+            </div>
+          </section>
+        ))}
+      </div>
+
+      {selected ? (
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/55 p-4 sm:p-6">
+          <div className="my-4 w-full max-w-5xl rounded-2xl border border-line bg-card p-4 text-ink shadow-xl sm:p-6">
+            <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="text-xl font-semibold">{selected.full_name || selected.owner_name}</p>
+                <p className="text-sm text-muted">{selected.card_code}</p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <StatusBadge status={selected.access_status} />
+                  <StatusBadge status={selected.is_verified ? "verified" : selected.kyc_status} />
+                </div>
+              </div>
+              <Btn kind="ghost" onClick={closeCard}>
+                Close
+              </Btn>
+            </div>
+
+            <p className="mb-3 text-sm font-semibold text-ink">Visual ID card</p>
+            <StaffIdCardVisual card={selected} />
+
+            <div className="mt-5 rounded-2xl border border-line bg-elevated p-4">
+              <p className="mb-3 text-sm font-semibold text-ink">Complete seller details</p>
+              <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                <Info label="Full name" value={selected.full_name || selected.owner_name} />
+                <Info label="Provider ID" value={selected.card_code} />
+                <Info label="Category / service" value={selected.category || "—"} />
+                <Info label="Phone" value={selected.phone || "—"} />
+                <Info label="Email" value={selected.email || "—"} />
+                <Info label="Address" value={selected.address || "—"} />
+                <Info label="Secondary contact" value={selected.contact || "—"} />
+                <Info label="Account phone" value={selected.owner_phone || "—"} />
+                <Info label="Account email" value={selected.owner_email || "—"} />
+                <Info label="Phone verified" value={selected.phone_verified ? "Yes" : "No"} />
+                <Info label="Email verified" value={selected.email_verified ? "Yes" : "No"} />
+                <Info label="Account status" value={selected.account_status || "—"} />
+                <Info label="KYC status" value={selected.kyc_status || "—"} />
+                <Info label="Download access" value={selected.access_status} />
+                <Info
+                  label="Requested at"
+                  value={selected.requested_at ? formatNptDateTime(selected.requested_at) : "—"}
+                />
+                <Info
+                  label="Approved at"
+                  value={selected.approved_at ? formatNptDateTime(selected.approved_at) : "—"}
+                />
+                <Info
+                  label="Joined on"
+                  value={selected.joined_on ? formatNptDateTime(selected.joined_on) : "—"}
+                />
+                <Info label="Application ID" value={selected.application_id || "—"} />
+                <Info label="Owner user ID" value={selected.owner_id} />
+                <Info label="Verify URL" value={selected.verify_url} />
+              </dl>
+
+              {profileRows.length ? (
+                <div className="mt-4 rounded-xl border border-line bg-card px-3 py-3">
+                  <p className="text-sm font-semibold text-ink">Registration profile data</p>
+                  <dl className="mt-2 grid gap-2 sm:grid-cols-2">
+                    {profileRows.map(([key, value]) => (
+                      <Info key={key} label={key.replaceAll("_", " ")} value={String(value)} />
+                    ))}
+                  </dl>
+                </div>
+              ) : null}
+
+              {selected.rejection_note ? (
+                <div className="mt-4 rounded-xl border border-red/35 bg-red-soft px-3 py-3 text-sm">
+                  <p className="font-semibold text-red">KYC rejection note</p>
+                  <p className="mt-1 whitespace-pre-wrap text-ink">{selected.rejection_note}</p>
+                </div>
+              ) : null}
+
+              {selected.staff_note ? (
+                <div className="mt-4 rounded-xl border border-line bg-card px-3 py-3 text-sm">
+                  <p className="font-semibold text-ink">Staff note</p>
+                  <p className="mt-1 whitespace-pre-wrap text-muted">{selected.staff_note}</p>
+                </div>
+              ) : null}
+            </div>
+
+            <div className="mt-4 flex flex-wrap gap-2">
+              {selected.access_status !== "approved" ? (
+                <Btn onClick={() => void act(selected.id, "approve")}>Approve download / print</Btn>
+              ) : null}
+              {selected.access_status === "approved" ? (
+                <Btn kind="ghost" onClick={() => void act(selected.id, "revoke")}>
+                  Revoke access
+                </Btn>
+              ) : null}
+              {selected.access_status !== "blocked" ? (
+                <Btn kind="danger" onClick={() => void act(selected.id, "block")}>
+                  Block card
+                </Btn>
+              ) : null}
+              <Btn kind="ghost" onClick={closeCard}>
+                Close
+              </Btn>
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}

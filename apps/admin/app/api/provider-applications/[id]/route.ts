@@ -20,8 +20,8 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
 
 export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
   const { id } = await context.params;
-  const body = (await request.json()) as { status?: "verified" | "rejected" };
-  if (body.status !== "verified" && body.status !== "rejected") {
+  const body = (await request.json()) as { status?: "pending" | "verified" | "rejected" };
+  if (body.status !== "pending" && body.status !== "verified" && body.status !== "rejected") {
     return NextResponse.json({ detail: "Invalid status" }, { status: 400, headers: cors });
   }
   const item = await setApplicationStatus(id, body.status);

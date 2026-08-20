@@ -11,7 +11,9 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.accounts.models import AppUser
 from apps.accounts.authentication import AppJWTAuthentication, OptionalAppJWTAuthentication
+from apps.accounts.models import AppUser
 from apps.accounts.permissions import IsAppUser
 from apps.listings.models import Listing, ListingComment, ListingPhoto, ListingReview, ListingSave
 from apps.listings.search import listing_place_q, listing_search_q
@@ -68,6 +70,9 @@ class ListingFeedView(APIView):
             items = items.filter(subcategory__iexact=subcategory)
         if request.query_params.get("verified") == "1":
             items = items.filter(owner__provider_application__status="verified")
+        owner = (request.query_params.get("owner") or "").strip()
+        if owner:
+            items = items.filter(owner_id=owner)
         min_rating = request.query_params.get("min_rating")
         if min_rating:
             try:
@@ -154,6 +159,53 @@ class ListingPublicDetailView(APIView):
             Listing.objects.filter(pk=listing.pk).update(view_count=F("view_count") + 1)
             listing.view_count += 1
         return Response(ListingSerializer(listing, context={"request": request}).data)
+
+
+class PublicSellerProfileView(APIView):
+    authentication_classes = [AppJWTAuthentication]
+    permission_classes = [IsAppUser]
+
+    def get(self, request, pk):
+        seller = get_object_or_404(AppUser.objects.select_related("provider_application"), pk=pk)
+        app = getattr(seller, "provider_application", None)
+        is_provider = seller.account_type == AppUser.ACCOUNT_PROVIDER
+        photo = (app.photo if app and app.photo else None) or seller.avatar
+        photo_url = request.build_absolute_uri(f"/api/listings/sellers/{seller.id}/photo/") if photo else None
+        listings = []
+        phone = email = address = service_type = ""
+        if is_provider and app:
+            phone = app.phone or seller.phone or ""
+            email = app.email or seller.email or ""
+            address = app.address or ""
+            service_type = app.service_type or ""
+            listings = listing_queryset().filter(owner=seller, status=Listing.STATUS_APPROVED).order_by("-created_at")[:200]
+        return Response(
+            {
+                "id": str(seller.id),
+                "full_name": (app.full_name if app else "") or seller.full_name,
+                "account_type": seller.account_type,
+                "phone": phone,
+                "email": email,
+                "address": address,
+                "service_type": service_type,
+                "photo_url": photo_url,
+                "listings": ListingSerializer(listings, many=True, context={"request": request}).data,
+            }
+        )
+
+
+class PublicSellerPhotoView(APIView):
+    authentication_classes = [OptionalAppJWTAuthentication]
+    permission_classes = [AllowAny]
+
+    def get(self, request, pk):
+        seller = get_object_or_404(AppUser.objects.select_related("provider_application"), pk=pk)
+        app = getattr(seller, "provider_application", None)
+        file = (app.photo if app and app.photo else None) or seller.avatar
+        if not file:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+        content_type, _ = mimetypes.guess_type(file.name)
+        return FileResponse(file.open("rb"), content_type=content_type or "application/octet-stream")
 
 
 class ListingMineView(APIView):

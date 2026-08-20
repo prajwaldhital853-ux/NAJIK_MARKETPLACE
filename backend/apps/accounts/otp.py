@@ -27,6 +27,16 @@ def request_otp(identifier: str, purpose: str) -> OneTimePassword:
 
 
 def verify_otp(identifier: str, purpose: str, code: str) -> bool:
+    cleaned = (code or "").strip()
+    # Dev stub: always accept 1234 until a real SMS OTP provider is connected.
+    if getattr(settings, "OTP_STUB", True) and cleaned == STUB_CODE:
+        OneTimePassword.objects.filter(
+            identifier=identifier,
+            purpose=purpose,
+            consumed_at__isnull=True,
+        ).update(consumed_at=timezone.now())
+        return True
+
     row = (
         OneTimePassword.objects.filter(
             identifier=identifier,
@@ -43,10 +53,7 @@ def verify_otp(identifier: str, purpose: str, code: str) -> bool:
     if row.attempts >= OTP_MAX_ATTEMPTS:
         return False
     row.attempts += 1
-    if getattr(settings, "OTP_STUB", True):
-        ok = code.strip() == STUB_CODE
-    else:
-        ok = check_password(code.strip(), row.code_hash)
+    ok = check_password(cleaned, row.code_hash)
     if not ok:
         row.save(update_fields=["attempts"])
         return False

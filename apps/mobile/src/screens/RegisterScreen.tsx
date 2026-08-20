@@ -58,7 +58,7 @@ export function RegisterScreen() {
 
   return (
     <KeyboardScreen enableRefresh={false} style={{ backgroundColor: colors.bg }} contentStyle={{ paddingTop: insets.top + 20, paddingHorizontal: 20 }}>
-      <PressScale onPress={() => navigation.navigate("Login")} style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 8 }}>
+      <PressScale onPress={() => navigation.navigate("Login", { page: seller ? "provider" : undefined })} style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 8 }}>
         <Ionicons name="arrow-back" size={22} color={colors.navy} />
         <Text style={{ fontWeight: "700" }}>Back to login</Text>
       </PressScale>

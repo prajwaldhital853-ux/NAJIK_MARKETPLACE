@@ -1,250 +1,358 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useNavigation, useRoute } from "@react-navigation/native";
-import { useEffect, useState } from "react";
-import { Alert, Text, TextInput, View } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
+import { useFocusEffect, useNavigation, useRoute } from "@react-navigation/native";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Alert, Dimensions, Image, NativeScrollEvent, NativeSyntheticEvent, Platform, ScrollView, StatusBar, Text, View } from "react-native";
+import { StatusBar as ExpoStatusBar } from "expo-status-bar";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { CitySkyline, HouseTreesMark } from "../components/CitySkyline";
 import { GoogleMark } from "../components/GoogleMark";
-import { KeyboardScreen, useKeyboardScroll } from "../components/KeyboardScreen";
+import { GoogleSignInModal } from "../components/GoogleSignInModal";
 import { NajikWordmark } from "../components/NajikWordmark";
 import { PressScale } from "../components/PressScale";
-import { ServiceCategoryBar } from "../components/ServiceCategoryBar";
 import { ApiError, friendlyError } from "../api";
+import { GOOGLE_CLIENT_ID, GOOGLE_REDIRECT_URI } from "../config";
 import { useAuth } from "../context/AuthContext";
 import { takeLoginHint } from "../loginHint";
-import { colors, shadow } from "../theme";
+import { colors } from "../theme";
 
 const GREEN = "#1B7D2C";
-const PHONE_BTN = "#C8EBD4";
+const buyerHero = require("../../assets/buyer-hero.png");
+const sellerHero = require("../../assets/seller-hero.png");
+const buyerTaglineCurve = require("../../assets/buyer-tagline-curve.png");
+const buyerCornerArt = require("../../assets/buyer-corner.png");
+const buyerCornerBottomArt = require("../../assets/buyer-corner-bottom.png");
+const { width: PAGE_W } = Dimensions.get("window");
 
 export function LoginScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
-  const { login } = useAuth();
-  const [phone, setPhone] = useState("");
-  const [password, setPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
+  const { loginGoogle } = useAuth();
+  const pager = useRef<ScrollView>(null);
   const hint = takeLoginHint();
-  const [error, setError] = useState(hint.message || "");
-  const [info, setInfo] = useState(route.params?.registered && !hint.message ? "Account created. Sign in to continue." : "");
-  const [lockLeft, setLockLeft] = useState(0);
+  const [page, setPage] = useState(route.params?.page === "provider" ? 1 : 0);
   const [busy, setBusy] = useState(false);
-  const { onInputFocus } = useKeyboardScroll();
+  const [notice, setNotice] = useState(hint.message || "");
+  const [googleOpen, setGoogleOpen] = useState(false);
 
   useEffect(() => {
-    if (hint.identifier) setPhone(String(hint.identifier).replace(/^\+?977/, ""));
-    else if (route.params?.identifier) setPhone(String(route.params.identifier).replace(/^\+?977/, ""));
-  }, [route.params?.identifier]);
-
-  useEffect(() => {
-    if (lockLeft <= 0) return;
-    const id = setInterval(() => setLockLeft((s) => Math.max(0, s - 1)), 1000);
-    return () => clearInterval(id);
-  }, [lockLeft]);
-
-  async function submit() {
-    if (lockLeft > 0) return;
-    if (!showPassword || !password) {
-      setShowPassword(true);
-      setError("");
-      return;
+    if (route.params?.page === "provider") {
+      setTimeout(() => pager.current?.scrollTo({ x: PAGE_W, animated: false }), 0);
     }
-    setError("");
+  }, [route.params?.page]);
+
+  useFocusEffect(
+    useCallback(() => {
+      StatusBar.setHidden(true, "fade");
+      if (Platform.OS === "android") {
+        StatusBar.setTranslucent(true);
+        StatusBar.setBackgroundColor("transparent");
+      }
+      // Do not un-hide on blur — the next screen owns the status bar.
+      // Restoring here races ProviderRegister / other immersive screens and flashes the bar.
+    }, []),
+  );
+
+  async function finishGoogle(code: string) {
+    setGoogleOpen(false);
     setBusy(true);
+    setNotice("");
     try {
-      const identifier = phone.includes("@") ? phone.trim() : phone.replace(/\s/g, "");
-      await login(identifier, password);
+      await loginGoogle({ code, redirectUri: GOOGLE_REDIRECT_URI }, "user");
     } catch (err) {
-      if (err instanceof ApiError && err.retryAfter) {
-        setLockLeft(err.retryAfter);
-        setError(err.message);
+      if (err instanceof ApiError && err.code === "use_provider_login") {
+        setNotice(err.message);
+        goPage(1);
       } else {
-        setError(friendlyError(err, "Could not sign in. Check your phone/email and password."));
+        Alert.alert("Google", friendlyError(err, "Could not continue with Google."));
       }
     } finally {
       setBusy(false);
     }
   }
 
-  const mm = Math.floor(lockLeft / 60);
-  const ss = String(lockLeft % 60).padStart(2, "0");
+  function goPage(next: number) {
+    pager.current?.scrollTo({ x: next * PAGE_W, animated: true });
+    setPage(next);
+  }
+
+  function onPagerScroll(event: NativeSyntheticEvent<NativeScrollEvent>) {
+    const next = Math.round(event.nativeEvent.contentOffset.x / PAGE_W);
+    if (next !== page) setPage(next);
+  }
+
+  async function onGoogle() {
+    if (!GOOGLE_CLIENT_ID) {
+      Alert.alert("Google", "Add EXPO_PUBLIC_GOOGLE_CLIENT_ID and restart Expo.");
+      return;
+    }
+    setGoogleOpen(true);
+  }
 
   return (
-    <KeyboardScreen enableRefresh={false} style={{ backgroundColor: colors.white }}>
-      <View style={{ paddingTop: insets.top + 8, paddingHorizontal: 16, alignItems: "center" }}>
-        <NajikWordmark />
-        <View style={{ marginTop: 14, width: "100%" }}>
-          <ServiceCategoryBar />
-        </View>
-      </View>
-
-      <View style={{ marginTop: 4 }}>
-        <CitySkyline />
-      </View>
-
-      <View
-        style={{
-          backgroundColor: colors.white,
-          borderTopLeftRadius: 28,
-          borderTopRightRadius: 28,
-          marginTop: -42,
-          paddingHorizontal: 18,
-          paddingTop: 20,
-          ...shadow.card,
-        }}
+    <View style={{ flex: 1, backgroundColor: colors.white }}>
+      <ExpoStatusBar hidden />
+      <ScrollView
+        ref={pager}
+        horizontal
+        pagingEnabled
+        showsHorizontalScrollIndicator={false}
+        onMomentumScrollEnd={onPagerScroll}
+        keyboardShouldPersistTaps="always"
+        style={{ flex: 1 }}
       >
-        <Text style={{ fontSize: 26, fontWeight: "800", color: colors.text, textAlign: "center" }}>Welcome Back!</Text>
-        <Text style={{ color: colors.textSecondary, marginTop: 4, textAlign: "center" }}>Login to continue to Najik</Text>
+        <BuyerPage
+          insetsTop={insets.top}
+          insetsBottom={insets.bottom}
+          busy={busy}
+          notice={page === 0 ? notice : ""}
+          onGoogle={() => void onGoogle()}
+        />
+        <SellerPage
+          insetsTop={insets.top}
+          insetsBottom={insets.bottom}
+          notice={page === 1 ? notice : ""}
+          onBack={() => goPage(0)}
+          onRegister={() => navigation.navigate("ProviderRegister")}
+          onLogin={() => navigation.navigate("SellerLogin")}
+        />
+      </ScrollView>
+      <GoogleSignInModal visible={googleOpen} onClose={() => setGoogleOpen(false)} onCode={(code) => void finishGoogle(code)} />
+    </View>
+  );
+}
 
+function BuyerPage({
+  insetsTop,
+  insetsBottom,
+  busy,
+  notice,
+  onGoogle,
+}: {
+  insetsTop: number;
+  insetsBottom: number;
+  busy: boolean;
+  notice: string;
+  onGoogle: () => void;
+}) {
+  return (
+    <View style={{ width: PAGE_W, flex: 1 }}>
+      <BuyerCornerTop />
+      <BuyerCornerBottom />
+      <ScrollView
+        contentContainerStyle={{ paddingTop: 44, paddingBottom: insetsBottom + 10, paddingHorizontal: 22, flexGrow: 1 }}
+        showsVerticalScrollIndicator={false}
+      >
+        <BrandHeader large showCurve />
+        <View style={{ marginTop: 14, alignItems: "center", justifyContent: "center" }}>
+          <Image source={buyerHero} style={{ width: "100%", height: 320 }} resizeMode="contain" />
+        </View>
+        <Text style={{ marginTop: 8, fontSize: 42, fontWeight: "900", color: colors.text, textAlign: "center", lineHeight: 46 }}>
+          Your app for
+        </Text>
+        <Text style={{ marginTop: 0, fontSize: 50, fontWeight: "900", color: GREEN, textAlign: "center", lineHeight: 52 }}>
+          fair deal
+        </Text>
+        <Text style={{ marginTop: 10, color: colors.textSecondary, textAlign: "center", fontSize: 18 }}>
+          Choose listings that are right for you.
+        </Text>
+        <Dots active={0} />
+        {notice ? <Text style={{ marginTop: 10, color: colors.red, textAlign: "center", fontWeight: "700" }}>{notice}</Text> : null}
         <PressScale
-          onPress={() => Alert.alert("Google", "Google sign-in will work once GOOGLE_CLIENT_IDS is set on the API.")}
+          onPress={onGoogle}
+          disabled={busy}
           style={{
-            marginTop: 18,
-            backgroundColor: GREEN,
+            marginTop: 22,
+            backgroundColor: "#111111",
             borderRadius: 28,
-            height: 52,
+            height: 54,
             alignItems: "center",
             justifyContent: "center",
+            opacity: busy ? 0.7 : 1,
           }}
         >
           <View style={{ position: "absolute", left: 14, width: 28, height: 28, borderRadius: 14, backgroundColor: "#fff", alignItems: "center", justifyContent: "center" }}>
             <GoogleMark size={16} />
           </View>
-          <Text style={{ color: "#fff", fontWeight: "800", fontSize: 15 }}>Continue with Google</Text>
+          <Text style={{ color: "#fff", fontWeight: "800", fontSize: 15 }}>{busy ? "Continuing…" : "Continue with Google"}</Text>
         </PressScale>
+        <TrustFooter text="Safe. Reliable. Trusted by thousands." />
+      </ScrollView>
+    </View>
+  );
+}
 
+function SellerPage({
+  insetsTop,
+  insetsBottom,
+  notice,
+  onBack,
+  onRegister,
+  onLogin,
+}: {
+  insetsTop: number;
+  insetsBottom: number;
+  notice: string;
+  onBack: () => void;
+  onRegister: () => void;
+  onLogin: () => void;
+}) {
+  return (
+    <View style={{ width: PAGE_W, flex: 1 }}>
+      <BuyerCornerTop />
+      <BuyerCornerBottom />
+      <ScrollView
+        contentContainerStyle={{ paddingTop: 16, paddingBottom: insetsBottom + 16, paddingHorizontal: 22, flexGrow: 1 }}
+        showsVerticalScrollIndicator={false}
+      >
+        <PressScale onPress={onBack} style={{ width: 40, height: 40, justifyContent: "center", marginBottom: 4 }}>
+          <Ionicons name="arrow-back" size={24} color="#111827" />
+        </PressScale>
+        <BrandHeader large />
+        <View style={{ marginTop: 4, alignItems: "center", justifyContent: "center" }}>
+          <Image source={sellerHero} style={{ width: "100%", height: 290 }} resizeMode="contain" />
+        </View>
+        <TrustChipsRow />
+        <Text style={{ marginTop: 10, fontSize: 32, fontWeight: "900", color: colors.text, textAlign: "center", lineHeight: 36 }}>
+          Join as a
+        </Text>
+        <Text style={{ marginTop: 0, fontSize: 38, fontWeight: "900", color: GREEN, textAlign: "center", lineHeight: 42 }}>
+          Service Provider
+        </Text>
+        <Text style={{ marginTop: 8, color: colors.textSecondary, textAlign: "center", fontSize: 15, lineHeight: 22 }}>
+          Grow your business, get more customers and be part of NAJIK's trusted network.
+        </Text>
+        <Dots active={1} />
+        {notice ? <Text style={{ marginTop: 10, color: colors.red, textAlign: "center", fontWeight: "700" }}>{notice}</Text> : null}
+        <PressScale onPress={onRegister} style={{ marginTop: 16, borderRadius: 14, overflow: "hidden" }}>
+          <LinearGradient colors={[GREEN, "#2FA24A"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={{ height: 54, borderRadius: 14, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 }}>
+            <Ionicons name="person-add" size={18} color="#fff" />
+            <Text style={{ color: "#fff", fontWeight: "800", fontSize: 15 }}>Register as Service Provider</Text>
+          </LinearGradient>
+        </PressScale>
         <PressScale
-          onPress={() => Alert.alert("Apple", "Apple sign-in will be available on iOS builds.")}
+          onPress={onLogin}
           style={{
             marginTop: 10,
-            backgroundColor: colors.white,
-            borderRadius: 28,
-            height: 52,
-            borderWidth: 1,
-            borderColor: colors.border,
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
-          <Ionicons name="logo-apple" size={20} color={colors.text} style={{ position: "absolute", left: 16 }} />
-          <Text style={{ color: colors.text, fontWeight: "800", fontSize: 15 }}>Continue with Apple</Text>
-        </PressScale>
-
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 10, marginTop: 16 }}>
-          <View style={{ flex: 1, height: 1, backgroundColor: colors.border }} />
-          <Text style={{ color: colors.muted, fontSize: 12 }}>or continue with</Text>
-          <View style={{ flex: 1, height: 1, backgroundColor: colors.border }} />
-        </View>
-
-        <View
-          style={{
-            marginTop: 14,
-            flexDirection: "row",
-            alignItems: "center",
-            borderWidth: 1,
-            borderColor: colors.border,
-            borderRadius: 16,
-            height: 52,
-            paddingLeft: 12,
-            overflow: "hidden",
-          }}
-        >
-          <Ionicons name="phone-portrait-outline" size={18} color={GREEN} />
-          <Text style={{ fontWeight: "800", color: colors.text, marginLeft: 8 }}>+977</Text>
-          <Ionicons name="chevron-down" size={14} color={colors.muted} style={{ marginLeft: 2, marginRight: 10 }} />
-          <View style={{ width: 1, height: 28, backgroundColor: colors.border }} />
-          <TextInput
-            placeholder="Enter your phone number"
-            placeholderTextColor={colors.muted}
-            value={phone}
-            onChangeText={setPhone}
-            onFocus={onInputFocus}
-            keyboardType="phone-pad"
-            autoCapitalize="none"
-            style={{ flex: 1, color: colors.text, paddingHorizontal: 12, height: 52 }}
-          />
-        </View>
-        {showPassword ? (
-          <View
-            style={{
-              marginTop: 10,
-              flexDirection: "row",
-              alignItems: "center",
-              borderWidth: 1,
-              borderColor: colors.border,
-              borderRadius: 16,
-              height: 52,
-              paddingHorizontal: 12,
-              gap: 8,
-            }}
-          >
-            <Ionicons name="lock-closed-outline" size={18} color={GREEN} />
-            <TextInput
-              placeholder="Password"
-              placeholderTextColor={colors.muted}
-              value={password}
-              onChangeText={setPassword}
-              onFocus={onInputFocus}
-              secureTextEntry
-              style={{ flex: 1, color: colors.text }}
-            />
-          </View>
-        ) : null}
-
-        {lockLeft > 0 ? (
-          <Text style={{ marginTop: 10, color: colors.red, fontWeight: "700" }}>Try again in {mm}:{ss}</Text>
-        ) : null}
-        {info && !error ? <Text style={{ marginTop: 10, color: GREEN, fontWeight: "700" }}>{info}</Text> : null}
-        {error && lockLeft === 0 ? <Text style={{ marginTop: 10, color: colors.red }}>{error}</Text> : null}
-
-        <PressScale
-          onPress={() => void submit()}
-          style={{
-            marginTop: 14,
-            backgroundColor: lockLeft ? colors.border : PHONE_BTN,
-            borderRadius: 28,
-            height: 52,
+            height: 54,
+            borderRadius: 14,
+            borderWidth: 1.7,
+            borderColor: "#111827",
             flexDirection: "row",
             alignItems: "center",
             justifyContent: "center",
             gap: 8,
-            opacity: busy ? 0.7 : 1,
+            backgroundColor: "#fff",
           }}
         >
-          <Text style={{ color: GREEN, fontWeight: "800", fontSize: 16 }}>{busy ? "Signing in…" : "Continue with Phone"}</Text>
-          <Ionicons name="arrow-forward" size={18} color={GREEN} />
+          <Ionicons name="arrow-back" size={16} color="#111827" />
+          <Text style={{ color: "#111827", fontWeight: "800", fontSize: 14 }}>Login to your existing account</Text>
         </PressScale>
+        <TrustFooter text="Safe. Secure. Always with you." />
+      </ScrollView>
+    </View>
+  );
+}
 
-        <View style={{ alignItems: "center", marginTop: 16, paddingBottom: 8 }}>
-          <Text style={{ color: colors.muted, fontSize: 12 }}>By continuing, you agree to our</Text>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 4 }}>
-            <Ionicons name="lock-closed" size={12} color={colors.muted} />
-            <Text style={{ color: GREEN, fontWeight: "800", fontSize: 12 }}>Terms of Service and Privacy Policy</Text>
-          </View>
-        </View>
-      </View>
+function BrandHeader({ large = false, showCurve = false }: { large?: boolean; showCurve?: boolean }) {
+  return (
+    <View style={{ alignItems: "center" }}>
+      <NajikWordmark scale={large ? 1 : 0.86} showTagline={false} />
+      <Tagline showCurve={showCurve} compact={!large} />
+    </View>
+  );
+}
 
-      <PressScale
-        onPress={() => navigation.navigate("Welcome")}
+function Tagline({ showCurve = false, compact = false }: { showCurve?: boolean; compact?: boolean }) {
+  const curveW = compact ? 156 : 196;
+  return (
+    <View style={{ marginTop: compact ? 6 : 4, alignItems: "center" }}>
+      <Text style={{ color: "#101828", fontSize: compact ? 15 : 16, fontWeight: "800" }}>
+        Everything Near You, <Text style={{ color: GREEN }}>One App.</Text>
+      </Text>
+      {showCurve ? (
+        <Image source={buyerTaglineCurve} style={{ marginTop: 2, width: curveW, height: 14 }} resizeMode="contain" />
+      ) : null}
+    </View>
+  );
+}
+
+function Dots({ active }: { active: 0 | 1 }) {
+  return (
+    <View style={{ flexDirection: "row", justifyContent: "center", gap: 6, marginTop: 14 }}>
+      <View style={{ width: active === 0 ? 18 : 7, height: 7, borderRadius: 4, backgroundColor: active === 0 ? GREEN : "#D1D5DB" }} />
+      <View style={{ width: active === 1 ? 18 : 7, height: 7, borderRadius: 4, backgroundColor: active === 1 ? GREEN : "#D1D5DB" }} />
+    </View>
+  );
+}
+
+function TrustChipsRow() {
+  return (
+    <View
+      style={{
+        marginTop: 8,
+        marginHorizontal: 36,
+        borderWidth: 1.2,
+        borderColor: "#B7E8B5",
+        borderRadius: 14,
+        backgroundColor: "#F4FBF4",
+        flexDirection: "row",
+        paddingVertical: 8,
+        paddingHorizontal: 4,
+      }}
+    >
+      <TrustChip icon="shield-checkmark" label={"Verified\nProviders"} />
+      <View style={{ width: 1, backgroundColor: "#D3EFCF", marginVertical: 4 }} />
+      <TrustChip icon="star" label={"High\nRatings"} />
+      <View style={{ width: 1, backgroundColor: "#D3EFCF", marginVertical: 4 }} />
+      <TrustChip icon="people" label={"Trusted by\nUsers"} />
+    </View>
+  );
+}
+
+function TrustChip({ icon, label }: { icon: keyof typeof Ionicons.glyphMap; label: string }) {
+  return (
+    <View style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 4 }}>
+      <View
         style={{
-          marginHorizontal: 16,
-          marginTop: 14,
-          backgroundColor: colors.white,
-          borderRadius: 18,
-          paddingVertical: 16,
-          paddingHorizontal: 16,
-          flexDirection: "row",
+          width: 34,
+          height: 34,
+          borderRadius: 17,
+          backgroundColor: GREEN,
           alignItems: "center",
-          ...shadow.card,
+          justifyContent: "center",
         }}
       >
-        <View style={{ flex: 1 }}>
-          <Text style={{ fontWeight: "800", color: colors.text, fontSize: 16 }}>New to Najik?</Text>
-          <Text style={{ color: GREEN, fontWeight: "800", marginTop: 4, fontSize: 14 }}>Create an account &gt;</Text>
-        </View>
-        <HouseTreesMark size={78} />
-      </PressScale>
-    </KeyboardScreen>
+        <Ionicons name={icon} size={18} color="#fff" />
+      </View>
+      <Text style={{ fontSize: 12, lineHeight: 14, textAlign: "center", color: "#1F2937", fontWeight: "700" }}>{label}</Text>
+    </View>
+  );
+}
+
+function TrustFooter({ text }: { text: string }) {
+  return (
+    <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, marginTop: 22 }}>
+      <Ionicons name="checkmark-circle" size={16} color={GREEN} />
+      <Text style={{ color: colors.muted, fontSize: 12, fontWeight: "600" }}>{text}</Text>
+    </View>
+  );
+}
+
+function BuyerCornerTop() {
+  const size = 148;
+  return (
+    <View pointerEvents="none" style={{ position: "absolute", left: 0, top: 0, width: size, height: size, zIndex: 2 }}>
+      <Image source={buyerCornerArt} style={{ width: size, height: size }} resizeMode="cover" />
+    </View>
+  );
+}
+
+function BuyerCornerBottom() {
+  const size = 88;
+  return (
+    <View pointerEvents="none" style={{ position: "absolute", right: 0, bottom: 0, width: size, height: size, zIndex: 2 }}>
+      <Image source={buyerCornerBottomArt} style={{ width: size, height: size }} resizeMode="cover" />
+    </View>
   );
 }

@@ -399,6 +399,30 @@ class AuthFlowTests(TestCase):
         res = self.client.post("/api/auth/google/", {"account_type": "user"}, format="json")
         self.assertEqual(res.status_code, 400)
 
+    @override_settings(GOOGLE_CLIENT_IDS=["test-client"], GOOGLE_CLIENT_SECRET="secret")
+    def test_google_code_exchange_signs_in_buyer(self):
+        from unittest.mock import patch
+
+        with patch(
+            "apps.accounts.views.google._exchange_google_code",
+            return_value=(
+                {
+                    "sub": "google-code-1",
+                    "email": "code.google@example.com",
+                    "email_verified": True,
+                    "name": "Code User",
+                },
+                None,
+            ),
+        ):
+            res = self.client.post(
+                "/api/auth/google/",
+                {"code": "4/abc", "redirect_uri": "https://auth.expo.io/@prajwal851/najik", "account_type": "user"},
+                format="json",
+            )
+        self.assertEqual(res.status_code, 200, res.data)
+        self.assertTrue(res.data["user"]["needs_profile"])
+
     def test_google_unconfigured_is_unavailable(self):
         res = self.client.post(
             "/api/auth/google/",
@@ -406,6 +430,75 @@ class AuthFlowTests(TestCase):
             format="json",
         )
         self.assertEqual(res.status_code, 503)
+
+    @override_settings(GOOGLE_CLIENT_IDS=["test-client"])
+    def test_google_buyer_skips_otp_and_needs_profile(self):
+        from unittest.mock import patch
+
+        with patch("apps.accounts.views.google._google_payload", return_value=(
+            {
+                "sub": "google-buyer-1",
+                "email": "buyer.google@example.com",
+                "email_verified": True,
+                "name": "Google Name",
+            },
+            None,
+        )):
+            res = self.client.post(
+                "/api/auth/google/",
+                {"id_token": "tok", "account_type": "user"},
+                format="json",
+            )
+        self.assertEqual(res.status_code, 200, res.data)
+        self.assertTrue(res.data["user"]["email_verified"])
+        self.assertTrue(res.data["user"]["needs_profile"])
+        self.auth(res.data["access"])
+        p = phone()
+        patched = self.client.patch(
+            "/api/auth/me/",
+            {"full_name": "Buyer Name", "phone": p, "address": "Lahan, Siraha"},
+            format="json",
+        )
+        self.assertEqual(patched.status_code, 200, patched.data)
+        self.assertFalse(patched.data["needs_profile"])
+        self.assertEqual(patched.data["full_name"], "Buyer Name")
+        self.assertEqual(patched.data["phone"], p)
+
+    @override_settings(GOOGLE_CLIENT_IDS=["test-client"])
+    def test_google_provider_cannot_use_buyer_page(self):
+        from unittest.mock import patch
+
+        res, body = self.register("provider", phone=phone(), email=email("provg"))
+        user = AppUser.objects.get(email=body["email"])
+        user.google_sub = "google-seller-1"
+        user.save(update_fields=["google_sub"])
+        with patch("apps.accounts.views.google._google_payload", return_value=(
+            {
+                "sub": "google-seller-1",
+                "email": body["email"],
+                "email_verified": True,
+                "name": "Seller",
+            },
+            None,
+        )):
+            blocked = self.client.post(
+                "/api/auth/google/",
+                {"id_token": "tok", "account_type": "user"},
+                format="json",
+            )
+        self.assertEqual(blocked.status_code, 409)
+        self.assertEqual(blocked.data["code"], "use_provider_login")
+
+    def test_provider_cannot_login_as_buyer_role(self):
+        p = phone()
+        self.register("provider", phone=p, email=email("role"))
+        res = self.client.post(
+            "/api/auth/login/",
+            {"identifier": p, "password": PASS, "account_type": "user"},
+            format="json",
+        )
+        self.assertEqual(res.status_code, 409)
+        self.assertEqual(res.data["code"], "use_provider_login")
 
     def test_staff_can_list_live_app_users(self):
         res, body = self.register("provider", phone=phone(), email=email("live"))

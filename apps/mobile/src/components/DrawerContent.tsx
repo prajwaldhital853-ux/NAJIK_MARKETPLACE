@@ -82,9 +82,9 @@ const buyerPrimary: BuyerItem[] = [
 ];
 
 const buyerSecondary: BuyerItem[] = [
-  { icon: "bookmark-outline", title: "My Posts", tab: "Post", color: "#4B5563", bg: "transparent" },
+  { icon: "chatbubbles-outline", title: "Messages", tab: "Messages", color: "#4B5563", bg: "transparent" },
   { icon: "heart-outline", title: "Saved", tab: "Saved", color: "#4B5563", bg: "transparent" },
-  { icon: "chatbubble-ellipses-outline", title: "Messages", tab: "ChatInbox", color: "#4B5563", bg: "transparent" },
+  { icon: "search-outline", title: "Explore", tab: "Explore", color: "#4B5563", bg: "transparent" },
   { icon: "notifications-outline", title: "Notifications", tab: "Home", color: "#4B5563", bg: "transparent" },
   { icon: "settings-outline", title: "Settings", tab: "Profile", color: "#4B5563", bg: "transparent" },
   { icon: "help-circle-outline", title: "Help & Support", tab: "Profile", color: "#4B5563", bg: "transparent" },
@@ -529,12 +529,12 @@ function BuyerDrawer({ navigation }: { navigation: DrawerContentComponentProps["
           }}
         >
           <View style={{ flex: 1, paddingRight: 8 }}>
-            <Text style={{ fontWeight: "800", color: "#0C110E", fontSize: 14 }}>Post Your Ad for Free</Text>
+            <Text style={{ fontWeight: "800", color: "#0C110E", fontSize: 14 }}>Find services near you</Text>
             <Text style={{ color: "#6B7280", fontSize: 11, marginTop: 3, lineHeight: 15 }}>
-              Reach thousands of people in your area.
+              Browse listings and message verified providers.
             </Text>
             <PressScale
-              onPress={() => goTab("Post")}
+              onPress={() => goTab("Explore")}
               style={{
                 marginTop: 10,
                 alignSelf: "flex-start",
@@ -544,7 +544,7 @@ function BuyerDrawer({ navigation }: { navigation: DrawerContentComponentProps["
                 borderRadius: 8,
               }}
             >
-              <Text style={{ color: "#fff", fontWeight: "800", fontSize: 12 }}>Post Now</Text>
+              <Text style={{ color: "#fff", fontWeight: "800", fontSize: 12 }}>Explore now</Text>
             </PressScale>
           </View>
           <View
@@ -557,7 +557,7 @@ function BuyerDrawer({ navigation }: { navigation: DrawerContentComponentProps["
               justifyContent: "center",
             }}
           >
-            <Ionicons name="megaphone" size={26} color="#2563EB" />
+            <Ionicons name="search" size={26} color="#2563EB" />
           </View>
         </View>
 

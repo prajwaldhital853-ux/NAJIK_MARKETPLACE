@@ -7,7 +7,7 @@ import { KeyboardScreen, useKeyboardScroll } from "./KeyboardScreen";
 import { PressScale } from "./PressScale";
 import { fetchSellerApplication } from "../authApi";
 import { useAuth } from "../context/AuthContext";
-import { isVerifiedProvider } from "../demo";
+import { isRejectedProvider, isVerifiedProvider } from "../demo";
 import { choosePhoto } from "../pickPhoto";
 import { colors, shadow } from "../theme";
 
@@ -16,12 +16,16 @@ const GREEN = "#1B7D2C";
 export function SellerProfileEditModal({ visible, onClose }: { visible: boolean; onClose: () => void }) {
   const insets = useSafeAreaInsets();
   const { user, updateSellerProfile } = useAuth();
+  const canEdit = isVerifiedProvider(user) || isRejectedProvider(user);
+  const rejected = isRejectedProvider(user);
   const [fullName, setFullName] = useState(user?.full_name || "");
   const [address, setAddress] = useState(user?.address || "");
   const [contact, setContact] = useState("");
   const [nagrita, setNagrita] = useState("");
   const [nagritaBack, setNagritaBack] = useState("");
   const [photo, setPhoto] = useState("");
+  const [nationCard, setNationCard] = useState("");
+  const [otherDocument, setOtherDocument] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -32,6 +36,8 @@ export function SellerProfileEditModal({ visible, onClose }: { visible: boolean;
     setNagrita("");
     setNagritaBack("");
     setPhoto("");
+    setNationCard("");
+    setOtherDocument("");
     setError("");
     void fetchSellerApplication()
       .then((row) => {
@@ -43,8 +49,8 @@ export function SellerProfileEditModal({ visible, onClose }: { visible: boolean;
   }, [visible, user?.full_name, user?.address]);
 
   async function save() {
-    if (!isVerifiedProvider(user)) {
-      Alert.alert("Wait for verification", "You can edit this profile after admin verifies your account.");
+    if (!canEdit) {
+      Alert.alert("Wait for verification", "You can edit this profile after admin verifies your account, or if it was rejected.");
       return;
     }
     if (!fullName.trim() || !address.trim()) {
@@ -61,8 +67,15 @@ export function SellerProfileEditModal({ visible, onClose }: { visible: boolean;
         ...(nagrita ? { nagrita_uri: nagrita } : {}),
         ...(nagritaBack ? { nagrita_back_uri: nagritaBack } : {}),
         ...(photo ? { photo_uri: photo } : {}),
+        ...(nationCard ? { nation_card_uri: nationCard } : {}),
+        ...(otherDocument ? { other_document_uri: otherDocument } : {}),
       });
-      Alert.alert("Sent for review", "Admin will verify your changes. Your live profile stays the same until then.");
+      Alert.alert(
+        rejected ? "Resubmitted" : "Sent for review",
+        rejected
+          ? "Your updated details were sent for admin review again."
+          : "Admin will verify your changes. Your live profile stays the same until then.",
+      );
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not save.");
@@ -78,10 +91,18 @@ export function SellerProfileEditModal({ visible, onClose }: { visible: boolean;
           <PressScale onPress={onClose} style={{ padding: 6 }}>
             <Ionicons name="close" size={22} color="#111827" />
           </PressScale>
-          <Text style={{ flex: 1, textAlign: "center", fontWeight: "800", fontSize: 16 }}>Edit profile</Text>
+          <Text style={{ flex: 1, textAlign: "center", fontWeight: "800", fontSize: 16 }}>
+            {rejected ? "Fix application" : "Edit profile"}
+          </Text>
           <View style={{ width: 34 }} />
         </View>
         <KeyboardScreen enableRefresh={false} contentStyle={{ padding: 16, paddingBottom: 28 }}>
+          {rejected && user?.rejection_note ? (
+            <View style={{ backgroundColor: "#FEECEC", borderRadius: 14, padding: 12, marginBottom: 12 }}>
+              <Text style={{ fontWeight: "800", color: colors.navy }}>Admin note</Text>
+              <Text style={{ color: colors.muted, marginTop: 4, fontSize: 13 }}>{user.rejection_note}</Text>
+            </View>
+          ) : null}
           <EditFields
             user={user}
             fullName={fullName}
@@ -93,11 +114,16 @@ export function SellerProfileEditModal({ visible, onClose }: { visible: boolean;
             nagrita={nagrita}
             nagritaBack={nagritaBack}
             photo={photo}
+            nationCard={nationCard}
+            otherDocument={otherDocument}
             setNagrita={setNagrita}
             setNagritaBack={setNagritaBack}
             setPhoto={setPhoto}
+            setNationCard={setNationCard}
+            setOtherDocument={setOtherDocument}
             error={error}
             busy={busy}
+            rejected={rejected}
             onSave={() => void save()}
           />
         </KeyboardScreen>
@@ -117,11 +143,16 @@ function EditFields({
   nagrita,
   nagritaBack,
   photo,
+  nationCard,
+  otherDocument,
   setNagrita,
   setNagritaBack,
   setPhoto,
+  setNationCard,
+  setOtherDocument,
   error,
   busy,
+  rejected,
   onSave,
 }: {
   user: ReturnType<typeof useAuth>["user"];
@@ -134,11 +165,16 @@ function EditFields({
   nagrita: string;
   nagritaBack: string;
   photo: string;
+  nationCard: string;
+  otherDocument: string;
   setNagrita: (v: string) => void;
   setNagritaBack: (v: string) => void;
   setPhoto: (v: string) => void;
+  setNationCard: (v: string) => void;
+  setOtherDocument: (v: string) => void;
   error: string;
   busy: boolean;
+  rejected: boolean;
   onSave: () => void;
 }) {
   const { onInputFocus } = useKeyboardScroll();
@@ -162,6 +198,8 @@ function EditFields({
       <DocCard label="Profile photo" uri={photo || user?.photo_uri} onPress={() => choosePhoto(setPhoto, "New profile photo")} />
       <DocCard label="Nagrita front" uri={nagrita} onPress={() => choosePhoto(setNagrita, "Nagrita front")} />
       <DocCard label="Nagrita back" uri={nagritaBack} onPress={() => choosePhoto(setNagritaBack, "Nagrita back")} />
+      <DocCard label="Nation card" uri={nationCard} onPress={() => choosePhoto(setNationCard, "Nation card")} />
+      <DocCard label="Other document" uri={otherDocument} onPress={() => choosePhoto(setOtherDocument, "Other document")} />
       {error ? <Text style={{ color: colors.red, marginTop: 10 }}>{error}</Text> : null}
       <PressScale
         onPress={onSave}
@@ -174,7 +212,9 @@ function EditFields({
           opacity: busy ? 0.7 : 1,
         }}
       >
-        <Text style={{ color: "#fff", fontWeight: "800" }}>{busy ? "Sending…" : "Send for verification"}</Text>
+        <Text style={{ color: "#fff", fontWeight: "800" }}>
+          {busy ? "Sending…" : rejected ? "Resubmit for review" : "Send for verification"}
+        </Text>
       </PressScale>
     </>
   );

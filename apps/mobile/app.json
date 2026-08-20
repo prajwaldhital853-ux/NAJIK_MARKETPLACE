@@ -7,6 +7,7 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
+    "backgroundColor": "#FFFFFF",
     "platforms": [
       "ios",
       "android"
@@ -19,7 +20,9 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.najik.app",
+      "userInterfaceStyle": "light",
       "infoPlist": {
+        "UIUserInterfaceStyle": "Light",
         "NSLocationWhenInUseUsageDescription": "NAJIK uses your location to pin listings and show nearby ads on the map.",
         "NSAppTransportSecurity": {
           "NSAllowsLocalNetworking": true,
@@ -28,6 +31,7 @@
       }
     },
     "android": {
+      "userInterfaceStyle": "light",
       "softwareKeyboardLayoutMode": "resize",
       "package": "com.najik.app",
       "adaptiveIcon": {
@@ -47,6 +51,9 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
+      "expo-dev-client",
+      "expo-system-ui",
+      "./plugins/withDisableForcedDarkModeAndroid",
       "expo-secure-store",
       "expo-font",
       [
@@ -60,7 +67,8 @@
         {
           "photosPermission": "NAJIK needs photos so sellers can upload nagrita and a profile photo."
         }
-      ]
+      ],
+      "expo-web-browser"
     ],
     "extra": {
       "eas": {

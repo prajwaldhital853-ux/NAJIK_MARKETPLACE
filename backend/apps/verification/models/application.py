@@ -16,6 +16,14 @@ def photo_path(instance, filename):
     return f"kyc/{instance.owner_id}/photo_{filename[-40:]}"
 
 
+def nation_card_path(instance, filename):
+    return f"kyc/{instance.owner_id}/nation_card_{filename[-40:]}"
+
+
+def other_document_path(instance, filename):
+    return f"kyc/{instance.owner_id}/other_{filename[-40:]}"
+
+
 class ProviderApplication(models.Model):
     STATUS_PENDING = "pending"
     STATUS_VERIFIED = "verified"
@@ -41,6 +49,10 @@ class ProviderApplication(models.Model):
     nagrita = models.FileField(upload_to=nagrita_path)
     nagrita_back = models.FileField(upload_to=nagrita_back_path, blank=True)
     photo = models.FileField(upload_to=photo_path)
+    nation_card = models.FileField(upload_to=nation_card_path, blank=True)
+    other_document = models.FileField(upload_to=other_document_path, blank=True)
+    profile_data = models.JSONField(default=dict, blank=True)
+    rejection_note = models.TextField(blank=True, default="")
     pending_edit = models.JSONField(default=dict, blank=True)
     pending_nagrita = models.FileField(upload_to=nagrita_path, blank=True)
     pending_nagrita_back = models.FileField(upload_to=nagrita_back_path, blank=True)

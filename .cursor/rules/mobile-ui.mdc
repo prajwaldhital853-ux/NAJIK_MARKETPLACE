@@ -1,13 +1,11 @@
----
-description: NAJIK mobile UI, keyboard, demo auth, and mock matching
-alwaysApply: true
----
-
 # NAJIK mobile UI
 
 ## Design
 - Match provided mockups and PDFs same-to-same (layout, spacing, forest green, official N+house+pin logo). Brand is **NAJIK**, never "Nepal Local".
-- Login: large logo + tagline on white, then 7 service icons, then Nepal skyline/pagoda, then the login card overlapping the skyline.
+- Guest open: swipeable **buyer** page first, then **service provider** page. Buyer hero is `apps/mobile/assets/buyer-hero.png`; seller hero is `apps/mobile/assets/seller-hero.png`.
+- Buyer login: Continue with Google (black). No Continue with phone on the buyer page. First Google login for that account shows name / address / phone, then home. Later logins with the same Google account skip the form.
+- Service provider page: Register as Service Provider (OTP then KYC). "Login to your existing account" uses the verified phone + password. Top-left back returns to the buyer page.
+- A service provider Google or phone account cannot sign in from the buyer page; send them to the service provider page.
 
 ## Keyboard
 Never let the keypad cover inputs or buttons. Every form/screen with TextInput must use `KeyboardScreen` (`apps/mobile/src/components/KeyboardScreen.tsx`):
@@ -20,9 +18,7 @@ Never let the keypad cover inputs or buttons. Every form/screen with TextInput m
 Buttons and tabs switch instantly. Do not use spring/scale press animations, screen-transition animations, or a loading spinner that delays navigation.
 
 ## Account types
-The mockup **Login** screen is the common sign-in for buyers and sellers (logo, 7 icons, skyline, Google / Apple / phone card). After **manual logout**, open this Login page — not Welcome.
-- **Create an account** on Login opens the User vs Service Provider choice, then the matching create form.
-- **User** (buyer): create form (name, phone, password) → OTP (`1234`) → Login → app. Same phone/email cannot also be a seller.
+After **manual logout**, open this Login pager — not Welcome.
+- **User** (buyer): Google → optional one-time profile → app. Same phone/email cannot also be a seller.
 - **Service Provider** (seller): create form (name, phone, password) → OTP → KYC apply form. Status is **pending** until admin verifies. They cannot post until verified. Approved listings appear in the buyer feed; pending listings wait in `/admin/listing-queue`.
 Admin frontend queues: `/admin/providers` (KYC), `/admin/listing-queue` (listings)
----

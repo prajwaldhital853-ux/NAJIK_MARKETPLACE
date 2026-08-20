@@ -48,3 +48,11 @@ function navigateNamed(navigation: any, name: string, params?: object) {
 export function openChatThread(navigation: { navigate: (...args: any[]) => void }, id: string) {
   navigateNamed(navigation, "ChatThread", { id });
 }
+
+export function openSellerProfile(navigation: { navigate: (...args: any[]) => void }, userId: string) {
+  navigateNamed(navigation, "SellerProfile", { userId });
+}
+
+export function openProviderIdCard(navigation: { navigate: (...args: any[]) => void }) {
+  navigateNamed(navigation, "ProviderIdCard");
+}

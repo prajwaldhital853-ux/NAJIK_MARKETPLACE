@@ -64,6 +64,15 @@ export function ResourcePage<T extends { id: string; status?: string }>({
     });
   }, [rows]);
 
+  useEffect(() => {
+    if (!open) {
+      setNote("");
+      return;
+    }
+    const row = open as { notes?: string; rejection_note?: string };
+    setNote(String(row.notes || row.rejection_note || ""));
+  }, [open?.id]);
+
   function closeDrawer() {
     if (openId) autoOpenedId.current = openId;
     setOpen(null);
@@ -142,38 +151,67 @@ export function ResourcePage<T extends { id: string; status?: string }>({
             {storeKey && statusActions?.length ? (
               <div className="space-y-2 border-t border-line pt-4">
                 <p className="text-xs font-semibold text-muted">Moderation</p>
+                <Field label={storeKey === "kyc" ? "Rejection note for user" : "Internal note"}>
+                  <textarea
+                    className={inputClass}
+                    rows={3}
+                    value={note}
+                    onChange={(e) => setNote(e.target.value)}
+                    placeholder={
+                      storeKey === "kyc"
+                        ? "Tell the user why this KYC was rejected (required to reject)"
+                        : "Optional note"
+                    }
+                  />
+                </Field>
                 <div className="flex flex-wrap gap-2">
                   {statusActions.map((s) => (
                     <Btn
                       key={s}
                       kind={s === "blocked" || s === "deactivated" || s === "rejected" || s === "hidden" ? "danger" : "ghost"}
                       onClick={() => {
+                        if (s === "rejected" && storeKey === "kyc" && !note.trim()) {
+                          admin.toast("Add a rejection note before rejecting.");
+                          return;
+                        }
+                        const patchData =
+                          storeKey === "kyc" && s === "rejected"
+                            ? { status: s, notes: note.trim() }
+                            : storeKey === "kyc" && s === "pending"
+                              ? { status: s, notes: "" }
+                              : { status: s };
                         void admin
-                          .patch(storeKey, open.id, { status: s })
+                          .patch(storeKey, open.id, patchData)
                           .then(() => {
-                            admin.toast(s === "active" ? "Account is active." : s === "blocked" ? "Account blocked." : s === "deactivated" ? "Account deactivated." : `Updated to ${s}.`);
-                            setOpen({ ...open, status: s === "deactivated" ? "blocked" : s } as T);
+                            admin.toast(
+                              s === "active"
+                                ? "Account is active."
+                                : s === "blocked"
+                                  ? "Account blocked."
+                                  : s === "deactivated"
+                                    ? "Account deactivated."
+                                    : s === "pending"
+                                      ? "Reactivated to pending."
+                                      : s === "rejected"
+                                        ? "Rejected with note sent to user."
+                                        : `Updated to ${s}.`,
+                            );
+                            setOpen({
+                              ...open,
+                              ...patchData,
+                              status: s === "deactivated" ? "blocked" : s,
+                            } as T);
+                            if (s === "rejected" || s === "pending") setNote("");
                           })
                           .catch((err: unknown) => {
                             admin.toast(err instanceof Error ? err.message : "Could not update.");
                           });
                       }}
                     >
-                      {s}
+                      {s === "pending" ? "Reactivate" : s === "rejected" ? "Reject with note" : s}
                     </Btn>
                   ))}
                 </div>
-                <Field label="Internal note">
-                  <textarea className={inputClass} rows={3} value={note} onChange={(e) => setNote(e.target.value)} />
-                </Field>
-                <Btn
-                  onClick={() => {
-                    admin.toast(note ? `Note saved: ${note.slice(0, 40)}` : "Status kept.");
-                    setNote("");
-                  }}
-                >
-                  Save note
-                </Btn>
               </div>
             ) : null}
             {storeKey && allowDelete ? (

@@ -106,11 +106,15 @@ export type ProviderApplication = {
   nagrita_uri?: string;
   nagrita_back_uri?: string;
   photo_uri?: string;
+  nation_card_uri?: string;
+  other_document_uri?: string;
   pending_photo_uri?: string;
   pending_nagrita_uri?: string;
   pending_nagrita_back_uri?: string;
   has_pending_edit?: boolean;
   pending_edit?: Record<string, string>;
+  profile_data?: Record<string, string>;
+  rejection_note?: string;
   status: string;
   created_at: string;
   reviewed_at?: string | null;
@@ -125,10 +129,17 @@ export async function listProviderApplications() {
   return staffRequest<ProviderApplication[]>("/api/admin/verification/applications/");
 }
 
-export async function patchProviderApplication(id: string, status: "verified" | "rejected") {
+export async function patchProviderApplication(
+  id: string,
+  status: "pending" | "verified" | "rejected",
+  rejection_note?: string,
+) {
   return staffRequest<ProviderApplication>(`/api/admin/verification/applications/${id}/`, {
     method: "PATCH",
-    body: JSON.stringify({ status }),
+    body: JSON.stringify({
+      status,
+      ...(status === "rejected" ? { rejection_note: rejection_note || "" } : {}),
+    }),
   });
 }
 
@@ -286,5 +297,103 @@ export async function patchChatReport(
   return staffRequest<ChatReportTicket>(`/api/admin/chat/reports/${id}/`, {
     method: "PATCH",
     body: JSON.stringify(body),
+  });
+}
+
+export type AppNotice = {
+  id: string;
+  title: string;
+  body: string;
+  audience: "all" | "buyer" | "provider";
+  audience_label: string;
+  image_uri?: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export async function listAppNotices() {
+  return staffRequest<AppNotice[]>("/api/admin/notices/");
+}
+
+export async function createAppNotice(payload: {
+  title: string;
+  body?: string;
+  audience: "all" | "buyer" | "provider";
+  image_uri?: string;
+}) {
+  return staffRequest<AppNotice>("/api/admin/notices/", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function setAppNoticeActive(id: string, is_active: boolean) {
+  return staffRequest<AppNotice>(`/api/admin/notices/${id}/`, {
+    method: "PATCH",
+    body: JSON.stringify({ is_active }),
+  });
+}
+
+export async function deleteAppNotice(id: string) {
+  return staffRequest<void>(`/api/admin/notices/${id}/`, { method: "DELETE" });
+}
+
+export type ProviderIdCard = {
+  id: string;
+  card_code: string;
+  access_status: "blocked" | "requested" | "approved";
+  can_download: boolean;
+  requested_at?: string | null;
+  approved_at?: string | null;
+  staff_note?: string;
+  full_name: string;
+  role_label: string;
+  category: string;
+  phone: string;
+  email: string;
+  joined_on?: string | null;
+  kyc_status: string;
+  is_verified: boolean;
+  photo_uri?: string | null;
+  verify_url: string;
+  qr_uri?: string | null;
+  public_qr_uri?: string | null;
+  signature_uri?: string | null;
+  created_at: string;
+  owner_id: string;
+  owner_name: string;
+  address?: string;
+  contact?: string;
+  application_id?: string | null;
+  profile_data?: Record<string, unknown>;
+  rejection_note?: string;
+  phone_verified?: boolean;
+  email_verified?: boolean;
+  owner_phone?: string;
+  owner_email?: string;
+  account_status?: string;
+};
+
+export async function listProviderIdCards(status?: string) {
+  const suffix = status ? `?status=${encodeURIComponent(status)}` : "";
+  return staffRequest<ProviderIdCard[]>(`/api/admin/verification/cards/${suffix}`);
+}
+
+export async function patchProviderIdCard(id: string, action: "approve" | "revoke" | "block", note?: string) {
+  return staffRequest<ProviderIdCard>(`/api/admin/verification/cards/${id}/`, {
+    method: "PATCH",
+    body: JSON.stringify({ action, note: note || "" }),
+  });
+}
+
+export async function fetchBranding() {
+  return staffRequest<{ signatory_uri?: string | null; updated_at?: string }>("/api/branding/admin/");
+}
+
+export async function uploadSignatory(image_uri: string) {
+  return staffRequest<{ signatory_uri?: string | null; updated_at?: string }>("/api/branding/admin/", {
+    method: "POST",
+    body: JSON.stringify({ signatory_uri: image_uri }),
   });
 }

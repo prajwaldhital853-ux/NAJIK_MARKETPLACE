@@ -93,12 +93,16 @@ export const NAV: NavItem[] = [
     ],
   },
   {
-    href: "/admin/kyc",
+    href: "/admin/providers",
     label: "KYC / Verification",
     icon: "shield",
     children: [
-      { href: "/admin/kyc", label: "User KYC" },
-      { href: "/admin/providers", label: "Seller applications" },
+      { href: "/admin/providers?status=pending", label: "Pending" },
+      { href: "/admin/providers?status=all", label: "All" },
+      { href: "/admin/providers?status=active", label: "Active" },
+      { href: "/admin/providers?status=rejected", label: "Rejected" },
+      { href: "/admin/id-cards?status=requested", label: "ID card requests" },
+      { href: "/admin/id-cards", label: "All ID cards" },
     ],
   },
   {

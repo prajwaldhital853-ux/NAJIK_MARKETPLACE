@@ -9,17 +9,35 @@
       "distribution": "internal",
       "android": {
         "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://najik-api-p9k2m7q.onrender.com",
+        "EXPO_PUBLIC_ADMIN_URL": "https://najik-marketplace.vercel.app",
+        "EXPO_PUBLIC_GOOGLE_CLIENT_ID": "701528417366-vmv356vjk1lp9h0ekj0vsuokcft2r8ne.apps.googleusercontent.com",
+        "EXPO_PUBLIC_GOOGLE_REDIRECT_URI": "https://auth.expo.io/@prajwal851/najik"
       }
     },
     "preview": {
       "distribution": "internal",
       "android": {
         "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://najik-api-p9k2m7q.onrender.com",
+        "EXPO_PUBLIC_ADMIN_URL": "https://najik-marketplace.vercel.app",
+        "EXPO_PUBLIC_GOOGLE_CLIENT_ID": "701528417366-vmv356vjk1lp9h0ekj0vsuokcft2r8ne.apps.googleusercontent.com",
+        "EXPO_PUBLIC_GOOGLE_REDIRECT_URI": "https://auth.expo.io/@prajwal851/najik"
       }
     },
     "production": {
       "android": {
         "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://najik-api-p9k2m7q.onrender.com",
+        "EXPO_PUBLIC_ADMIN_URL": "https://najik-marketplace.vercel.app",
+        "EXPO_PUBLIC_GOOGLE_CLIENT_ID": "701528417366-vmv356vjk1lp9h0ekj0vsuokcft2r8ne.apps.googleusercontent.com",
+        "EXPO_PUBLIC_GOOGLE_REDIRECT_URI": "https://auth.expo.io/@prajwal851/najik"
       }
     }
   },

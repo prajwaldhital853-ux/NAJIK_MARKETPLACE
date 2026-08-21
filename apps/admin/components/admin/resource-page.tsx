@@ -3,9 +3,16 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { PageHeader, SummaryStrip } from "./page-frame";
-import { DataTable, type Column } from "./table";
-import { Avatar, Btn, Drawer, Field, StatusBadge, inputClass } from "./ui";
+import { DataTable, type Column, type RowMenuAction } from "./table";
+import { DetailKv, DetailOverlay } from "./detail-overlay";
+import { Avatar, Btn, Field, StatusBadge, inputClass } from "./ui";
 import { useAdmin } from "@/lib/store";
+
+function tabFromStatus(status: string | null, tabs: string[]) {
+  if (!status) return tabs[0] || "All";
+  const match = tabs.find((t) => t.toLowerCase().replace(/\s+/g, "_") === status.toLowerCase().replace(/\s+/g, "_"));
+  return match || tabs[0] || "All";
+}
 
 export function ResourcePage<T extends { id: string; status?: string }>({
   title,
@@ -21,6 +28,7 @@ export function ResourcePage<T extends { id: string; status?: string }>({
   allowDelete,
   deleteConfirm,
   detail,
+  documents,
 }: {
   title: string;
   crumb?: string;
@@ -35,16 +43,31 @@ export function ResourcePage<T extends { id: string; status?: string }>({
   allowDelete?: boolean;
   deleteConfirm?: string;
   detail?: (row: T) => React.ReactNode;
+  documents?: (row: T) => { label: string; src?: string | null }[];
 }) {
   const params = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
-  const [tab, setTab] = useState(tabs[0] || "All");
+  const statusParam = params.get("status");
+  const [tab, setTab] = useState(() => tabFromStatus(statusParam, tabs));
   const [open, setOpen] = useState<T | null>(null);
   const [note, setNote] = useState("");
   const admin = useAdmin();
   const openId = params.get("id");
   const autoOpenedId = useRef<string | null>(null);
+
+  useEffect(() => {
+    setTab(tabFromStatus(statusParam, tabs));
+  }, [statusParam, tabs]);
+
+  function setTabAndUrl(nextTab: string) {
+    setTab(nextTab);
+    const next = new URLSearchParams(params.toString());
+    if (nextTab === "All") next.delete("status");
+    else next.set("status", nextTab.toLowerCase().replace(/\s+/g, "_"));
+    const query = next.toString();
+    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+  }
 
   useEffect(() => {
     if (!openId) return;
@@ -98,8 +121,8 @@ export function ResourcePage<T extends { id: string; status?: string }>({
     if (type) list = list.filter((r) => String((r as Record<string, unknown>).type) === type);
     if (verified) list = list.filter((r) => Boolean((r as Record<string, unknown>).verified));
     if (severity) list = list.filter((r) => String((r as Record<string, unknown>).severity) === severity);
-    if (params.get("status")) list = list.filter((r) => String(r.status) === params.get("status"));
     if (q) list = list.filter((r) => JSON.stringify(r).toLowerCase().includes(q.toLowerCase()));
+    // Status comes from the synced tab only (URL drives tab via useEffect).
     if (tab !== "All") {
       const needle = tab.toLowerCase().replace(/\s+/g, "_");
       list = list.filter((r) => {
@@ -110,117 +133,199 @@ export function ResourcePage<T extends { id: string; status?: string }>({
     return list;
   }, [rows, params, tab, tabKey]);
 
+  const orderedIdsKey = `najik-admin-order:${storeKey || pathname}`;
+  const [orderIds, setOrderIds] = useState<string[]>(() => {
+    if (typeof window === "undefined") return [];
+    try {
+      return JSON.parse(localStorage.getItem(orderedIdsKey) || "[]") as string[];
+    } catch {
+      return [];
+    }
+  });
+
+  const orderedRows = useMemo(() => {
+    if (!orderIds.length) return filtered;
+    const rank = new Map(orderIds.map((id, i) => [id, i]));
+    return [...filtered].sort((a, b) => {
+      const ai = rank.has(a.id) ? rank.get(a.id)! : Number.MAX_SAFE_INTEGER;
+      const bi = rank.has(b.id) ? rank.get(b.id)! : Number.MAX_SAFE_INTEGER;
+      if (ai !== bi) return ai - bi;
+      return 0;
+    });
+  }, [filtered, orderIds]);
+
+  function moveRow(row: T, direction: -1 | 1) {
+    const ids = orderedRows.map((r) => r.id);
+    const idx = ids.indexOf(row.id);
+    const swap = idx + direction;
+    if (idx < 0 || swap < 0 || swap >= ids.length) return;
+    const next = [...ids];
+    [next[idx], next[swap]] = [next[swap], next[idx]];
+    setOrderIds(next);
+    try {
+      localStorage.setItem(orderedIdsKey, JSON.stringify(next));
+    } catch {
+      /* ignore */
+    }
+  }
+
+  const rowActions: RowMenuAction<T>[] = [
+    {
+      label: "Delete",
+      danger: true,
+      onClick: (row) => {
+        if (!storeKey || !allowDelete) {
+          admin.toast("Delete is not available here.");
+          return;
+        }
+        const message = deleteConfirm || "Delete this record permanently? This cannot be undone.";
+        if (!window.confirm(message)) return;
+        void admin
+          .remove(storeKey, row.id)
+          .then(() => {
+            admin.toast("Deleted.");
+            if (open?.id === row.id) closeDrawer();
+          })
+          .catch((err: unknown) => admin.toast(err instanceof Error ? err.message : "Could not delete."));
+      },
+    },
+    {
+      label: "Block",
+      danger: true,
+      onClick: (row) => {
+        if (!storeKey) {
+          admin.toast("Block is not available here.");
+          return;
+        }
+        void admin
+          .patch(storeKey, row.id, { status: "blocked" })
+          .then(() => admin.toast("Blocked."))
+          .catch((err: unknown) => admin.toast(err instanceof Error ? err.message : "Could not block."));
+      },
+    },
+    {
+      label: "Move up",
+      onClick: (row) => moveRow(row, -1),
+    },
+    {
+      label: "Move down",
+      onClick: (row) => moveRow(row, 1),
+    },
+  ];
+
   return (
     <>
       <PageHeader title={title} crumb={crumb} summary={summary} />
       <SummaryStrip items={kpis} />
       <DataTable
-        rows={filtered}
+        rows={orderedRows}
         columns={columns}
         tabs={tabs}
         tab={tab}
-        onTab={setTab}
+        onTab={setTabAndUrl}
         onRow={(row) => {
           setOpen(row);
           if (storeKey === "users") admin.markInboxSeen(`user-${row.id}`);
         }}
-        onAction={(row) => {
-          setOpen(row);
-          if (storeKey === "users") admin.markInboxSeen(`user-${row.id}`);
-        }}
+        rowActions={rowActions}
       />
-      <Drawer open={!!open} title={open ? String((open as Record<string, unknown>).title || (open as Record<string, unknown>).name || "Record") : ""} onClose={closeDrawer}>
-        {open ? (
-          <div className="space-y-4 text-sm">
-            {"name" in open && typeof (open as { name?: string }).name === "string" ? (
-              <div className="flex items-center gap-3">
-                <Avatar name={(open as { name: string }).name} id={open.id} size={48} />
-                <div>
-                  <p className="font-semibold text-ink">{(open as { name: string }).name}</p>
-                  <StatusBadge status={String(open.status || "active")} />
+      <DetailOverlay
+        open={!!open}
+        title={open ? String((open as Record<string, unknown>).title || (open as Record<string, unknown>).name || "Record") : ""}
+        onClose={closeDrawer}
+        details={
+          open ? (
+            <div className="space-y-3 text-sm">
+              {"name" in open && typeof (open as { name?: string }).name === "string" ? (
+                <div className="flex items-center gap-3">
+                  <Avatar name={(open as { name: string }).name} id={open.id} size={48} />
+                  <div>
+                    <p className="font-semibold text-ink">{(open as { name: string }).name}</p>
+                    <StatusBadge status={String(open.status || "active")} />
+                  </div>
                 </div>
-              </div>
-            ) : (
-              <StatusBadge status={String(open.status || "active")} />
-            )}
-            {detail ? detail(open) : (
-              <pre className="overflow-auto rounded-xl bg-elevated p-3 text-[11px] text-muted">
-                {JSON.stringify(open, null, 2)}
-              </pre>
-            )}
-            {storeKey && statusActions?.length ? (
-              <div className="space-y-2 border-t border-line pt-4">
-                <p className="text-xs font-semibold text-muted">Moderation</p>
-                <Field label={storeKey === "kyc" ? "Rejection note for user" : "Internal note"}>
-                  <textarea
-                    className={inputClass}
-                    rows={3}
-                    value={note}
-                    onChange={(e) => setNote(e.target.value)}
-                    placeholder={
-                      storeKey === "kyc"
-                        ? "Tell the user why this KYC was rejected (required to reject)"
-                        : "Optional note"
-                    }
-                  />
-                </Field>
-                <div className="flex flex-wrap gap-2">
-                  {statusActions.map((s) => (
-                    <Btn
-                      key={s}
-                      kind={s === "blocked" || s === "deactivated" || s === "rejected" || s === "hidden" ? "danger" : "ghost"}
-                      onClick={() => {
-                        if (s === "rejected" && storeKey === "kyc" && !note.trim()) {
-                          admin.toast("Add a rejection note before rejecting.");
-                          return;
-                        }
-                        const patchData =
-                          storeKey === "kyc" && s === "rejected"
-                            ? { status: s, notes: note.trim() }
-                            : storeKey === "kyc" && s === "pending"
-                              ? { status: s, notes: "" }
-                              : { status: s };
-                        void admin
-                          .patch(storeKey, open.id, patchData)
-                          .then(() => {
-                            admin.toast(
-                              s === "active"
-                                ? "Account is active."
-                                : s === "blocked"
-                                  ? "Account blocked."
-                                  : s === "deactivated"
-                                    ? "Account deactivated."
-                                    : s === "pending"
-                                      ? "Reactivated to pending."
-                                      : s === "rejected"
-                                        ? "Rejected with note sent to user."
-                                        : `Updated to ${s}.`,
-                            );
-                            setOpen({
-                              ...open,
-                              ...patchData,
-                              status: s === "deactivated" ? "blocked" : s,
-                            } as T);
-                            if (s === "rejected" || s === "pending") setNote("");
-                          })
-                          .catch((err: unknown) => {
-                            admin.toast(err instanceof Error ? err.message : "Could not update.");
-                          });
-                      }}
-                    >
-                      {s === "pending" ? "Reactivate" : s === "rejected" ? "Reject with note" : s}
-                    </Btn>
-                  ))}
+              ) : (
+                <StatusBadge status={String(open.status || "active")} />
+              )}
+              {detail ? detail(open) : <DetailKv label="ID" value={open.id} />}
+            </div>
+          ) : null
+        }
+        documents={open && documents ? documents(open) : []}
+        footer={
+          open ? (
+            <div className="space-y-3 text-sm">
+              {storeKey && statusActions?.length ? (
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold text-muted">Moderation</p>
+                  <Field label={storeKey === "kyc" ? "Rejection note for user" : "Internal note"}>
+                    <textarea
+                      className={inputClass}
+                      rows={2}
+                      value={note}
+                      onChange={(e) => setNote(e.target.value)}
+                      placeholder={
+                        storeKey === "kyc"
+                          ? "Tell the user why this KYC was rejected (required to reject)"
+                          : "Optional note"
+                      }
+                    />
+                  </Field>
+                  <div className="flex flex-wrap gap-2">
+                    {statusActions.map((s) => (
+                      <Btn
+                        key={s}
+                        kind={s === "blocked" || s === "deactivated" || s === "rejected" || s === "hidden" ? "danger" : "ghost"}
+                        onClick={() => {
+                          if (s === "rejected" && storeKey === "kyc" && !note.trim()) {
+                            admin.toast("Add a rejection note before rejecting.");
+                            return;
+                          }
+                          const patchData =
+                            storeKey === "kyc" && s === "rejected"
+                              ? { status: s, notes: note.trim() }
+                              : storeKey === "kyc" && s === "pending"
+                                ? { status: s, notes: "" }
+                                : { status: s };
+                          void admin
+                            .patch(storeKey, open.id, patchData)
+                            .then(() => {
+                              admin.toast(
+                                s === "active"
+                                  ? "Account is active."
+                                  : s === "blocked"
+                                    ? "Account blocked."
+                                    : s === "deactivated"
+                                      ? "Account deactivated."
+                                      : s === "pending"
+                                        ? "Reactivated to pending."
+                                        : s === "rejected"
+                                          ? "Rejected with note sent to user."
+                                          : `Updated to ${s}.`,
+                              );
+                              setOpen({
+                                ...open,
+                                ...patchData,
+                                status: s === "deactivated" ? "blocked" : s,
+                              } as T);
+                              if (s === "rejected" || s === "pending") setNote("");
+                            })
+                            .catch((err: unknown) => {
+                              admin.toast(err instanceof Error ? err.message : "Could not update.");
+                            });
+                        }}
+                      >
+                        {s === "pending" ? "Reactivate" : s === "rejected" ? "Reject with note" : s}
+                      </Btn>
+                    ))}
+                  </div>
                 </div>
-              </div>
-            ) : null}
-            {storeKey && allowDelete ? (
-              <div className="space-y-2 border-t border-line pt-4">
+              ) : null}
+              {storeKey && allowDelete ? (
                 <Btn
                   kind="danger"
                   onClick={() => {
-                    const message =
-                      deleteConfirm || "Delete this record permanently? This cannot be undone.";
+                    const message = deleteConfirm || "Delete this record permanently? This cannot be undone.";
                     if (!window.confirm(message)) return;
                     void admin
                       .remove(storeKey, open.id)
@@ -235,11 +340,11 @@ export function ResourcePage<T extends { id: string; status?: string }>({
                 >
                   Delete
                 </Btn>
-              </div>
-            ) : null}
-          </div>
-        ) : null}
-      </Drawer>
+              ) : null}
+            </div>
+          ) : null
+        }
+      />
     </>
   );
 }

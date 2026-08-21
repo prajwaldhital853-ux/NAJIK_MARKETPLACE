@@ -2,15 +2,23 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { PageHeader, SummaryStrip } from "@/components/admin/page-frame";
-import { Btn, StatusBadge } from "@/components/admin/ui";
-import { formatNptDateTime, formatNptTime } from "@/lib/format";
+import { DataTable, type Column, type RowMenuAction } from "@/components/admin/table";
+import { DetailKv, DetailOverlay } from "@/components/admin/detail-overlay";
+import { Avatar, Btn, StatusBadge, inputClass } from "@/components/admin/ui";
+import { formatNptDateTime, formatNptTime, relativeTime } from "@/lib/format";
 import { useSession } from "@/lib/session";
 import { ADMIN_POLL_MS } from "@/lib/live-inbox";
-import { deleteStaffListing, fetchStaffImage, listStaffListings, patchStaffListing, type StaffListing } from "@/lib/staff-api";
+import { deleteStaffListing, listStaffListings, patchStaffListing, type StaffListing } from "@/lib/staff-api";
 
 const TABS = ["Pending", "All", "Approved", "Rejected"] as const;
+
+function tabFromParam(raw: string | null, fallback: (typeof TABS)[number]): (typeof TABS)[number] {
+  if (!raw) return fallback;
+  const hit = TABS.find((t) => t.toLowerCase() === raw.toLowerCase());
+  return hit || fallback;
+}
 
 export function ListingModeration({
   title,
@@ -27,15 +35,23 @@ export function ListingModeration({
 }) {
   const { apiSession } = useSession();
   const params = useSearchParams();
-  const statusParam = params.get("status");
-  const initialTab = TABS.includes((statusParam || "").replace(/^\w/, (c) => c.toUpperCase()) as (typeof TABS)[number])
-    ? ((statusParam || "").replace(/^\w/, (c) => c.toUpperCase()) as (typeof TABS)[number])
-    : defaultTab;
+  const router = useRouter();
+  const pathname = usePathname();
   const [items, setItems] = useState<StaffListing[]>([]);
   const [error, setError] = useState("");
-  const [tab, setTab] = useState<(typeof TABS)[number]>(initialTab);
+  const [tab, setTab] = useState<(typeof TABS)[number]>(() => tabFromParam(params.get("status"), defaultTab));
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
-  const [reason, setReason] = useState<Record<string, string>>({});
+  const [reason, setReason] = useState("");
+  const [open, setOpen] = useState<StaffListing | null>(null);
+  const orderKey = `najik-listing-order:${category || "all"}`;
+  const [orderIds, setOrderIds] = useState<string[]>(() => {
+    if (typeof window === "undefined") return [];
+    try {
+      return JSON.parse(localStorage.getItem(orderKey) || "[]") as string[];
+    } catch {
+      return [];
+    }
+  });
 
   async function load() {
     if (!apiSession) return;
@@ -50,6 +66,10 @@ export function ListingModeration({
   }
 
   useEffect(() => {
+    setTab(tabFromParam(params.get("status"), defaultTab));
+  }, [params, defaultTab]);
+
+  useEffect(() => {
     if (!apiSession) {
       setItems([]);
       setError("Sign in with a staff account to review live listings.");
@@ -60,9 +80,23 @@ export function ListingModeration({
     return () => window.clearInterval(id);
   }, [apiSession, category]);
 
+  useEffect(() => {
+    setOpen((prev) => (prev ? items.find((i) => i.id === prev.id) || prev : prev));
+  }, [items]);
+
+  function setTabAndUrl(next: string) {
+    const nextTab = tabFromParam(next, defaultTab);
+    setTab(nextTab);
+    const q = new URLSearchParams(params.toString());
+    if (nextTab === "All") q.delete("status");
+    else q.set("status", nextTab.toLowerCase());
+    const query = q.toString();
+    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+  }
+
   async function setStatus(id: string, status: "approved" | "rejected") {
     try {
-      await patchStaffListing(id, status, reason[id]);
+      await patchStaffListing(id, status, reason);
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not update listing.");
@@ -73,6 +107,7 @@ export function ListingModeration({
     if (!window.confirm("Delete this listing permanently? Buyers will no longer see it.")) return;
     try {
       await deleteStaffListing(id);
+      if (open?.id === id) setOpen(null);
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not delete listing.");
@@ -80,6 +115,7 @@ export function ListingModeration({
   }
 
   const pending = items.filter((i) => i.status === "pending" || i.has_pending_edit);
+
   const visible = useMemo(() => {
     const filtered =
       tab === "All"
@@ -87,12 +123,86 @@ export function ListingModeration({
         : tab === "Pending"
           ? items.filter((i) => i.status === "pending" || i.has_pending_edit)
           : items.filter((i) => i.status === tab.toLowerCase());
+    const rank = new Map(orderIds.map((id, i) => [id, i]));
     return [...filtered].sort((a, b) => {
+      const ai = rank.has(a.id) ? rank.get(a.id)! : Number.MAX_SAFE_INTEGER / 2;
+      const bi = rank.has(b.id) ? rank.get(b.id)! : Number.MAX_SAFE_INTEGER / 2;
+      if (ai !== bi) return ai - bi;
       if ((a.status === "pending" || a.has_pending_edit) && !(b.status === "pending" || b.has_pending_edit)) return -1;
       if ((b.status === "pending" || b.has_pending_edit) && !(a.status === "pending" || a.has_pending_edit)) return 1;
       return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
     });
-  }, [items, tab]);
+  }, [items, tab, orderIds]);
+
+  function moveRow(row: StaffListing, direction: -1 | 1) {
+    const ids = visible.map((r) => r.id);
+    const idx = ids.indexOf(row.id);
+    const swap = idx + direction;
+    if (idx < 0 || swap < 0 || swap >= ids.length) return;
+    const next = [...ids];
+    [next[idx], next[swap]] = [next[swap], next[idx]];
+    setOrderIds(next);
+    try {
+      localStorage.setItem(orderKey, JSON.stringify(next));
+    } catch {
+      /* ignore */
+    }
+  }
+
+  const columns: Column<StaffListing>[] = [
+    {
+      key: "title",
+      label: "Listing",
+      render: (row) => (
+        <div className="flex items-center gap-3">
+          <Avatar name={row.owner_name || row.title} id={row.owner_id || row.id} />
+          <div className="min-w-0">
+            <p className="truncate font-semibold text-ink">{row.title}</p>
+            <p className="truncate text-xs text-muted">{row.owner_name}</p>
+          </div>
+        </div>
+      ),
+    },
+    { key: "category", label: "Category", render: (row) => row.category },
+    { key: "subcategory", label: "Type", render: (row) => row.subcategory || String(row.extras?.dealType || "—") },
+    {
+      key: "location",
+      label: "Location",
+      render: (row) => <span className="line-clamp-2 max-w-[220px] text-xs">{row.location}</span>,
+    },
+    { key: "price", label: "Price", render: (row) => (row.price ? `Rs. ${row.price}` : "—") },
+    {
+      key: "status",
+      label: "Status",
+      render: (row) => <StatusBadge status={row.has_pending_edit ? "edit pending" : row.status} />,
+    },
+    {
+      key: "created_at",
+      label: "Submitted",
+      render: (row) => <span className="text-xs text-muted">{relativeTime(row.created_at)}</span>,
+      sortValue: (row) => new Date(row.created_at).getTime(),
+    },
+  ];
+
+  const rowActions: RowMenuAction<StaffListing>[] = [
+    {
+      label: "Delete",
+      danger: true,
+      onClick: (row) => void removeListing(row.id),
+    },
+    {
+      label: "Block",
+      danger: true,
+      onClick: (row) => {
+        if (!window.confirm("Block this listing by rejecting it?")) return;
+        void setStatus(row.id, "rejected");
+      },
+    },
+    { label: "Move up", onClick: (row) => moveRow(row, -1) },
+    { label: "Move down", onClick: (row) => moveRow(row, 1) },
+  ];
+
+  const extras = open?.extras || {};
 
   return (
     <div>
@@ -119,156 +229,102 @@ export function ListingModeration({
           { label: "Rejected", value: items.filter((i) => i.status === "rejected").length, tone: "red" },
         ]}
       />
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <div className="flex flex-wrap gap-1">
-          {TABS.map((item) => (
-            <button
-              key={item}
-              type="button"
-              onClick={() => setTab(item)}
-              className={`rounded-full px-3 py-1 text-xs font-semibold ${tab === item ? "bg-brand text-white" : "border border-line text-ink"}`}
-            >
-              {item}
-            </button>
-          ))}
-        </div>
+      <div className="mb-3 flex justify-end">
         {updatedAt ? <p className="text-[11px] text-muted">Updated {formatNptTime(updatedAt.toISOString())}</p> : null}
       </div>
       {error ? <p className="mb-4 text-sm text-red">{error}</p> : null}
-      {visible.length === 0 && !error ? (
-        <section className="card-glow rounded-2xl border border-line bg-card p-6 text-sm text-muted">
-          {items.length === 0 ? "No seller listings yet." : `No ${tab.toLowerCase()} listings.`}
-        </section>
-      ) : null}
-      <div className="max-h-[min(70vh,calc(100vh-16rem))] space-y-4 overflow-y-auto pr-1">
-        {visible.map((item) => (
-          <ListingCard
-            key={item.id}
-            item={item}
-            reason={reason[item.id] || ""}
-            onReason={(value) => setReason((current) => ({ ...current, [item.id]: value }))}
-            onStatus={setStatus}
-            onDelete={removeListing}
-          />
-        ))}
-      </div>
+      <DataTable
+        rows={visible}
+        columns={columns}
+        tabs={[...TABS]}
+        tab={tab}
+        onTab={setTabAndUrl}
+        onRow={setOpen}
+        rowActions={rowActions}
+        searchPlaceholder="Filter listings…"
+      />
+
+      <DetailOverlay
+        open={!!open}
+        title={open?.title || "Listing"}
+        onClose={() => setOpen(null)}
+        details={
+          open ? (
+            <div>
+              <div className="mb-3 flex items-center gap-3">
+                <Avatar name={open.owner_name || open.title} id={open.owner_id || open.id} size={44} />
+                <div>
+                  <p className="font-semibold text-ink">{open.owner_name}</p>
+                  <StatusBadge status={open.has_pending_edit ? "edit pending" : open.status} />
+                </div>
+              </div>
+              <DetailKv label="Category" value={open.category} />
+              <DetailKv label="Type" value={open.subcategory || String(extras.dealType || "—")} />
+              <DetailKv label="Price" value={`Rs. ${open.price}${open.negotiable ? " (negotiable)" : ""}`} />
+              <DetailKv label="Location" value={open.location} />
+              <DetailKv label="Contact" value={open.contact_phone} />
+              <DetailKv label="Reach via" value={open.contact_via} />
+              {extras.company ? <DetailKv label="Company" value={String(extras.company)} /> : null}
+              {extras.experience ? <DetailKv label="Experience" value={String(extras.experience)} /> : null}
+              {extras.make ? <DetailKv label="Vehicle" value={`${extras.make} ${extras.model || ""}`.trim()} /> : null}
+              {extras.condition ? <DetailKv label="Condition" value={String(extras.condition)} /> : null}
+              <DetailKv label="Promote requested" value={open.promote_requested ? "Yes" : "No"} />
+              <DetailKv label="Submitted" value={formatNptDateTime(open.created_at)} />
+              <DetailKv label="Views" value={String(open.view_count || 0)} />
+              <div className="mt-3">
+                <p className="text-xs text-muted">Description</p>
+                <p className="mt-1 whitespace-pre-wrap text-sm text-ink">{open.description || "—"}</p>
+              </div>
+              {open.has_pending_edit && open.pending_edit ? (
+                <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm dark:border-amber-900/40 dark:bg-amber-950/30">
+                  <p className="font-semibold text-ink">Edit request</p>
+                  <p className="mt-1 text-muted">Proposed title: {String(open.pending_edit.title || open.title)}</p>
+                  <p className="mt-1 text-ink">{String(open.pending_edit.description || "")}</p>
+                </div>
+              ) : null}
+              {open.admin_reason ? <p className="mt-3 text-sm text-red">Last reason: {open.admin_reason}</p> : null}
+            </div>
+          ) : null
+        }
+        documents={
+          open
+            ? open.photos.map((photo, index) => ({
+                label: `Photo ${index + 1}`,
+                src: photo.url,
+              }))
+            : []
+        }
+        footer={
+          open ? (
+            <div className="space-y-2">
+              {open.status === "pending" || open.has_pending_edit ? (
+                <>
+                  <textarea
+                    value={reason}
+                    onChange={(event) => setReason(event.target.value)}
+                    placeholder="Rejection reason (required to reject)"
+                    className={`${inputClass} min-h-[4rem]`}
+                    rows={2}
+                  />
+                  <div className="flex flex-wrap gap-2">
+                    <Btn onClick={() => void setStatus(open.id, "approved")}>{open.has_pending_edit ? "Approve edit" : "Approve"}</Btn>
+                    <Btn kind="danger" onClick={() => void setStatus(open.id, "rejected")}>
+                      {open.has_pending_edit ? "Reject edit" : "Reject"}
+                    </Btn>
+                    <Btn kind="danger" onClick={() => void removeListing(open.id)}>
+                      Delete
+                    </Btn>
+                  </div>
+                </>
+              ) : (
+                <Btn kind="danger" onClick={() => void removeListing(open.id)}>
+                  Delete listing
+                </Btn>
+              )}
+            </div>
+          ) : null
+        }
+      />
     </div>
-  );
-}
-
-function ListingCard({
-  item,
-  reason,
-  onReason,
-  onStatus,
-  onDelete,
-}: {
-  item: StaffListing;
-  reason: string;
-  onReason: (value: string) => void;
-  onStatus: (id: string, status: "approved" | "rejected") => void;
-  onDelete: (id: string) => void;
-}) {
-  const extras = item.extras || {};
-  const deal = String(extras.dealType || item.subcategory || item.category);
-  return (
-    <section className="card-glow rounded-2xl border border-line bg-card p-5">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <p className="text-lg font-medium text-ink">{item.title}</p>
-          <p className="text-sm text-muted">
-            {item.category} · {deal} · {item.subcategory} · {item.owner_name}
-          </p>
-        </div>
-        <StatusBadge status={item.has_pending_edit ? "edit pending" : item.status} />
-      </div>
-      <p className="mt-2 text-sm text-ink">{item.description}</p>
-      <dl className="mt-4 grid gap-2 text-sm sm:grid-cols-2">
-        <Info label="Category" value={item.category} />
-        <Info label="Price" value={`Rs. ${item.price}${item.negotiable ? " (negotiable)" : ""}`} />
-        <Info label="Location" value={item.location} />
-        <Info label="Contact" value={item.contact_phone} />
-        <Info label="Reach via" value={item.contact_via} />
-        {extras.company ? <Info label="Company" value={String(extras.company)} /> : null}
-        {extras.experience ? <Info label="Experience" value={String(extras.experience)} /> : null}
-        {extras.make ? <Info label="Vehicle" value={`${extras.make} ${extras.model || ""}`.trim()} /> : null}
-        {extras.year ? <Info label="Year" value={String(extras.year)} /> : null}
-        {extras.rateType ? <Info label="Rate type" value={String(extras.rateType)} /> : null}
-        {extras.condition ? <Info label="Condition" value={String(extras.condition)} /> : null}
-        <Info label="Promote requested" value={item.promote_requested ? "Yes" : "No"} />
-        <Info label="Submitted" value={formatNptDateTime(item.created_at)} />
-        <Info label="Views" value={String(item.view_count || 0)} />
-        <Info label="Comments" value={String(item.comment_count || 0)} />
-        <Info label="Reviews" value={String(item.review_count || 0)} />
-      </dl>
-      <div className="mt-4 grid gap-3 sm:grid-cols-3">
-        {item.photos.map((photo) => (
-          <StaffPhoto key={photo.id} src={photo.url} />
-        ))}
-      </div>
-      {item.has_pending_edit && item.pending_edit ? (
-        <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm">
-          <p className="font-semibold text-ink">Edit request</p>
-          <p className="mt-1 text-muted">Proposed title: {String(item.pending_edit.title || item.title)}</p>
-          <p className="mt-1 text-ink">{String(item.pending_edit.description || "")}</p>
-          <p className="mt-1 text-muted">Proposed price: Rs. {String(item.pending_edit.price || item.price)}</p>
-        </div>
-      ) : null}
-      {item.admin_reason ? <p className="mt-3 text-sm text-red">Last reason: {item.admin_reason}</p> : null}
-      {item.status === "pending" || item.has_pending_edit ? (
-        <div className="mt-4 space-y-2">
-          <textarea
-            value={reason}
-            onChange={(event) => onReason(event.target.value)}
-            placeholder="Rejection reason (required to reject)"
-            className="w-full rounded-xl border border-line bg-elevated px-3 py-2 text-sm"
-            rows={2}
-          />
-          <div className="flex flex-wrap gap-2">
-            <Btn onClick={() => onStatus(item.id, "approved")}>{item.has_pending_edit ? "Approve edit" : "Approve"}</Btn>
-            <Btn kind="danger" onClick={() => onStatus(item.id, "rejected")}>
-              {item.has_pending_edit ? "Reject edit" : "Reject"}
-            </Btn>
-            <Btn kind="danger" onClick={() => onDelete(item.id)}>
-              Delete listing
-            </Btn>
-          </div>
-        </div>
-      ) : (
-        <div className="mt-4">
-          <Btn kind="danger" onClick={() => onDelete(item.id)}>
-            Delete listing
-          </Btn>
-        </div>
-      )}
-    </section>
-  );
-}
-
-function Info({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <dt className="text-muted">{label}</dt>
-      <dd className="font-medium text-ink">{value}</dd>
-    </div>
-  );
-}
-
-function StaffPhoto({ src }: { src: string }) {
-  const [blobUrl, setBlobUrl] = useState("");
-  useEffect(() => {
-    let objectUrl = "";
-    void fetchStaffImage(src).then((url) => {
-      objectUrl = url;
-      setBlobUrl(url);
-    });
-    return () => {
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
-    };
-  }, [src]);
-  if (!blobUrl) return <div className="h-32 rounded-xl bg-elevated" />;
-  return (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img src={blobUrl} alt="" className="h-32 w-full rounded-xl object-cover" />
   );
 }

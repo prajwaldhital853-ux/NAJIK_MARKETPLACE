@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, ChevronUp, Eye, MoreHorizontal, Search } from "lucide-react";
 import { StatusBadge } from "./ui";
 
@@ -11,6 +11,12 @@ export type Column<T> = {
   sortValue?: (row: T) => string | number;
 };
 
+export type RowMenuAction<T> = {
+  label: string;
+  onClick: (row: T) => void;
+  danger?: boolean;
+};
+
 export function DataTable<T extends { id: string }>({
   rows,
   columns,
@@ -19,6 +25,7 @@ export function DataTable<T extends { id: string }>({
   onTab,
   onRow,
   onAction,
+  rowActions,
   searchPlaceholder = "Filter rows…",
 }: {
   rows: T[];
@@ -27,7 +34,9 @@ export function DataTable<T extends { id: string }>({
   tab?: string;
   onTab?: (t: string) => void;
   onRow?: (row: T) => void;
+  /** @deprecated Prefer rowActions for kebab menu */
   onAction?: (row: T) => void;
+  rowActions?: RowMenuAction<T>[];
   searchPlaceholder?: string;
 }) {
   const [q, setQ] = useState("");
@@ -35,7 +44,18 @@ export function DataTable<T extends { id: string }>({
   const [asc, setAsc] = useState(true);
   const [page, setPage] = useState(0);
   const [selected, setSelected] = useState<string[]>([]);
+  const [menuId, setMenuId] = useState<string | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
   const per = 8;
+
+  useEffect(() => {
+    if (!menuId) return;
+    function onDoc(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuId(null);
+    }
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [menuId]);
 
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
@@ -80,7 +100,7 @@ export function DataTable<T extends { id: string }>({
                   onTab?.(t);
                   setPage(0);
                 }}
-                  className={`rounded px-2 py-1 text-[11px] ${
+                className={`rounded px-2 py-1 text-[11px] ${
                   (tab || tabs[0]) === t ? "bg-brand text-white" : "text-muted hover:bg-elevated"
                 }`}
               >
@@ -133,10 +153,10 @@ export function DataTable<T extends { id: string }>({
             {slice.map((row) => (
               <tr
                 key={row.id}
-                className="border-b border-line/80 hover:bg-elevated/70"
-                onDoubleClick={() => onRow?.(row)}
+                className="cursor-pointer border-b border-line/80 hover:bg-elevated/70"
+                onClick={() => onRow?.(row)}
               >
-                <td className="px-4 py-3">
+                <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                   <input
                     type="checkbox"
                     checked={selected.includes(row.id)}
@@ -150,23 +170,53 @@ export function DataTable<T extends { id: string }>({
                     {col.render ? col.render(row) : String((row as Record<string, unknown>)[col.key] ?? "")}
                   </td>
                 ))}
-                <td className="px-3 py-3">
+                <td className="relative px-3 py-3" onClick={(e) => e.stopPropagation()}>
                   <div className="flex items-center gap-1">
                     <button
                       type="button"
                       className="rounded-lg p-1.5 text-muted hover:bg-card hover:text-brand"
                       onClick={() => onRow?.(row)}
+                      aria-label="View details"
                     >
                       <Eye size={15} />
                     </button>
                     <button
                       type="button"
                       className="rounded-lg p-1.5 text-muted hover:bg-card"
-                      onClick={() => onAction?.(row)}
+                      onClick={() => {
+                        if (rowActions?.length) {
+                          setMenuId((cur) => (cur === row.id ? null : row.id));
+                          return;
+                        }
+                        onAction?.(row);
+                      }}
+                      aria-label="More actions"
                     >
                       <MoreHorizontal size={15} />
                     </button>
                   </div>
+                  {menuId === row.id && rowActions?.length ? (
+                    <div
+                      ref={menuRef}
+                      className="absolute right-3 z-20 mt-1 min-w-[150px] overflow-hidden rounded-xl border border-line bg-card py-1 shadow-lg"
+                    >
+                      {rowActions.map((action) => (
+                        <button
+                          key={action.label}
+                          type="button"
+                          className={`block w-full px-3 py-2 text-left text-xs font-medium hover:bg-elevated ${
+                            action.danger ? "text-red" : "text-ink"
+                          }`}
+                          onClick={() => {
+                            setMenuId(null);
+                            action.onClick(row);
+                          }}
+                        >
+                          {action.label}
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
                 </td>
               </tr>
             ))}

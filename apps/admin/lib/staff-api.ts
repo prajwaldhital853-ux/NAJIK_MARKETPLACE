@@ -144,6 +144,11 @@ export async function patchProviderApplication(
 }
 
 export async function fetchStaffImage(url: string) {
+  if (!url) return "";
+  // Public CDN URLs (e.g. Cloudinary) do not need staff auth.
+  if (/^https?:\/\/res\.cloudinary\.com\//i.test(url) || url.startsWith("blob:")) {
+    return url;
+  }
   const run = (token: string) => fetch(url, { headers: { Authorization: `Bearer ${token}` } });
   try {
     const token = await ensureStaffAccessToken();

@@ -2,8 +2,6 @@ from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework_simplejwt.exceptions import AuthenticationFailed, InvalidToken
 from rest_framework_simplejwt.settings import api_settings
 
-from apps.accounts.serializers.auth import inactive_auth_error
-
 
 class AppJWTAuthentication(JWTAuthentication):
     """Accepts only JWTs minted for marketplace AppUser accounts."""

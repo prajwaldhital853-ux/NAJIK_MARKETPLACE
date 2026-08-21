@@ -6,7 +6,7 @@ export type ApiListingPhoto = { id: string; url: string; sort_order: number; is_
 
 export type ApiListing = {
   id: string;
-  status: "draft" | "pending" | "approved" | "rejected";
+  status: "draft" | "pending" | "approved" | "rejected" | "deactivated";
   category: string;
   subcategory: string;
   title: string;

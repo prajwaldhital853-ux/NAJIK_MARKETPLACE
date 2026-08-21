@@ -31,11 +31,13 @@ class Listing(models.Model):
     STATUS_PENDING = "pending"
     STATUS_APPROVED = "approved"
     STATUS_REJECTED = "rejected"
+    STATUS_DEACTIVATED = "deactivated"
     STATUS_CHOICES = (
         (STATUS_DRAFT, "Draft"),
         (STATUS_PENDING, "Pending"),
         (STATUS_APPROVED, "Approved"),
         (STATUS_REJECTED, "Rejected"),
+        (STATUS_DEACTIVATED, "Deactivated"),
     )
 
     CONTACT_PHONE = "phone"
@@ -51,7 +53,7 @@ class Listing(models.Model):
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="listings")
-    status = models.CharField(max_length=12, choices=STATUS_CHOICES, default=STATUS_DRAFT)
+    status = models.CharField(max_length=16, choices=STATUS_CHOICES, default=STATUS_DRAFT)
     category = models.CharField(max_length=20, choices=CATEGORY_CHOICES)
     subcategory = models.CharField(max_length=40)
     title = models.CharField(max_length=160)

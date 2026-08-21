@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { StaffIdCardVisual } from "@/components/admin/staff-id-card-visual";
 import { PageHeader, SummaryStrip } from "@/components/admin/page-frame";
@@ -60,6 +60,8 @@ export default function IdCardsPage() {
   const [error, setError] = useState("");
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(params.get("id"));
+  const ownerAutoOpened = useRef<string | null>(null);
+  const closedIntentionally = useRef(false);
   const [signatoryPreview, setSignatoryPreview] = useState("/id-card/authorized-signatory.png");
   const [emergencyPhone, setEmergencyPhone] = useState("01-5970123");
   const [emergencyEmail, setEmergencyEmail] = useState("support@najik.com");
@@ -90,9 +92,17 @@ export default function IdCardsPage() {
       setUpdatedAt(new Date());
       setError("");
       const ownerParam = params.get("owner");
-      if (ownerParam && !params.get("id")) {
+      if (
+        ownerParam &&
+        !params.get("id") &&
+        !closedIntentionally.current &&
+        ownerAutoOpened.current !== ownerParam
+      ) {
         const match = rows.find((row) => row.owner_id === ownerParam);
-        if (match) setSelectedId(match.id);
+        if (match) {
+          ownerAutoOpened.current = ownerParam;
+          setSelectedId(match.id);
+        }
       }
     } catch (err) {
       setItems([]);
@@ -149,39 +159,59 @@ export default function IdCardsPage() {
 
   useEffect(() => {
     const id = params.get("id");
-    if (id) setSelectedId(id);
+    if (id) {
+      closedIntentionally.current = false;
+      setSelectedId(id);
+      return;
+    }
+    if (closedIntentionally.current) {
+      setSelectedId(null);
+    }
   }, [params]);
 
   function setFilter(next: Tab) {
     const qs = new URLSearchParams();
     if (next !== "all") qs.set("status", next);
-    if (selectedId) qs.set("id", selectedId);
+    // Do not keep id/owner in the URL when switching filters — that reopened the modal.
     const suffix = qs.toString();
-    router.replace(suffix ? `${pathname}?${suffix}` : pathname);
+    closedIntentionally.current = true;
+    setSelectedId(null);
+    router.replace(suffix ? `${pathname}?${suffix}` : pathname, { scroll: false });
   }
 
   function openCard(id: string) {
+    closedIntentionally.current = false;
     setSelectedId(id);
     const qs = new URLSearchParams();
     if (filter !== "all") qs.set("status", filter);
     qs.set("id", id);
-    router.replace(`${pathname}?${qs.toString()}`);
+    router.replace(`${pathname}?${qs.toString()}`, { scroll: false });
   }
 
   function closeCard() {
+    closedIntentionally.current = true;
     setSelectedId(null);
     const qs = new URLSearchParams();
     if (filter !== "all") qs.set("status", filter);
+    // Drop id and owner so polling / effects cannot reopen the window.
     const suffix = qs.toString();
-    router.replace(suffix ? `${pathname}?${suffix}` : pathname);
+    router.replace(suffix ? `${pathname}?${suffix}` : pathname, { scroll: false });
   }
 
-  async function act(id: string, action: "approve" | "revoke" | "block") {
+  async function act(id: string, action: "approve" | "revoke" | "block" | "unblock") {
     try {
-      await patchProviderIdCard(id, action);
+      await patchProviderIdCard(id, action === "unblock" ? "approve" : action);
+      toast(
+        action === "approve" || action === "unblock"
+          ? "ID card unblocked / download approved."
+          : action === "block"
+            ? "ID card blocked."
+            : "ID card access revoked.",
+      );
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not update card access.");
+      toast(err instanceof Error ? err.message : "Could not update card access.");
     }
   }
 
@@ -309,7 +339,9 @@ export default function IdCardsPage() {
                 See user ID card
               </Btn>
               {card.access_status !== "approved" ? (
-                <Btn onClick={() => void act(card.id, "approve")}>Approve download / print</Btn>
+                <Btn onClick={() => void act(card.id, card.access_status === "blocked" ? "unblock" : "approve")}>
+                  {card.access_status === "blocked" ? "Unblock ID card" : "Approve download / print"}
+                </Btn>
               ) : null}
               {card.access_status === "approved" ? (
                 <Btn kind="ghost" onClick={() => void act(card.id, "revoke")}>
@@ -408,7 +440,9 @@ export default function IdCardsPage() {
 
             <div className="mt-4 flex flex-wrap gap-2">
               {selected.access_status !== "approved" ? (
-                <Btn onClick={() => void act(selected.id, "approve")}>Approve download / print</Btn>
+                <Btn onClick={() => void act(selected.id, selected.access_status === "blocked" ? "unblock" : "approve")}>
+                  {selected.access_status === "blocked" ? "Unblock ID card" : "Approve download / print"}
+                </Btn>
               ) : null}
               {selected.access_status === "approved" ? (
                 <Btn kind="ghost" onClick={() => void act(selected.id, "revoke")}>

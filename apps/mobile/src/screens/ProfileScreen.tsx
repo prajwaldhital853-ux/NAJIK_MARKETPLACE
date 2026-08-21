@@ -8,10 +8,10 @@ import { useAppRefreshControl } from "../components/KeyboardScreen";
 import { PressScale } from "../components/PressScale";
 import { SellerHeroBanner } from "../components/SellerHeroBanner";
 import { SellerProfileEditModal } from "../components/SellerProfileEditModal";
-import { StaffWarningCard } from "../components/StaffWarningBanner";
+import { ListingAdminNotesCard, StaffWarningCard } from "../components/StaffWarningBanner";
 import { useAuth } from "../context/AuthContext";
 import { isPendingProvider, isProvider, isRejectedProvider, isVerifiedProvider } from "../demo";
-import { fetchMyListings } from "../listingsApi";
+import { fetchMyListings, type ApiListing } from "../listingsApi";
 import { subscribeListingsChanged } from "../listingsRefresh";
 import { openProviderIdCard, openSellerPage } from "../navigation/browse";
 import { choosePhoto } from "../pickPhoto";
@@ -86,6 +86,7 @@ export function ProfileScreen() {
   const [editOpen, setEditOpen] = useState(false);
   const [activeCount, setActiveCount] = useState(0);
   const [pendingCount, setPendingCount] = useState(0);
+  const [myListings, setMyListings] = useState<ApiListing[]>([]);
   const name = user?.full_name || "Account";
   const pending = isPendingProvider(user);
   const verified = isVerifiedProvider(user);
@@ -93,14 +94,16 @@ export function ProfileScreen() {
   const photo = user?.photo_uri || "";
 
   useEffect(() => {
-    if (!isProvider(user) || !verified) {
+    if (!isProvider(user)) {
       setActiveCount(0);
       setPendingCount(0);
+      setMyListings([]);
       return;
     }
     const load = () => {
       void fetchMyListings()
         .then((rows) => {
+          setMyListings(rows);
           setActiveCount(rows.filter((row) => row.status === "approved").length);
           setPendingCount(rows.filter((row) => row.status === "pending").length);
         })
@@ -141,6 +144,7 @@ export function ProfileScreen() {
       <SellerProfileEditModal visible={editOpen} onClose={() => setEditOpen(false)} />
       <ScrollView refreshControl={refreshControl} contentContainerStyle={{ padding: 16, paddingBottom: 36 }} showsVerticalScrollIndicator={false}>
         <StaffWarningCard />
+        <ListingAdminNotesCard listings={myListings} />
         {pending ? (
           <View style={{ backgroundColor: colors.orangeSoft, borderRadius: 16, padding: 14, marginBottom: 14, ...shadow.card }}>
             <Text style={{ fontWeight: "800", color: colors.navy }}>Verification pending</Text>
@@ -350,6 +354,7 @@ function BuyerProfile() {
       <AppHeader right="bell-settings" showLocation showPro={false} pinColor={GREEN} />
       <ScrollView refreshControl={refreshControl} contentContainerStyle={{ padding: 16, paddingBottom: 36 }} showsVerticalScrollIndicator={false}>
         <StaffWarningCard />
+        <ListingAdminNotesCard listings={myListings} />
         <PressScale
           onPress={() => {}}
           style={{

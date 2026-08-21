@@ -17,7 +17,9 @@ import {
   View,
 } from "react-native";
 import { Audio } from "expo-av";
+import * as FileSystemLegacy from "expo-file-system/legacy";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { friendlyError } from "../api";
 import { AuthImage } from "../components/AuthImage";
 import { PressScale } from "../components/PressScale";
 import { ReportComplaintModal } from "../components/ReportComplaintModal";
@@ -142,7 +144,7 @@ export function ChatThreadScreen() {
       if (body.kind === "image") setPendingImage(null);
       if (body.kind === "voice") setPendingVoice(null);
     } catch (err) {
-      Alert.alert("Chat", err instanceof Error ? err.message : "Could not send.");
+      Alert.alert("Chat", friendlyError(err, "Could not send."));
     }
   }
 
@@ -186,6 +188,16 @@ export function ChatThreadScreen() {
   }
 
   async function uriToData(uri: string, fallbackType = "audio/m4a") {
+    try {
+      const base64 = await FileSystemLegacy.readAsStringAsync(uri, {
+        encoding: FileSystemLegacy.EncodingType.Base64,
+      });
+      if (base64?.trim()) {
+        return `data:${fallbackType};base64,${base64.trim()}`;
+      }
+    } catch {
+      /* fall through to fetch */
+    }
     const res = await fetch(uri);
     const blob = await res.blob();
     const dataUri = await new Promise<string>((resolve, reject) => {
@@ -194,7 +206,11 @@ export function ChatThreadScreen() {
       reader.onerror = () => reject(new Error("Could not read file."));
       reader.readAsDataURL(blob);
     });
-    return dataUri.replace("data:application/octet-stream", `data:${fallbackType}`);
+    if (!dataUri.startsWith("data:")) throw new Error("Could not encode audio.");
+    if (dataUri.startsWith("data:;base64,") || dataUri.startsWith("data:application/octet-stream")) {
+      return dataUri.replace(/^data:[^;]*;base64,/, `data:${fallbackType};base64,`);
+    }
+    return dataUri;
   }
 
   async function toggleRecord() {

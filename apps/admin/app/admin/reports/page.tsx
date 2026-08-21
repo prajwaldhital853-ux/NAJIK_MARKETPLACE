@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { PageHeader, SummaryStrip } from "@/components/admin/page-frame";
 import { Btn, StatusBadge, inputClass } from "@/components/admin/ui";
 import { formatNptDateTime, formatNptTime } from "@/lib/format";
@@ -46,11 +46,19 @@ export default function ReportsPage() {
   const { apiSession } = useSession();
   const { markInboxSeen, toast } = useAdmin();
   const params = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
   const [items, setItems] = useState<ComplaintTicket[]>([]);
   const [error, setError] = useState("");
   const [section, setSection] = useState<"all" | ComplaintSection>(parseSectionParam(params.get("section")));
   const [tab, setTab] = useState<(typeof STATUS_TABS)[number]>(
-    params.get("status") === "open" ? "Open" : params.get("status") === "under_review" ? "Under review" : "All",
+    params.get("status") === "open"
+      ? "Open"
+      : params.get("status") === "under_review"
+        ? "Under review"
+        : params.get("status") === "resolved"
+          ? "Resolved"
+          : "All",
   );
   const [highOnly, setHighOnly] = useState(params.get("severity") === "high");
   const [openId, setOpenId] = useState<string | null>(params.get("id"));
@@ -58,6 +66,32 @@ export default function ReportsPage() {
   const [warningNote, setWarningNote] = useState("");
   const [adminNote, setAdminNote] = useState("");
   const [busy, setBusy] = useState(false);
+
+  function writeFilters(next: {
+    section?: "all" | ComplaintSection;
+    tab?: (typeof STATUS_TABS)[number];
+    highOnly?: boolean;
+    openId?: string | null;
+  }) {
+    const nextSection = next.section ?? section;
+    const nextTab = next.tab ?? tab;
+    const nextHigh = next.highOnly ?? highOnly;
+    const nextOpen = next.openId === undefined ? openId : next.openId;
+    if (next.section !== undefined) setSection(next.section);
+    if (next.tab !== undefined) setTab(next.tab);
+    if (next.highOnly !== undefined) setHighOnly(next.highOnly);
+    if (next.openId !== undefined) setOpenId(next.openId);
+
+    const qs = new URLSearchParams();
+    if (nextSection !== "all") qs.set("section", nextSection);
+    if (nextTab === "Open") qs.set("status", "open");
+    else if (nextTab === "Under review") qs.set("status", "under_review");
+    else if (nextTab === "Resolved") qs.set("status", "resolved");
+    if (nextHigh) qs.set("severity", "high");
+    if (nextOpen) qs.set("id", nextOpen);
+    const suffix = qs.toString();
+    router.replace(suffix ? `${pathname}?${suffix}` : pathname, { scroll: false });
+  }
 
   async function load() {
     if (!apiSession) return;
@@ -87,12 +121,16 @@ export default function ReportsPage() {
     if (id) {
       setOpenId(id);
       markInboxSeen(`report-${id}`);
+    } else {
+      setOpenId(null);
     }
-    if (params.get("severity") === "high") setHighOnly(true);
+    setHighOnly(params.get("severity") === "high");
     setSection(parseSectionParam(params.get("section")));
     const status = params.get("status");
     if (status === "open") setTab("Open");
-    if (status === "under_review") setTab("Under review");
+    else if (status === "under_review") setTab("Under review");
+    else if (status === "resolved") setTab("Resolved");
+    else setTab("All");
   }, [params, markInboxSeen]);
 
   const sectionCounts = useMemo(() => {
@@ -186,8 +224,10 @@ export default function ReportsPage() {
               key={item}
               type="button"
               onClick={() => {
-                setTab(item);
-                if (item === "All") setSection("all");
+                writeFilters({
+                  tab: item,
+                  section: item === "All" ? "all" : section,
+                });
               }}
               className={`rounded-full px-3 py-1 text-xs font-semibold ${
                 tab === item ? "bg-brand text-white" : "border border-line text-ink"
@@ -200,7 +240,7 @@ export default function ReportsPage() {
             <button
               key={item.id}
               type="button"
-              onClick={() => setSection((prev) => (prev === item.id ? "all" : item.id))}
+              onClick={() => writeFilters({ section: section === item.id ? "all" : item.id })}
               className={`rounded-full px-3 py-1 text-xs font-semibold ${
                 section === item.id ? "bg-brand text-white" : "border border-line text-ink"
               }`}
@@ -210,7 +250,7 @@ export default function ReportsPage() {
           ))}
           <button
             type="button"
-            onClick={() => setHighOnly((v) => !v)}
+            onClick={() => writeFilters({ highOnly: !highOnly })}
             className={`rounded-full px-3 py-1 text-xs font-semibold ${highOnly ? "bg-red text-white" : "border border-line text-ink"}`}
           >
             High severity
@@ -245,7 +285,7 @@ export default function ReportsPage() {
                         title={titleFor(row)}
                         sectionLabel={SECTION_LABEL[complaintSection(row)]}
                         onSelect={() => {
-                          setOpenId(row.id);
+                          writeFilters({ openId: row.id });
                           markInboxSeen(`report-${row.id}`);
                         }}
                       />

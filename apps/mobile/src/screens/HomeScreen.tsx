@@ -7,7 +7,7 @@ import { AuthImage } from "../components/AuthImage";
 import { useAppRefreshControl } from "../components/KeyboardScreen";
 import { PressScale } from "../components/PressScale";
 import { SellerHeroBanner } from "../components/SellerHeroBanner";
-import { StaffWarningCard } from "../components/StaffWarningBanner";
+import { ListingAdminNotesCard, StaffWarningCard } from "../components/StaffWarningBanner";
 import { useAuth } from "../context/AuthContext";
 import { isPendingProvider, isProvider, isRejectedProvider, isVerifiedProvider } from "../demo";
 import { fetchMyListings, type ApiListing } from "../listingsApi";
@@ -34,14 +34,10 @@ function SellerHomeScreen() {
   const serviceLabel = user?.service_type || "Real Estate & Property Service";
 
   const loadPosts = useCallback(() => {
-    if (!verified) {
-      setPosts([]);
-      return;
-    }
     void fetchMyListings()
       .then(setPosts)
       .catch(() => setPosts([]));
-  }, [verified]);
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
@@ -59,6 +55,7 @@ function SellerHomeScreen() {
       <AppHeader right="bell-chat" />
       <ScrollView refreshControl={refreshControl} contentContainerStyle={{ padding: 16, paddingBottom: 36 }} showsVerticalScrollIndicator={false}>
         <StaffWarningCard />
+        <ListingAdminNotesCard listings={posts} />
         {pending ? (
           <View style={{ backgroundColor: colors.orangeSoft, borderRadius: 16, padding: 14, marginBottom: 14, ...shadow.card }}>
             <Text style={{ fontWeight: "800", color: colors.navy }}>Verification pending</Text>

@@ -200,7 +200,7 @@ export async function deleteAppUser(id: string) {
 
 export type StaffListing = {
   id: string;
-  status: "draft" | "pending" | "approved" | "rejected";
+  status: "draft" | "pending" | "approved" | "rejected" | "deactivated";
   category: string;
   subcategory: string;
   title: string;
@@ -239,7 +239,11 @@ export async function listStaffListings(query?: { category?: string; status?: st
   return staffRequest<StaffListing[]>(`/api/admin/listings/${suffix}`);
 }
 
-export async function patchStaffListing(id: string, status: "approved" | "rejected", reason?: string) {
+export async function patchStaffListing(
+  id: string,
+  status: "approved" | "rejected" | "deactivated",
+  reason?: string,
+) {
   return staffRequest<StaffListing>(`/api/admin/listings/${id}/`, {
     method: "PATCH",
     body: JSON.stringify({ status, reason: reason || "" }),
@@ -467,10 +471,14 @@ export async function listProviderIdCards(status?: string) {
   return staffRequest<ProviderIdCard[]>(`/api/admin/verification/cards/${suffix}`);
 }
 
-export async function patchProviderIdCard(id: string, action: "approve" | "revoke" | "block", note?: string) {
+export async function patchProviderIdCard(
+  id: string,
+  action: "approve" | "revoke" | "block" | "unblock",
+  note?: string,
+) {
   return staffRequest<ProviderIdCard>(`/api/admin/verification/cards/${id}/`, {
     method: "PATCH",
-    body: JSON.stringify({ action, note: note || "" }),
+    body: JSON.stringify({ action: action === "unblock" ? "approve" : action, note: note || "" }),
   });
 }
 

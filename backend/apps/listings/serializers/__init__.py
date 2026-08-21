@@ -301,12 +301,23 @@ def apply_pending_edit(listing: Listing):
 
 
 class ListingStatusSerializer(serializers.Serializer):
-    status = serializers.ChoiceField(choices=(Listing.STATUS_APPROVED, Listing.STATUS_REJECTED))
+    status = serializers.ChoiceField(
+        choices=(Listing.STATUS_APPROVED, Listing.STATUS_REJECTED, Listing.STATUS_DEACTIVATED)
+    )
     reason = serializers.CharField(required=False, allow_blank=True)
 
     def validate(self, attrs):
-        if attrs["status"] == Listing.STATUS_REJECTED and not (attrs.get("reason") or "").strip():
-            raise serializers.ValidationError({"reason": "Add a reason so the seller knows why this listing was rejected."})
+        needs_reason = attrs["status"] in {Listing.STATUS_REJECTED, Listing.STATUS_DEACTIVATED}
+        if needs_reason and not (attrs.get("reason") or "").strip():
+            raise serializers.ValidationError(
+                {
+                    "reason": (
+                        "Add a note so the seller knows why this listing was deactivated."
+                        if attrs["status"] == Listing.STATUS_DEACTIVATED
+                        else "Add a reason so the seller knows why this listing was rejected."
+                    )
+                }
+            )
         return attrs
 
 

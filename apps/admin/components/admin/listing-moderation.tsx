@@ -12,7 +12,7 @@ import { useSession } from "@/lib/session";
 import { ADMIN_POLL_MS } from "@/lib/live-inbox";
 import { deleteStaffListing, listStaffListings, patchStaffListing, type StaffListing } from "@/lib/staff-api";
 
-const TABS = ["Pending", "All", "Approved", "Rejected"] as const;
+const TABS = ["Pending", "All", "Approved", "Rejected", "Deactivated"] as const;
 
 function tabFromParam(raw: string | null, fallback: (typeof TABS)[number]): (typeof TABS)[number] {
   if (!raw) return fallback;
@@ -87,20 +87,40 @@ export function ListingModeration({
   function setTabAndUrl(next: string) {
     const nextTab = tabFromParam(next, defaultTab);
     setTab(nextTab);
-    const q = new URLSearchParams(params.toString());
-    if (nextTab === "All") q.delete("status");
-    else q.set("status", nextTab.toLowerCase());
+    const q = new URLSearchParams();
+    // Keep category-style filters that identify the page, drop sticky status/type/featured
+    // so switching tabs never stays stuck on a previous sidebar query.
+    if (params.get("kind")) q.set("kind", params.get("kind")!);
+    if (nextTab === "All") {
+      /* no status */
+    } else {
+      q.set("status", nextTab.toLowerCase());
+    }
     const query = q.toString();
     router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
   }
 
-  async function setStatus(id: string, status: "approved" | "rejected") {
+  async function setStatus(id: string, status: "approved" | "rejected" | "deactivated", note?: string) {
     try {
-      await patchStaffListing(id, status, reason);
+      await patchStaffListing(id, status, note ?? reason);
+      setReason("");
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not update listing.");
     }
+  }
+
+  async function deactivateListing(row: StaffListing) {
+    const note = window.prompt(
+      "Deactivate this listing and tell the seller why (shown on their home & profile):",
+      reason || "",
+    );
+    if (note == null) return;
+    if (!note.trim()) {
+      window.alert("A note for the seller is required.");
+      return;
+    }
+    await setStatus(row.id, "deactivated", note.trim());
   }
 
   async function removeListing(id: string) {
@@ -117,12 +137,22 @@ export function ListingModeration({
   const pending = items.filter((i) => i.status === "pending" || i.has_pending_edit);
 
   const visible = useMemo(() => {
-    const filtered =
+    const featuredOnly = params.get("featured") === "1";
+    let filtered =
       tab === "All"
         ? items
         : tab === "Pending"
           ? items.filter((i) => i.status === "pending" || i.has_pending_edit)
           : items.filter((i) => i.status === tab.toLowerCase());
+    if (featuredOnly) filtered = filtered.filter((i) => i.is_promoted || i.promote_requested);
+    const typeFilter = params.get("type");
+    if (typeFilter) {
+      filtered = filtered.filter(
+        (i) =>
+          i.subcategory.toLowerCase() === typeFilter.toLowerCase() ||
+          String(i.extras?.dealType || "").toLowerCase() === typeFilter.toLowerCase(),
+      );
+    }
     const rank = new Map(orderIds.map((id, i) => [id, i]));
     return [...filtered].sort((a, b) => {
       const ai = rank.has(a.id) ? rank.get(a.id)! : Number.MAX_SAFE_INTEGER / 2;
@@ -132,7 +162,7 @@ export function ListingModeration({
       if ((b.status === "pending" || b.has_pending_edit) && !(a.status === "pending" || a.has_pending_edit)) return 1;
       return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
     });
-  }, [items, tab, orderIds]);
+  }, [items, tab, orderIds, params]);
 
   function moveRow(row: StaffListing, direction: -1 | 1) {
     const ids = visible.map((r) => r.id);
@@ -186,16 +216,23 @@ export function ListingModeration({
 
   const rowActions: RowMenuAction<StaffListing>[] = [
     {
+      label: "Deactivate",
+      danger: true,
+      onClick: (row) => void deactivateListing(row),
+    },
+    {
       label: "Delete",
       danger: true,
       onClick: (row) => void removeListing(row.id),
     },
     {
-      label: "Block",
-      danger: true,
+      label: "Reactivate",
       onClick: (row) => {
-        if (!window.confirm("Block this listing by rejecting it?")) return;
-        void setStatus(row.id, "rejected");
+        if (row.status !== "deactivated" && row.status !== "rejected") {
+          window.alert("Only deactivated or rejected listings need reactivation.");
+          return;
+        }
+        void setStatus(row.id, "approved", "");
       },
     },
     { label: "Move up", onClick: (row) => moveRow(row, -1) },
@@ -227,6 +264,7 @@ export function ListingModeration({
           { label: "Pending / edits", value: pending.length, tone: "amber" },
           { label: "Approved", value: items.filter((i) => i.status === "approved").length, tone: "green" },
           { label: "Rejected", value: items.filter((i) => i.status === "rejected").length, tone: "red" },
+          { label: "Deactivated", value: items.filter((i) => i.status === "deactivated").length, tone: "amber" },
         ]}
       />
       <div className="mb-3 flex justify-end">
@@ -302,7 +340,7 @@ export function ListingModeration({
                   <textarea
                     value={reason}
                     onChange={(event) => setReason(event.target.value)}
-                    placeholder="Rejection reason (required to reject)"
+                    placeholder="Rejection / deactivation note for the seller"
                     className={`${inputClass} min-h-[4rem]`}
                     rows={2}
                   />
@@ -311,15 +349,28 @@ export function ListingModeration({
                     <Btn kind="danger" onClick={() => void setStatus(open.id, "rejected")}>
                       {open.has_pending_edit ? "Reject edit" : "Reject"}
                     </Btn>
+                    <Btn kind="danger" onClick={() => void deactivateListing(open)}>
+                      Deactivate
+                    </Btn>
                     <Btn kind="danger" onClick={() => void removeListing(open.id)}>
                       Delete
                     </Btn>
                   </div>
                 </>
               ) : (
-                <Btn kind="danger" onClick={() => void removeListing(open.id)}>
-                  Delete listing
-                </Btn>
+                <div className="flex flex-wrap gap-2">
+                  {open.status === "deactivated" || open.status === "rejected" ? (
+                    <Btn onClick={() => void setStatus(open.id, "approved", "")}>Reactivate listing</Btn>
+                  ) : null}
+                  {open.status === "approved" ? (
+                    <Btn kind="danger" onClick={() => void deactivateListing(open)}>
+                      Deactivate
+                    </Btn>
+                  ) : null}
+                  <Btn kind="danger" onClick={() => void removeListing(open.id)}>
+                    Delete listing
+                  </Btn>
+                </div>
               )}
             </div>
           ) : null

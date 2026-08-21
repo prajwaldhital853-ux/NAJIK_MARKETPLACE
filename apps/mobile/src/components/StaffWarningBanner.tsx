@@ -35,7 +35,42 @@ export function StaffWarningCard({ style }: { style?: object }) {
   );
 }
 
-/** Floating top banner across the app after admin sends a warning. */
+/** Shows admin deactivation notes for the seller's listings on Home / Profile. */
+export function ListingAdminNotesCard({ listings }: { listings: { id: string; title: string; status: string; admin_reason?: string }[] }) {
+  const notes = listings.filter((row) => row.status === "deactivated" && (row.admin_reason || "").trim());
+  if (!notes.length) return null;
+  return (
+    <View
+      style={{
+        backgroundColor: "#FEF2F2",
+        borderWidth: 1,
+        borderColor: "#FECACA",
+        borderRadius: 14,
+        padding: 12,
+        marginBottom: 12,
+        gap: 10,
+        ...shadow.card,
+      }}
+    >
+      <View style={{ flexDirection: "row", gap: 10 }}>
+        <Ionicons name="alert-circle" size={22} color="#B91C1C" style={{ marginTop: 2 }} />
+        <View style={{ flex: 1 }}>
+          <Text style={{ fontWeight: "800", color: "#991B1B", fontSize: 13 }}>Listing deactivated by NAJIK admin</Text>
+          <Text style={{ color: "#7F1D1D", marginTop: 4, fontSize: 12, lineHeight: 17 }}>
+            Buyers cannot see these listings until an admin reactivates them.
+          </Text>
+        </View>
+      </View>
+      {notes.map((row) => (
+        <View key={row.id} style={{ backgroundColor: "#fff", borderRadius: 10, padding: 10, borderWidth: 1, borderColor: "#FECACA" }}>
+          <Text style={{ fontWeight: "700", color: "#111827", fontSize: 13 }}>{row.title}</Text>
+          <Text style={{ color: "#7F1D1D", marginTop: 4, fontSize: 13, lineHeight: 18 }}>{row.admin_reason}</Text>
+        </View>
+      ))}
+    </View>
+  );
+}
+
 export function StaffWarningBanner() {
   const { user } = useAuth();
   const insets = useSafeAreaInsets();

@@ -14,9 +14,10 @@ from apps.listings.serializers import file_from_data_uri
 ONLINE_WINDOW = timedelta(seconds=45)
 MAX_VOICE_BYTES = 4 * 1024 * 1024
 AUDIO_URI = re.compile(
-    r"^data:audio/(mpeg|mp4|m4a|aac|webm|wav|x-m4a|mp3);base64,([A-Za-z0-9+/=\s]+)$",
+    r"^data:(?:audio/(mpeg|mp4|m4a|aac|webm|wav|x-m4a|mp3|3gpp|3gp|amr|ogg|opus|x-caf|caf)|application/octet-stream);base64,([A-Za-z0-9+/=\s]+)$",
     re.I,
 )
+AUDIO_URI_BARE = re.compile(r"^data:(?:application/octet-stream)?;base64,([A-Za-z0-9+/=\s]+)$", re.I)
 
 QUICK_REPLIES = [
     "Is this still available?",
@@ -64,17 +65,34 @@ def listing_photo_url(listing, request):
 
 
 def file_from_audio_uri(value: str) -> ContentFile:
-    match = AUDIO_URI.match((value or "").strip())
-    if not match:
-        raise serializers.ValidationError("Upload an audio voice note.")
-    try:
-        raw = base64.b64decode(re.sub(r"\s+", "", match.group(2)), validate=True)
-    except Exception as exc:
-        raise serializers.ValidationError("Invalid audio data.") from exc
+    raw_value = (value or "").strip()
+    match = AUDIO_URI.match(raw_value)
+    ext = "m4a"
+    if match:
+        try:
+            raw = base64.b64decode(re.sub(r"\s+", "", match.group(2)), validate=True)
+        except Exception as exc:
+            raise serializers.ValidationError("Invalid audio data.") from exc
+        ext = (match.group(1) or "m4a").lower()
+    else:
+        bare = AUDIO_URI_BARE.match(raw_value)
+        if not bare:
+            raise serializers.ValidationError("Upload an audio voice note.")
+        try:
+            raw = base64.b64decode(re.sub(r"\s+", "", bare.group(1)), validate=True)
+        except Exception as exc:
+            raise serializers.ValidationError("Invalid audio data.") from exc
     if len(raw) > MAX_VOICE_BYTES:
         raise serializers.ValidationError("Voice notes must be 4 MB or smaller.")
-    ext = match.group(1).lower().replace("x-m4a", "m4a").replace("mpeg", "mp3").replace("mp3", "mp3")
-    if ext == "mp4":
+    ext = (
+        ext.replace("x-m4a", "m4a")
+        .replace("mpeg", "mp3")
+        .replace("mp4", "m4a")
+        .replace("3gpp", "3gp")
+        .replace("x-caf", "caf")
+        .replace("octet-stream", "m4a")
+    )
+    if ext not in {"mp3", "m4a", "aac", "webm", "wav", "3gp", "amr", "ogg", "opus", "caf"}:
         ext = "m4a"
     return ContentFile(raw, name=f"voice_{uuid.uuid4().hex[:8]}.{ext}")
 

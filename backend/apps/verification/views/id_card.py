@@ -170,7 +170,7 @@ class StaffIdCardDetailView(APIView):
         )
         action = (request.data.get("action") or "").strip()
         note = (request.data.get("note") or "").strip()
-        if action == "approve":
+        if action == "approve" or action == "unblock":
             card.approve(staff=request.user, note=note)
         elif action == "revoke":
             card.revoke(note=note)
@@ -178,7 +178,7 @@ class StaffIdCardDetailView(APIView):
             card.revoke(note=note or "Blocked by admin")
         else:
             return Response(
-                {"detail": "Use action: approve, revoke, or block."},
+                {"detail": "Use action: approve, unblock, revoke, or block."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
         return Response(staff_id_card_payload(card, request=request))

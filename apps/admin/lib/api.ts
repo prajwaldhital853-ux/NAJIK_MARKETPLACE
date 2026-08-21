@@ -1,4 +1,8 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
+const API_URL = (process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000").replace(/\/$/, "");
+
+export function getApiBaseUrl() {
+  return API_URL;
+}
 
 export class ApiError extends Error {
   status: number;
@@ -14,7 +18,9 @@ export async function api<T>(
   options: RequestInit & { token?: string } = {},
 ): Promise<T> {
   const { token, headers, ...rest } = options;
-  const response = await fetch(`${API_URL}${path}`, {
+  // Django APPEND_SLASH requires a trailing slash on POST routes.
+  const normalizedPath = path.endsWith("/") || path.includes("?") ? path : `${path}/`;
+  const response = await fetch(`${API_URL}${normalizedPath}`, {
     ...rest,
     headers: {
       "Content-Type": "application/json",

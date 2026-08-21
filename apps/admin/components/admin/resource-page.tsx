@@ -14,7 +14,7 @@ function tabFromStatus(status: string | null, tabs: string[]) {
   return match || tabs[0] || "All";
 }
 
-export function ResourcePage<T extends { id: string; status?: string }>({
+export function ResourcePage<T extends { id: string; status?: string; staff_warning?: string; notes?: string; rejection_note?: string }>({
   title,
   crumb,
   summary,
@@ -27,6 +27,7 @@ export function ResourcePage<T extends { id: string; status?: string }>({
   statusActions,
   allowDelete,
   deleteConfirm,
+  allowSendNote,
   detail,
   documents,
 }: {
@@ -42,6 +43,7 @@ export function ResourcePage<T extends { id: string; status?: string }>({
   statusActions?: string[];
   allowDelete?: boolean;
   deleteConfirm?: string;
+  allowSendNote?: boolean;
   detail?: (row: T) => React.ReactNode;
   documents?: (row: T) => { label: string; src?: string | null }[];
 }) {
@@ -92,8 +94,8 @@ export function ResourcePage<T extends { id: string; status?: string }>({
       setNote("");
       return;
     }
-    const row = open as { notes?: string; rejection_note?: string };
-    setNote(String(row.notes || row.rejection_note || ""));
+    const row = open as { notes?: string; rejection_note?: string; staff_warning?: string };
+    setNote(String(row.staff_warning || row.notes || row.rejection_note || ""));
   }, [open?.id]);
 
   function closeDrawer() {
@@ -258,7 +260,7 @@ export function ResourcePage<T extends { id: string; status?: string }>({
               {storeKey && statusActions?.length ? (
                 <div className="space-y-2">
                   <p className="text-xs font-semibold text-muted">Moderation</p>
-                  <Field label={storeKey === "kyc" ? "Rejection note for user" : "Internal note"}>
+                  <Field label={storeKey === "kyc" ? "Rejection note for user" : allowSendNote ? "Note for user (shown in app)" : "Internal note"}>
                     <textarea
                       className={inputClass}
                       rows={2}
@@ -267,10 +269,53 @@ export function ResourcePage<T extends { id: string; status?: string }>({
                       placeholder={
                         storeKey === "kyc"
                           ? "Tell the user why this KYC was rejected (required to reject)"
-                          : "Optional note"
+                          : allowSendNote
+                            ? "Write a note the user will see on Home and Profile"
+                            : "Optional note"
                       }
                     />
                   </Field>
+                  {allowSendNote && storeKey ? (
+                    <div className="flex flex-wrap gap-2">
+                      <Btn
+                        kind="primary"
+                        onClick={() => {
+                          if (!note.trim()) {
+                            admin.toast("Write a note before sending.");
+                            return;
+                          }
+                          void admin
+                            .patch(storeKey, open.id, { staff_warning: note.trim(), notes: note.trim() })
+                            .then(() => {
+                              admin.toast("Note sent to user.");
+                              setOpen({ ...open, staff_warning: note.trim() } as T);
+                            })
+                            .catch((err: unknown) => {
+                              admin.toast(err instanceof Error ? err.message : "Could not send note.");
+                            });
+                        }}
+                      >
+                        Send note to user
+                      </Btn>
+                      <Btn
+                        kind="ghost"
+                        onClick={() => {
+                          void admin
+                            .patch(storeKey, open.id, { staff_warning: "", notes: "" })
+                            .then(() => {
+                              admin.toast("Note cleared.");
+                              setNote("");
+                              setOpen({ ...open, staff_warning: "" } as T);
+                            })
+                            .catch((err: unknown) => {
+                              admin.toast(err instanceof Error ? err.message : "Could not clear note.");
+                            });
+                        }}
+                      >
+                        Clear note
+                      </Btn>
+                    </div>
+                  ) : null}
                   <div className="flex flex-wrap gap-2">
                     {statusActions.map((s) => (
                       <Btn
@@ -286,7 +331,9 @@ export function ResourcePage<T extends { id: string; status?: string }>({
                               ? { status: s, notes: note.trim() }
                               : storeKey === "kyc" && s === "pending"
                                 ? { status: s, notes: "" }
-                                : { status: s };
+                                : storeKey === "users" && note.trim()
+                                  ? { status: s, staff_warning: note.trim(), notes: note.trim() }
+                                  : { status: s };
                           void admin
                             .patch(storeKey, open.id, patchData)
                             .then(() => {
@@ -306,7 +353,10 @@ export function ResourcePage<T extends { id: string; status?: string }>({
                               setOpen({
                                 ...open,
                                 ...patchData,
-                                status: s === "deactivated" ? "blocked" : s,
+                                status: s === "deactivated" ? "deactivated" : s,
+                                ...(typeof patchData.staff_warning === "string"
+                                  ? { staff_warning: patchData.staff_warning }
+                                  : {}),
                               } as T);
                               if (s === "rejected" || s === "pending") setNote("");
                             })

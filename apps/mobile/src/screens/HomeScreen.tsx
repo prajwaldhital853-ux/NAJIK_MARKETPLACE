@@ -3,11 +3,12 @@ import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { useCallback, useState } from "react";
 import { Alert, ScrollView, Text, View } from "react-native";
 import { AppHeader } from "../components/AppHeader";
+import { AppNoticeHost } from "../components/AppNoticeHost";
 import { AuthImage } from "../components/AuthImage";
 import { useAppRefreshControl } from "../components/KeyboardScreen";
 import { PressScale } from "../components/PressScale";
 import { SellerHeroBanner } from "../components/SellerHeroBanner";
-import { ListingAdminNotesCard, StaffWarningCard } from "../components/StaffWarningBanner";
+import { AccountStatusCard, ListingAdminNotesCard, StaffWarningCard } from "../components/StaffWarningBanner";
 import { useAuth } from "../context/AuthContext";
 import { isPendingProvider, isProvider, isRejectedProvider, isVerifiedProvider } from "../demo";
 import { fetchMyListings, deleteMyListing, type ApiListing } from "../listingsApi";
@@ -18,8 +19,13 @@ import { BuyerHomeScreen } from "./BuyerHomeScreen";
 
 export function HomeScreen() {
   const { user } = useAuth();
-  if (!isProvider(user)) return <BuyerHomeScreen />;
-  return <SellerHomeScreen />;
+  return (
+    <>
+      {!isProvider(user) ? <BuyerHomeScreen /> : <SellerHomeScreen />}
+      {/* Admin notices only after buyer/seller home is on screen */}
+      <AppNoticeHost />
+    </>
+  );
 }
 
 function SellerHomeScreen() {
@@ -53,7 +59,24 @@ function SellerHomeScreen() {
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
       <AppHeader right="bell-chat" />
+      <View style={{ paddingHorizontal: 16, paddingTop: 10, paddingBottom: 8, backgroundColor: colors.bg, borderBottomWidth: 1, borderBottomColor: "#EEF0F3" }}>
+        <SellerHeroBanner
+          name={name}
+          photo={photo}
+          serviceType={user?.service_type}
+          verified={verified}
+          pending={pending}
+          rejected={rejected}
+          variant="home"
+          showPosted={verified}
+          listingCount={posts.length}
+          onPress={() => navigation.jumpTo("Profile")}
+          onCamera={() => navigation.jumpTo("Profile")}
+          onViewListing={() => navigation.jumpTo("Listings")}
+        />
+      </View>
       <ScrollView refreshControl={refreshControl} contentContainerStyle={{ padding: 16, paddingBottom: 36 }} showsVerticalScrollIndicator={false}>
+        <AccountStatusCard />
         <StaffWarningCard />
         <ListingAdminNotesCard listings={posts} />
         {pending ? (
@@ -72,22 +95,8 @@ function SellerHomeScreen() {
             </Text>
           </View>
         ) : null}
-        <SellerHeroBanner
-          name={name}
-          photo={photo}
-          serviceType={user?.service_type}
-          verified={verified}
-          pending={pending}
-          rejected={rejected}
-          variant="home"
-          showPosted={verified}
-          listingCount={posts.length}
-          onPress={() => navigation.jumpTo("Profile")}
-          onCamera={() => navigation.jumpTo("Profile")}
-          onViewListing={() => navigation.jumpTo("Listings")}
-        />
 
-        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 20, marginBottom: 10 }}>
+        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
           <Text style={{ fontSize: 18, fontWeight: "800", color: colors.navy }}>Your Recent Posts</Text>
           {verified ? (
             <Text onPress={() => navigation.jumpTo("Listings")} style={{ color: colors.green, fontWeight: "700" }}>View all ›</Text>

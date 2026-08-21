@@ -1,16 +1,16 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { useEffect, useMemo, useState } from "react";
-import { Alert, Dimensions, Modal, Pressable, ScrollView, Text, View } from "react-native";
+import { Alert, Dimensions, Image, Modal, Pressable, ScrollView, Text, View } from "react-native";
 import { AppHeader } from "../components/AppHeader";
 import { Avatar } from "../components/Avatar";
 import { useAppRefreshControl } from "../components/KeyboardScreen";
 import { PressScale } from "../components/PressScale";
 import { SellerHeroBanner } from "../components/SellerHeroBanner";
 import { SellerProfileEditModal } from "../components/SellerProfileEditModal";
-import { ListingAdminNotesCard, StaffWarningCard } from "../components/StaffWarningBanner";
+import { AccountStatusCard, ListingAdminNotesCard, StaffWarningCard } from "../components/StaffWarningBanner";
 import { useAuth } from "../context/AuthContext";
-import { isPendingProvider, isProvider, isRejectedProvider, isVerifiedProvider } from "../demo";
+import { isPendingProvider, isProvider, isRejectedProvider, isVerifiedProvider, isAccountRestricted } from "../demo";
 import { fetchMyListings, type ApiListing } from "../listingsApi";
 import { subscribeListingsChanged } from "../listingsRefresh";
 import { openProviderIdCard, openSellerPage } from "../navigation/browse";
@@ -184,6 +184,10 @@ export function ProfileScreen() {
               <PressScale
                 onPress={() => {
                   setDetailsOpen(false);
+                  if (isAccountRestricted(user)) {
+                    Alert.alert("Account restricted", "Your account is deactivated or blocked. You cannot open your ID card.");
+                    return;
+                  }
                   openProviderIdCard(navigation);
                 }}
                 style={{ marginTop: 10, borderWidth: 1.5, borderColor: GREEN, borderRadius: 12, paddingVertical: 12, alignItems: "center" }}
@@ -194,7 +198,21 @@ export function ProfileScreen() {
           </Pressable>
         </Pressable>
       </Modal>
+      <View style={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 10, backgroundColor: "#F7F8FA", borderBottomWidth: 1, borderBottomColor: "#EEF0F3" }}>
+        <SellerHeroBanner
+          name={name}
+          photo={photo}
+          serviceType={user?.service_type}
+          verified={verified}
+          pending={pending}
+          rejected={rejected}
+          variant="profile"
+          onPress={() => setDetailsOpen(true)}
+          onCamera={openEdit}
+        />
+      </View>
       <ScrollView refreshControl={refreshControl} contentContainerStyle={{ padding: 16, paddingBottom: 36 }} showsVerticalScrollIndicator={false}>
+        <AccountStatusCard />
         <StaffWarningCard />
         <ListingAdminNotesCard listings={myListings} />
         {pending ? (
@@ -238,19 +256,7 @@ export function ProfileScreen() {
           </View>
         ) : null}
 
-        <SellerHeroBanner
-          name={name}
-          photo={photo}
-          serviceType={user?.service_type}
-          verified={verified}
-          pending={pending}
-          rejected={rejected}
-          variant="profile"
-          onPress={() => setDetailsOpen(true)}
-          onCamera={openEdit}
-        />
-
-        <View style={{ marginTop: 14, backgroundColor: "#fff", borderRadius: 16, padding: 14, ...shadow.card }}>
+        <View style={{ marginTop: 0, backgroundColor: "#fff", borderRadius: 16, padding: 14, ...shadow.card }}>
           <Text style={{ fontWeight: "800", color: colors.navy, marginBottom: 10 }}>Profile</Text>
           <DetailRow label="Name" value={user?.full_name || "—"} />
           <DetailRow label="Phone" value={user?.phone || "—"} />
@@ -321,8 +327,15 @@ export function ProfileScreen() {
               key={item.title}
               onPress={() => {
                 if (item.page === "idcard") {
-                  // Available for pending, verified, blocked download, and restricted accounts.
+                  if (isAccountRestricted(user)) {
+                    Alert.alert("Account restricted", "Your account is deactivated or blocked. You cannot open your ID card.");
+                    return;
+                  }
                   openProviderIdCard(navigation);
+                  return;
+                }
+                if (isAccountRestricted(user) && (item.tab === "Post" || item.page === "promotions" || item.page === "services")) {
+                  Alert.alert("Account restricted", "Your account is deactivated or blocked. Contact NAJIK admin.");
                   return;
                 }
                 if (item.page) openSellerPage(navigation, item.page);
@@ -401,9 +414,7 @@ function BuyerProfile() {
   return (
     <View style={{ flex: 1, backgroundColor: "#F7F8FA" }}>
       <AppHeader right="bell-settings" showLocation showPro={false} pinColor={GREEN} />
-      <ScrollView refreshControl={refreshControl} contentContainerStyle={{ padding: 16, paddingBottom: 36 }} showsVerticalScrollIndicator={false}>
-        <StaffWarningCard />
-        <ListingAdminNotesCard listings={myListings} />
+      <View style={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 10, backgroundColor: "#F7F8FA", borderBottomWidth: 1, borderBottomColor: "#EEF0F3" }}>
         <PressScale
           onPress={() => {}}
           style={{
@@ -461,6 +472,10 @@ function BuyerProfile() {
             <Ionicons name="chevron-forward" size={18} color="#9AA0A6" />
           </View>
         </PressScale>
+      </View>
+      <ScrollView refreshControl={refreshControl} contentContainerStyle={{ padding: 16, paddingBottom: 36 }} showsVerticalScrollIndicator={false}>
+        <AccountStatusCard />
+        <StaffWarningCard />
 
         <View style={{ marginTop: 12, backgroundColor: "#fff", borderRadius: 16, paddingVertical: 14, flexDirection: "row", ...shadow.card }}>
           {stats.map((item) => (

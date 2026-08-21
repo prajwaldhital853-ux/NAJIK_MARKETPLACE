@@ -65,3 +65,4 @@ apps/admin/data/
 dist/
 build/
 *.tsbuildinfo
+*.apk

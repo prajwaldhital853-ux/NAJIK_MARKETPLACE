@@ -91,6 +91,8 @@ function userLiveKey(user: AppUser) {
     user.rejection_note,
     user.staff_warning || "",
     user.staff_warning_at || "",
+    user.is_active === false ? "0" : "1",
+    user.account_status || "",
   ].join("|");
 }
 

@@ -125,6 +125,8 @@ class AppUserPublicSerializer(serializers.ModelSerializer):
             "date_joined",
             "staff_warning",
             "staff_warning_at",
+            "is_active",
+            "account_status",
         )
         read_only_fields = fields
 

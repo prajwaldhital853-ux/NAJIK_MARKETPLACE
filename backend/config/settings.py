@@ -144,10 +144,14 @@ CORS_ALLOWED_ORIGINS = env.list(
     default=[
         "http://localhost:3000",
         "http://127.0.0.1:3000",
+        "http://[::1]:3000",
         "http://localhost:8081",
         "http://127.0.0.1:8081",
+        "http://[::1]:8081",
     ],
 )
+# Local browsers often open admin via IPv6 (::1); allow all origins in DEBUG only.
+CORS_ALLOW_ALL_ORIGINS = DEBUG
 CORS_ALLOW_CREDENTIALS = True
 CSRF_TRUSTED_ORIGINS = env.list("CSRF_TRUSTED_ORIGINS", default=[])
 

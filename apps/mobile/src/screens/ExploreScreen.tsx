@@ -97,6 +97,7 @@ export function ExploreScreen() {
   return (
     <View style={{ flex: 1, backgroundColor: "#F7F8FA" }}>
       <AppHeader right="bell-filter" showLocation pinColor="#22A34A" />
+      <ExploreStickySearch query={query} setQuery={setQuery} />
       <KeyboardScreen adjustKeyboardInsets={false} contentStyle={{ padding: PAD, paddingTop: 8, paddingBottom: 28 }}>
         <ExploreBody
           query={query}
@@ -107,8 +108,65 @@ export function ExploreScreen() {
           setRecent={setRecent}
           adOpen={adOpen}
           setAdOpen={setAdOpen}
+          hideSearch
         />
       </KeyboardScreen>
+    </View>
+  );
+}
+
+function ExploreStickySearch({ query, setQuery }: { query: string; setQuery: (v: string) => void }) {
+  const navigation = useNavigation<any>();
+  async function runSearch(term = query) {
+    const q = term.trim();
+    if (q) await saveRecentSearch(q);
+    openMapSearch(navigation, { q });
+  }
+  return (
+    <View style={{ paddingHorizontal: PAD, paddingTop: 8, paddingBottom: 10, backgroundColor: "#F7F8FA", borderBottomWidth: 1, borderBottomColor: "#EEF0F3" }}>
+      <View
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          backgroundColor: "#fff",
+          borderRadius: 16,
+          paddingLeft: 12,
+          height: 50,
+          borderWidth: 1,
+          borderColor: "#E6E8EC",
+        }}
+      >
+        <Ionicons name="search" size={18} color="#9AA0A6" />
+        <TextInput
+          value={query}
+          onChangeText={setQuery}
+          placeholder="Search rooms, land, jobs, services..."
+          placeholderTextColor="#9AA0A6"
+          returnKeyType="search"
+          onSubmitEditing={() => void runSearch()}
+          style={{ flex: 1, marginLeft: 8, fontSize: 13, color: colors.navy }}
+        />
+        <PressScale
+          onPress={() => openMapSearch(navigation, { q: query })}
+          style={{ width: 42, height: 42, borderRadius: 11, backgroundColor: "#111827", alignItems: "center", justifyContent: "center", marginRight: 2 }}
+        >
+          <Ionicons name="map" size={18} color="#fff" />
+        </PressScale>
+        <PressScale
+          onPress={() => void runSearch()}
+          style={{
+            width: 42,
+            height: 42,
+            borderRadius: 11,
+            backgroundColor: GREEN,
+            alignItems: "center",
+            justifyContent: "center",
+            margin: 4,
+          }}
+        >
+          <Ionicons name="search" size={20} color="#fff" />
+        </PressScale>
+      </View>
     </View>
   );
 }
@@ -122,6 +180,7 @@ function ExploreBody({
   setRecent,
   adOpen,
   setAdOpen,
+  hideSearch,
 }: {
   query: string;
   setQuery: (v: string) => void;
@@ -131,6 +190,7 @@ function ExploreBody({
   setRecent: (v: string[]) => void;
   adOpen: boolean;
   setAdOpen: (v: boolean) => void;
+  hideSearch?: boolean;
 }) {
   const { onInputFocus } = useKeyboardScroll();
   const navigation = useNavigation<any>();
@@ -161,6 +221,7 @@ function ExploreBody({
 
   return (
     <>
+      {!hideSearch ? (
       <View>
         <View
           style={{
@@ -207,6 +268,7 @@ function ExploreBody({
           </PressScale>
         </View>
       </View>
+      ) : null}
 
       <View style={{ flexDirection: "row", marginTop: 14 }}>
         {chips.map((chip) => {

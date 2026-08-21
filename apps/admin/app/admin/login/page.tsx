@@ -3,6 +3,7 @@
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Eye, EyeOff, Lock, LogIn, Mail, User } from "lucide-react";
+import { ApiError } from "@/lib/api";
 import { useSession } from "@/lib/session";
 
 const HERO =
@@ -13,23 +14,37 @@ const CORNER =
 export default function StaffLoginPage() {
   const router = useRouter();
   const { login } = useSession();
-  const [email, setEmail] = useState("admin@najik.com");
+  const [email, setEmail] = useState("owner@najik.local");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
-  async function onSubmit(event: FormEvent) {
+  async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const fd = new FormData(event.currentTarget);
+    const nextEmail = String(fd.get("email") || email).trim();
+    const nextPassword = String(fd.get("password") || password);
+    setEmail(nextEmail);
+    setPassword(nextPassword);
     setBusy(true);
     setError("");
     try {
-      const staff = await login(email, password);
-      if (!staff) {
-        setError("Invalid email or password.");
-        return;
-      }
+      await login(nextEmail, nextPassword);
       router.replace("/admin");
+    } catch (err) {
+      if (err instanceof ApiError) {
+        const msg = err.message.toLowerCase();
+        if (msg.includes("invalid credentials") || err.status === 400) {
+          setError("Invalid email or password. Use matching pair: owner@najik.local + ChangeMeNow!23  or  admin@najik.com + NajikAdmin@2026");
+        } else if (err.status === 429) {
+          setError("Too many login attempts. Wait a minute and try again.");
+        } else {
+          setError(err.message || "Login failed.");
+        }
+      } else {
+        setError("Cannot reach the API. Keep Django running on port 8000, then refresh this page.");
+      }
     } finally {
       setBusy(false);
     }
@@ -84,6 +99,11 @@ export default function StaffLoginPage() {
                 <p className="mt-2 max-w-[320px] text-[14px] leading-relaxed text-[#6b7280]">
                   Welcome back! Please login to your Admin Panel account.
                 </p>
+                <p className="mt-2 text-[11px] text-[#9aa19c]">
+                  {process.env.NEXT_PUBLIC_API_URL?.includes("onrender.com")
+                    ? "Connected to live API"
+                    : "Connected to local API"}
+                </p>
               </div>
 
               <form onSubmit={onSubmit} className="space-y-3.5">
@@ -93,8 +113,10 @@ export default function StaffLoginPage() {
                     <User className="h-[18px] w-[18px] shrink-0 text-[#9aa19c]" />
                     <input
                       className="w-full bg-transparent text-[14px] text-[#111827] outline-none placeholder:text-[#9aa19c]"
-                      type="email"
+                      type="text"
+                      name="email"
                       autoComplete="username"
+                      inputMode="email"
                       placeholder="Username"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
@@ -111,6 +133,7 @@ export default function StaffLoginPage() {
                     <input
                       className="w-full bg-transparent text-[14px] text-[#111827] outline-none placeholder:text-[#9aa19c]"
                       type={showPassword ? "text" : "password"}
+                      name="password"
                       autoComplete="current-password"
                       placeholder="Password"
                       value={password}

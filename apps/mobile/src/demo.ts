@@ -33,6 +33,15 @@ export function isRejectedProvider(user?: AppUser | null) {
 }
 
 export function canPostServices(user?: AppUser | null) {
+  if (!user || user.is_active === false) return false;
+  if (user.account_status === "blocked" || user.account_status === "deactivated") return false;
   if (isProvider(user)) return isVerifiedProvider(user);
-  return true;
+  return false;
+}
+
+export function isAccountRestricted(user?: AppUser | null) {
+  if (!user) return false;
+  if (user.is_active === false) return true;
+  const status = (user.account_status || "").toLowerCase();
+  return status === "blocked" || status === "deactivated";
 }

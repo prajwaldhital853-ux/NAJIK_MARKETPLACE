@@ -25,13 +25,21 @@ export type User = {
   phone: string;
   city: string;
   role: UserRole;
-  status: "active" | "pending" | "verified" | "blocked";
+  status: "active" | "pending" | "verified" | "blocked" | "deactivated";
   joined: string;
   listings: number;
   lastActive: string;
   kyc: "none" | "pending" | "verified" | "rejected";
   category: string;
   joinedAt?: string;
+  staff_warning?: string;
+  photo_uri?: string | null;
+  avatar_uri?: string | null;
+  nagrita_uri?: string | null;
+  nagrita_back_uri?: string | null;
+  nation_card_uri?: string | null;
+  other_document_uri?: string | null;
+  application_id?: string | null;
 };
 
 export type Property = {

@@ -34,21 +34,32 @@ export default function UsersPage() {
   return (
     <ResourcePage
       title="User Management"
-      summary="Live app signups. Open a row to block, verify, or permanently delete the account and all of their listings."
+      summary="Live app signups. Open a row to send a note, deactivate, block, or permanently delete the account."
       kpis={[
         { label: "Accounts", value: users.length, tone: "brand" },
         { label: "Active", value: users.filter((u) => u.status === "active" || u.status === "verified").length, tone: "green" },
         { label: "Pending", value: users.filter((u) => u.status === "pending").length, tone: "amber" },
         { label: "Blocked", value: users.filter((u) => u.status === "blocked").length, tone: "red" },
+        { label: "Deactivated", value: users.filter((u) => u.status === "deactivated").length, tone: "amber" },
         { label: "KYC verified", value: users.filter((u) => u.kyc === "verified").length, tone: "green" },
       ]}
       rows={users}
       columns={columns}
-      tabs={["All", "Active", "Pending", "Verified", "Blocked"]}
+      tabs={["All", "Active", "Pending", "Verified", "Blocked", "Deactivated"]}
       storeKey="users"
       statusActions={["active", "deactivated", "blocked"]}
       allowDelete
       deleteConfirm="Delete this account and all of their listings? This cannot be undone."
+      allowSendNote
+      documents={(u) =>
+        [
+          { label: "Profile photo", src: u.photo_uri || u.avatar_uri },
+          { label: "Citizenship front (Nagrita)", src: u.nagrita_uri },
+          { label: "Citizenship back", src: u.nagrita_back_uri },
+          { label: "Nation card", src: u.nation_card_uri },
+          { label: "Other document", src: u.other_document_uri },
+        ].filter((d) => d.src)
+      }
       detail={(u) => (
         <>
           <Kv label="Email" value={u.email} />
@@ -58,6 +69,8 @@ export default function UsersPage() {
           <Kv label="Joined" value={u.joined} />
           <Kv label="Listings" value={u.listings} />
           <Kv label="KYC" value={u.kyc} />
+          <Kv label="Status" value={u.status} />
+          {u.staff_warning ? <Kv label="Current note to user" value={u.staff_warning} /> : null}
         </>
       )}
     />

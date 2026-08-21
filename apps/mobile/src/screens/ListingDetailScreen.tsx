@@ -9,6 +9,7 @@ import {
   Linking,
   Modal,
   Pressable,
+  ScrollView,
   Share,
   Text,
   TextInput,
@@ -27,14 +28,15 @@ import { ReportComplaintModal } from "../components/ReportComplaintModal";
 import { useAuth } from "../context/AuthContext";
 import { isProvider } from "../demo";
 import { catalogMeta, listingById, type CatalogItem } from "../data/catalog";
-import { liveListingById, listingToCatalog } from "../data/liveListings";
-import { fetchListing, postListingComment, postListingReview, toggleListingSave, type ApiListing } from "../listingsApi";
+import { apiCategoryForKey, liveListingById, listingsToCatalog, listingToCatalog } from "../data/liveListings";
+import { rankSimilarListings, relatedKeywordsFor } from "../data/similarListings";
+import { fetchListing, fetchListingFeed, postListingComment, postListingReview, toggleListingSave, type ApiListing } from "../listingsApi";
 import { emitListingsChanged, subscribeListingsChanged } from "../listingsRefresh";
-import { openChatThread } from "../navigation/browse";
+import { openCategory, openChatThread, openMapSearch } from "../navigation/browse";
 import { richFor, type Review } from "../data/listingDetails";
 import { friendlyError } from "../api";
 import { startListingChat } from "../chatApi";
-import { mapsDirectionsUrl } from "../geo";
+import { mapsDirectionsUrl, mapsPinUrl } from "../geo";
 
 const GREEN = "#1B7D2C";
 const { width: SCREEN_W } = Dimensions.get("window");
@@ -137,7 +139,10 @@ function ListingBody({
   const listingId = live?.id || item.id;
   const meta = catalogMeta[item.key];
   const rich = useMemo(() => richFor(item, live), [item, live]);
-  const related: CatalogItem[] = [];
+  const [related, setRelated] = useState<CatalogItem[]>([]);
+  const [relatedKeywords, setRelatedKeywords] = useState<string[]>([]);
+  const [activeKeyword, setActiveKeyword] = useState<string | null>(null);
+  const [relatedPool, setRelatedPool] = useState<CatalogItem[]>([]);
   const galleryRef = useRef<FlatList<number>>(null);
   const [photo, setPhoto] = useState(0);
   const [tab, setTab] = useState<TabKey>("description");
@@ -156,8 +161,45 @@ function ListingBody({
     setMore(false);
     setComment("");
     setReviewText("");
+    setActiveKeyword(null);
     galleryRef.current?.scrollToOffset({ offset: 0, animated: false });
   }, [item.id]);
+
+  useEffect(() => {
+    const category = live?.category || apiCategoryForKey(item.key);
+    const keywords = relatedKeywordsFor(item, live);
+    setRelatedKeywords(keywords);
+    let cancelled = false;
+    void fetchListingFeed({ category })
+      .then((rows) => {
+        if (cancelled) return;
+        const pool = listingsToCatalog(rows).filter((row) => row.id !== item.id);
+        setRelatedPool(pool);
+        setRelated(rankSimilarListings(pool, item));
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setRelatedPool([]);
+          setRelated([]);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [item.id, item.key, live?.category, live?.subcategory, item.title]);
+
+  useEffect(() => {
+    if (!relatedPool.length) return;
+    setRelated(rankSimilarListings(relatedPool, item, { keyword: activeKeyword }));
+  }, [activeKeyword, relatedPool, item]);
+
+  function openSellerMap() {
+    if (item.lat != null && item.lng != null) {
+      void Linking.openURL(mapsPinUrl({ lat: item.lat, lng: item.lng }));
+      return;
+    }
+    void Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(item.location)}`);
+  }
 
   function onHeroScroll(e: NativeSyntheticEvent<NativeScrollEvent>) {
     const i = Math.round(e.nativeEvent.contentOffset.x / SCREEN_W);
@@ -509,24 +551,51 @@ function ListingBody({
                 center={{ lat: item.lat, lng: item.lng }}
                 zoom={16}
                 markers={[{ id: item.id, lat: item.lat, lng: item.lng, label: item.price, kind: "price" }]}
+                onSelect={() => openSellerMap()}
               />
+              <PressScale
+                onPress={openSellerMap}
+                style={{
+                  position: "absolute",
+                  left: 10,
+                  right: 10,
+                  bottom: 10,
+                  backgroundColor: "rgba(11,29,42,0.88)",
+                  borderRadius: 10,
+                  paddingVertical: 10,
+                  paddingHorizontal: 12,
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 8,
+                }}
+              >
+                <Ionicons name="map" size={14} color="#fff" />
+                <Text style={{ color: "#fff", fontWeight: "700", fontSize: 12, flex: 1 }}>Open pinned location in Google Maps</Text>
+                <Ionicons name="open-outline" size={14} color="#fff" />
+              </PressScale>
             </View>
-          ) : null}
+          ) : (
+            <View style={{ backgroundColor: "#F3F4F6", borderRadius: 14, padding: 16, marginBottom: 12 }}>
+              <Text style={{ color: "#6B7280", fontSize: 13, textAlign: "center" }}>
+                Seller has not pinned a map location for this listing yet.
+              </Text>
+            </View>
+          )}
           <PressScale
             onPress={() => {
               if (item.lat != null && item.lng != null) {
                 void Linking.openURL(mapsDirectionsUrl({ lat: item.lat, lng: item.lng }));
                 return;
               }
-              void Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(item.location)}`);
+              openSellerMap();
             }}
-            style={{ flexDirection: "row", alignItems: "center", borderWidth: 1, borderColor: LINE, padding: 14 }}
+            style={{ flexDirection: "row", alignItems: "center", borderWidth: 1, borderColor: LINE, padding: 14, borderRadius: 12 }}
           >
             <Ionicons name="location" size={22} color={GREEN} />
             <View style={{ flex: 1, marginLeft: 12 }}>
               <Text style={{ fontWeight: "700", fontSize: 14, color: "#111" }}>{item.location}</Text>
               <Text style={{ color: "#6B7280", fontSize: 12, marginTop: 4 }}>
-                {item.lat != null ? "Open directions in Google Maps" : "Address only — seller has not pinned a map point yet"}
+                {item.lat != null ? "Open directions in Google Maps" : "Search this address in Google Maps"}
               </Text>
             </View>
             <Ionicons name="navigate-outline" size={18} color={GREEN} />
@@ -534,10 +603,84 @@ function ListingBody({
         </View>
       ) : null}
 
-      {related.length && !live ? (
-        <View style={{ paddingTop: 22, paddingHorizontal: 16 }}>
-          <Text style={{ fontWeight: "800", fontSize: 16, color: "#111", marginBottom: 10 }}>Similar Products</Text>
-          <ListingGrid items={related} />
+      {(related.length || relatedKeywords.length) && !isOwner ? (
+        <View style={{ paddingTop: 22, paddingBottom: 4, paddingHorizontal: 16 }}>
+          <Text style={{ fontWeight: "900", fontSize: 18, color: "#111827", marginBottom: 10 }}>
+            Similar {meta.title}
+          </Text>
+
+          {relatedKeywords.length ? (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={{ gap: 8, paddingBottom: 12 }}
+            >
+              <PressScale
+                onPress={() => setActiveKeyword(null)}
+                style={{
+                  paddingHorizontal: 12,
+                  paddingVertical: 7,
+                  borderRadius: 999,
+                  backgroundColor: !activeKeyword ? GREEN : "#EEF0F3",
+                }}
+              >
+                <Text style={{ fontWeight: "700", fontSize: 12, color: !activeKeyword ? "#fff" : "#374151" }}>All related</Text>
+              </PressScale>
+              {relatedKeywords.map((kw) => {
+                const on = activeKeyword === kw;
+                return (
+                  <PressScale
+                    key={kw}
+                    onPress={() => setActiveKeyword(on ? null : kw)}
+                    onLongPress={() => openMapSearch(navigation, { q: kw, key: item.key })}
+                    style={{
+                      paddingHorizontal: 12,
+                      paddingVertical: 7,
+                      borderRadius: 999,
+                      borderWidth: 1,
+                      borderColor: on ? GREEN : "#E5E7EB",
+                      backgroundColor: on ? "#E7F6EC" : "#fff",
+                    }}
+                  >
+                    <Text style={{ fontWeight: "700", fontSize: 12, color: on ? GREEN : "#374151" }}>{kw}</Text>
+                  </PressScale>
+                );
+              })}
+            </ScrollView>
+          ) : null}
+
+          {related.length ? (
+            <ListingGrid items={related} />
+          ) : (
+            <View style={{ backgroundColor: "#F3F4F6", borderRadius: 12, padding: 14 }}>
+              <Text style={{ color: "#6B7280", fontSize: 13, textAlign: "center" }}>
+                No matches for “{activeKeyword}”. Try another related keyword.
+              </Text>
+            </View>
+          )}
+
+          <PressScale
+            onPress={() => {
+              if (activeKeyword) {
+                openMapSearch(navigation, { q: activeKeyword, key: item.key });
+                return;
+              }
+              openCategory(navigation, item.key);
+            }}
+            style={{
+              marginTop: 12,
+              alignSelf: "flex-start",
+              borderWidth: 1.5,
+              borderColor: "#2563EB",
+              borderRadius: 8,
+              paddingHorizontal: 12,
+              paddingVertical: 7,
+            }}
+          >
+            <Text style={{ color: "#2563EB", fontWeight: "700", fontSize: 12 }}>
+              {activeKeyword ? `View more “${activeKeyword}”` : `View more ${meta.title}`}
+            </Text>
+          </PressScale>
         </View>
       ) : null}
 

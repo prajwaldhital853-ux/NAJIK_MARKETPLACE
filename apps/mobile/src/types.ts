@@ -32,6 +32,8 @@ export type AppUser = {
   date_joined?: string;
   staff_warning?: string;
   staff_warning_at?: string | null;
+  is_active?: boolean;
+  account_status?: "active" | "blocked" | "deactivated";
 };
 
 export type DealType = "For Sale" | "For Rent";

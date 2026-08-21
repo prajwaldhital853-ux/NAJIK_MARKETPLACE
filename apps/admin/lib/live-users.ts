@@ -6,7 +6,8 @@ export function mapDirectoryUser(row: AppDirectoryUser): User {
   const provider = row.account_type === "provider";
   const kyc = row.verification_status || "none";
   let status: User["status"] = "active";
-  if (!row.is_active) status = "blocked";
+  if (!row.is_active || row.account_status === "blocked") status = "blocked";
+  else if (row.account_status === "deactivated") status = "deactivated";
   else if (kyc === "pending") status = "pending";
   else if (kyc === "verified") status = "verified";
   return {
@@ -23,6 +24,14 @@ export function mapDirectoryUser(row: AppDirectoryUser): User {
     kyc,
     category: provider ? row.service_type || "Provider" : "User",
     joinedAt: row.date_joined,
+    staff_warning: row.staff_warning || "",
+    photo_uri: row.photo_uri,
+    avatar_uri: row.avatar_uri,
+    nagrita_uri: row.nagrita_uri,
+    nagrita_back_uri: row.nagrita_back_uri,
+    nation_card_uri: row.nation_card_uri,
+    other_document_uri: row.other_document_uri,
+    application_id: row.application_id,
   };
 }
 

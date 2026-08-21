@@ -181,13 +181,25 @@ export type AppDirectoryUser = {
   address?: string | null;
   date_joined: string;
   is_active: boolean;
+  account_status?: "active" | "blocked" | "deactivated";
+  staff_warning?: string;
+  staff_warning_at?: string | null;
+  photo_uri?: string | null;
+  avatar_uri?: string | null;
+  nagrita_uri?: string | null;
+  nagrita_back_uri?: string | null;
+  nation_card_uri?: string | null;
+  other_document_uri?: string | null;
 };
 
 export async function listAppUsers() {
   return staffRequest<AppDirectoryUser[]>("/api/admin/users/");
 }
 
-export async function patchAppUser(id: string, body: { is_active?: boolean; status?: string }) {
+export async function patchAppUser(
+  id: string,
+  body: { is_active?: boolean; status?: string; staff_warning?: string; notes?: string },
+) {
   return staffRequest<AppDirectoryUser>(`/api/admin/users/${id}/`, {
     method: "PATCH",
     body: JSON.stringify(body),

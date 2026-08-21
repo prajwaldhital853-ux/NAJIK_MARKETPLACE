@@ -79,13 +79,8 @@ export function ListingsScreen() {
   return (
     <View style={{ flex: 1, backgroundColor: "#F7F8FA" }}>
       <AppHeader />
-      <ScrollView
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-        refreshControl={refreshControl}
-        contentContainerStyle={{ padding: 16, paddingTop: 8, paddingBottom: 28 }}
-      >
-        <View style={{ height: 86, marginBottom: 10, flexDirection: "row", alignItems: "center" }}>
+      <View style={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: 8, backgroundColor: "#F7F8FA", borderBottomWidth: 1, borderBottomColor: "#EEF0F3" }}>
+        <View style={{ height: 86, flexDirection: "row", alignItems: "center" }}>
           <View style={{ flex: 1, minWidth: 0, paddingRight: 6 }}>
             <Text style={{ fontSize: 21, fontWeight: "800", color: colors.navy }}>My Listings</Text>
             <Text style={{ color: "#8A8F98", marginTop: 3, fontSize: 10.5, lineHeight: 14 }}>
@@ -125,11 +120,17 @@ export function ListingsScreen() {
             <Text style={{ color: "#fff", fontWeight: "800", fontSize: 12 }}>Add Listing</Text>
           </PressScale>
         </View>
-
+      </View>
+      <ScrollView
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+        refreshControl={refreshControl}
+        contentContainerStyle={{ padding: 16, paddingTop: 8, paddingBottom: 28 }}
+      >
         {canPost ? (
           <VerifiedBody />
         ) : (
-          <View style={{ marginTop: 16, backgroundColor: colors.orangeSoft, borderRadius: 16, padding: 16, ...shadow.card }}>
+          <View style={{ marginTop: 8, backgroundColor: colors.orangeSoft, borderRadius: 16, padding: 16, ...shadow.card }}>
             <Text style={{ fontWeight: "800", color: colors.navy }}>{pending ? "Verification pending" : "Cannot post yet"}</Text>
             <Text style={{ color: colors.muted, marginTop: 6, fontSize: 13 }}>
               You will see listings here after NAJIK admin verifies your account.

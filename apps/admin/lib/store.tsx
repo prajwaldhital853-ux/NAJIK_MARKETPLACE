@@ -223,8 +223,18 @@ export function AdminStoreProvider({ children }: { children: React.ReactNode }) 
       if (!getStaffRefreshToken()) throw new Error("Sign in with a staff account to update this user.");
       const status = String(data.status || "");
       const row = await patchAppUser(id, {
-        status,
-        is_active: status === "active" ? true : status === "blocked" || status === "deactivated" ? false : undefined,
+        ...(status ? { status } : {}),
+        is_active:
+          status === "active"
+            ? true
+            : status === "blocked" || status === "deactivated"
+              ? false
+              : undefined,
+        ...(typeof data.staff_warning === "string"
+          ? { staff_warning: String(data.staff_warning) }
+          : typeof data.notes === "string"
+            ? { staff_warning: String(data.notes) }
+            : {}),
       });
       const mapped = mapDirectoryUser(row);
       setLiveUsers((prev) => prev.map((user) => (user.id === id ? mapped : user)));

@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { useIsFocused } from "@react-navigation/native";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AppState, Dimensions, Modal, Pressable, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -11,8 +12,10 @@ import { colors, shadow } from "../theme";
 const GREEN = "#1B7D2C";
 const BETWEEN_MS = 320;
 
+/** Admin-published notices — only while buyer/seller Home tab is focused. */
 export function AppNoticeHost() {
   const { user, loading } = useAuth();
+  const isFocused = useIsFocused();
   const [queue, setQueue] = useState<AppNotice[]>([]);
   const [visible, setVisible] = useState(false);
   const dismissed = useRef(new Set<string>());
@@ -46,24 +49,28 @@ export function AppNoticeHost() {
       setQueue([]);
       return;
     }
+  }, [userKey, loading, user]);
+
+  useEffect(() => {
+    if (!user || loading || !isFocused) return;
     void load();
-  }, [userKey, loading, load, user]);
+  }, [user, loading, isFocused, load, userKey]);
 
   useEffect(() => {
     const sub = AppState.addEventListener("change", (state) => {
-      if (state === "active" && user) void load();
+      if (state === "active" && user && isFocused) void load();
     });
     return () => sub.remove();
-  }, [load, user]);
+  }, [load, user, isFocused]);
 
   useEffect(() => {
-    if (!current) {
+    if (!current || !isFocused) {
       setVisible(false);
       return;
     }
     const openTimer = setTimeout(() => setVisible(true), 40);
     return () => clearTimeout(openTimer);
-  }, [current?.id]);
+  }, [current?.id, isFocused]);
 
   useEffect(() => {
     return () => {
@@ -83,7 +90,7 @@ export function AppNoticeHost() {
     }, BETWEEN_MS);
   }
 
-  if (!current) return null;
+  if (!current || !isFocused) return null;
   return <AppNoticeModal key={current.id} notice={current} visible={visible} onDismiss={dismiss} />;
 }
 

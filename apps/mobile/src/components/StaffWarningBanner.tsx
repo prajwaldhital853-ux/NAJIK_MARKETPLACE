@@ -28,8 +28,45 @@ export function StaffWarningCard({ style }: { style?: object }) {
     >
       <Ionicons name="warning" size={22} color="#B45309" style={{ marginTop: 2 }} />
       <View style={{ flex: 1 }}>
-        <Text style={{ fontWeight: "800", color: "#92400E", fontSize: 13 }}>Account warning from NAJIK</Text>
+        <Text style={{ fontWeight: "800", color: "#92400E", fontSize: 13 }}>Message from NAJIK admin</Text>
         <Text style={{ color: "#78350F", marginTop: 4, fontSize: 13, lineHeight: 18 }}>{warning}</Text>
+      </View>
+    </View>
+  );
+}
+
+/** Shown when the account is deactivated or blocked by staff. */
+export function AccountStatusCard({ style }: { style?: object }) {
+  const { user } = useAuth();
+  const status = (user?.account_status || "").toLowerCase();
+  const inactive = user?.is_active === false || status === "deactivated" || status === "blocked";
+  if (!inactive) return null;
+
+  const deactivated = status === "deactivated" || (user?.is_active === false && status !== "blocked");
+  const title = deactivated ? "Account deactivated" : "Account blocked";
+  const body = deactivated
+    ? "NAJIK admin deactivated your account. You cannot post listings, open your ID card, or use marketplace actions until an admin reactivates you."
+    : "NAJIK admin blocked your account. You cannot post listings, open your ID card, or use marketplace actions until an admin restores access.";
+
+  return (
+    <View
+      style={{
+        backgroundColor: "#FEF2F2",
+        borderWidth: 1,
+        borderColor: "#FECACA",
+        borderRadius: 14,
+        padding: 12,
+        flexDirection: "row",
+        gap: 10,
+        marginBottom: 12,
+        ...shadow.card,
+        ...style,
+      }}
+    >
+      <Ionicons name="ban" size={22} color="#B91C1C" style={{ marginTop: 2 }} />
+      <View style={{ flex: 1 }}>
+        <Text style={{ fontWeight: "800", color: "#991B1B", fontSize: 14 }}>{title}</Text>
+        <Text style={{ color: "#7F1D1D", marginTop: 4, fontSize: 13, lineHeight: 18 }}>{body}</Text>
       </View>
     </View>
   );

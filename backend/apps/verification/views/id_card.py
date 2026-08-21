@@ -33,6 +33,12 @@ class ProviderIdCardMeView(APIView):
     allow_inactive = True
 
     def get(self, request):
+        if not request.user.is_active:
+            status_label = getattr(request.user, "account_status", "") or "deactivated"
+            return Response(
+                {"detail": f"Your account is {status_label}. You cannot open your ID card."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         if request.user.account_type != "provider":
             return Response({"detail": "Only service providers have an ID card."}, status=status.HTTP_403_FORBIDDEN)
         card = ensure_provider_id_card(request.user)

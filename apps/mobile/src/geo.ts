@@ -24,6 +24,16 @@ export function mapsDirectionsUrl(point: GeoPoint) {
   return `https://www.google.com/maps/dir/?api=1&destination=${point.lat},${point.lng}`;
 }
 
+/** Open Google Maps centered on a pin (app or browser). */
+export function mapsPlaceUrl(point: GeoPoint, label?: string) {
+  const q = label ? encodeURIComponent(label) : `${point.lat},${point.lng}`;
+  return `https://www.google.com/maps/search/?api=1&query=${q}&query_place_id=&center=${point.lat},${point.lng}`;
+}
+
+export function mapsPinUrl(point: GeoPoint) {
+  return `https://www.google.com/maps?q=${point.lat},${point.lng}`;
+}
+
 export async function reverseGeocode(point: GeoPoint) {
   try {
     const rows = await Location.reverseGeocodeAsync({ latitude: point.lat, longitude: point.lng });

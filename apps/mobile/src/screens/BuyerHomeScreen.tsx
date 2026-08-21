@@ -1,15 +1,16 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
-import { useEffect, useState } from "react";
-import { Dimensions, Image, Text, TextInput, View } from "react-native";
+import { useEffect, useMemo, useState } from "react";
+import { Dimensions, Image, ScrollView, Text, TextInput, View } from "react-native";
 import { AppHeader } from "../components/AppHeader";
 import { ListingGrid } from "../components/ClassifiedCard";
-import { KeyboardScreen, useKeyboardScroll } from "../components/KeyboardScreen";
+import { useAppRefreshControl } from "../components/KeyboardScreen";
+import { MarketplaceSection } from "../components/MarketplaceSection";
 import { PressScale } from "../components/PressScale";
-import { StaffWarningCard } from "../components/StaffWarningBanner";
+import { StaffWarningCard, AccountStatusCard } from "../components/StaffWarningBanner";
 import { useBuyerLocation } from "../context/BuyerLocationContext";
-import { homeCategoryKey, type CatalogItem } from "../data/catalog";
+import { homeCategoryKey, type CatalogItem, type CatalogKey } from "../data/catalog";
 import { listingsToCatalog } from "../data/liveListings";
 import { fetchListingFeed } from "../listingsApi";
 import { subscribeListingsChanged } from "../listingsRefresh";
@@ -36,185 +37,240 @@ const categories: { label: string; icon: keyof typeof Ionicons.glyphMap; bg: str
   { label: "Others", icon: "apps", bg: "#EEF4FF", color: "#1D4ED8" },
 ];
 
+const TREND_CHIPS: { key: string; label: string; catalog?: CatalogKey }[] = [
+  { key: "all", label: "All Products" },
+  { key: "property", label: "Real Estate", catalog: "property" },
+  { key: "vehicles", label: "Automobiles", catalog: "vehicles" },
+  { key: "jobs", label: "Jobs", catalog: "jobs" },
+  { key: "services", label: "Services", catalog: "services" },
+  { key: "used", label: "Used Items", catalog: "used" },
+  { key: "electronics", label: "Electronics", catalog: "electronics" },
+];
+
 export function BuyerHomeScreen() {
+  const navigation = useNavigation<any>();
+  const { place, feedParams } = useBuyerLocation();
   const [query, setQuery] = useState("");
   const [submitted, setSubmitted] = useState("");
+  const [live, setLive] = useState<CatalogItem[]>([]);
+  const [trendChip, setTrendChip] = useState("all");
 
-  return (
-    <View style={{ flex: 1, backgroundColor: "#F7F8FA" }}>
-      <AppHeader showLocation />
-      <KeyboardScreen contentStyle={{ padding: PAD, paddingTop: 10, paddingBottom: 28 }} style={{ backgroundColor: "#F7F8FA" }}>
-        <BuyerHomeBody query={query} setQuery={setQuery} submitted={submitted} setSubmitted={setSubmitted} />
-      </KeyboardScreen>
-    </View>
+  useEffect(() => {
+    const load = () => {
+      void fetchListingFeed({ ...feedParams, q: submitted || undefined })
+        .then((rows) => setLive(listingsToCatalog(rows)))
+        .catch(() => setLive([]));
+    };
+    load();
+    return subscribeListingsChanged(load);
+  }, [submitted, feedParams.place, feedParams.lat, feedParams.lng, feedParams.radius_km]);
+
+  const refreshControl = useAppRefreshControl(async () => {
+    const rows = await fetchListingFeed({ ...feedParams, q: submitted || undefined }).catch(() => []);
+    setLive(listingsToCatalog(rows));
+  });
+
+  const recommended = useMemo(() => {
+    const featured = live.filter((item) => item.badge === "FEATURED" || item.badge === "VERIFIED" || item.verified);
+    return (featured.length ? featured : live).slice(0, 8);
+  }, [live]);
+
+  const verifiedSellers = useMemo(
+    () => live.filter((item) => item.verified || item.badge === "VERIFIED").slice(0, 8),
+    [live],
   );
-}
 
-function BuyerHomeBody({
-  query,
-  setQuery,
-  submitted,
-  setSubmitted,
-}: {
-  query: string;
-  setQuery: (v: string) => void;
-  submitted: string;
-  setSubmitted: (v: string) => void;
-}) {
-  const navigation = useNavigation<any>();
-  const { onInputFocus } = useKeyboardScroll();
-  const { place } = useBuyerLocation();
+  const trending = useMemo(() => {
+    const chip = TREND_CHIPS.find((c) => c.key === trendChip);
+    const pool = chip?.catalog ? live.filter((item) => item.key === chip.catalog || (chip.catalog === "used" && item.key === "electronics")) : live;
+    return pool.slice(0, 10);
+  }, [live, trendChip]);
+
+  const latest = useMemo(() => live, [live]);
 
   function runSearch() {
     setSubmitted(query.trim());
   }
 
   return (
-    <>
-      <StaffWarningCard />
-      <View
-        style={{
-          flexDirection: "row",
-          alignItems: "center",
-          backgroundColor: "#fff",
-          borderRadius: 18,
-          paddingLeft: 14,
-          height: 52,
-          ...shadow.card,
-        }}
-      >
-        <Ionicons name="search" size={18} color="#9AA0A6" />
-        <TextInput
-          value={query}
-          onChangeText={setQuery}
-          onFocus={onInputFocus}
-          placeholder={`Search ${place.source === "all" ? "across Nepal" : `in ${place.label}`}...`}
-          placeholderTextColor="#9AA0A6"
-          returnKeyType="search"
-          onSubmitEditing={runSearch}
-          style={{ flex: 1, marginLeft: 8, fontSize: 13, color: colors.navy }}
-        />
-        <PressScale
-          onPress={runSearch}
+    <View style={{ flex: 1, backgroundColor: "#F7F8FA" }}>
+      <AppHeader showLocation />
+      <View style={{ paddingHorizontal: PAD, paddingTop: 10, paddingBottom: 10, backgroundColor: "#F7F8FA", borderBottomWidth: 1, borderBottomColor: "#EEF0F3" }}>
+        <View
           style={{
-            width: 44,
-            height: 44,
-            borderRadius: 12,
-            backgroundColor: GREEN,
+            flexDirection: "row",
             alignItems: "center",
-            justifyContent: "center",
-            margin: 4,
+            backgroundColor: "#fff",
+            borderRadius: 18,
+            paddingLeft: 14,
+            height: 52,
+            ...shadow.card,
           }}
         >
-          <Ionicons name="search" size={20} color="#fff" />
-        </PressScale>
-      </View>
-
-      <View style={{ flexDirection: "row", flexWrap: "wrap", marginTop: 12, gap: GAP }}>
-        {categories.map((item) => (
+          <Ionicons name="search" size={18} color="#9AA0A6" />
+          <TextInput
+            value={query}
+            onChangeText={setQuery}
+            placeholder={`Search ${place.source === "all" ? "across Nepal" : `in ${place.label}`}...`}
+            placeholderTextColor="#9AA0A6"
+            returnKeyType="search"
+            onSubmitEditing={runSearch}
+            style={{ flex: 1, marginLeft: 8, fontSize: 13, color: colors.navy }}
+          />
           <PressScale
-            key={item.label}
-            onPress={() => openCategory(navigation, homeCategoryKey[item.label] ?? "property")}
+            onPress={runSearch}
             style={{
-              width: TILE,
-              backgroundColor: item.bg,
-              borderRadius: 16,
-              paddingVertical: 14,
-              paddingHorizontal: 2,
+              width: 44,
+              height: 44,
+              borderRadius: 12,
+              backgroundColor: GREEN,
               alignItems: "center",
+              justifyContent: "center",
+              margin: 4,
             }}
           >
-            <Ionicons name={item.icon} size={34} color={item.color} />
-            <Text style={{ fontSize: 10, fontWeight: "700", marginTop: 4, color: "#111827" }} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
-              {item.label}
-            </Text>
+            <Ionicons name="search" size={20} color="#fff" />
           </PressScale>
-        ))}
+        </View>
       </View>
 
-      {!submitted ? (
-        <View style={{ marginTop: 18, height: 156, borderRadius: 18, overflow: "hidden", ...shadow.card }}>
-          <Image source={housePhoto} style={{ position: "absolute", right: 0, top: 0, width: "62%", height: "100%" }} resizeMode="cover" />
-          <LinearGradient
-            colors={[FOREST, FOREST, "rgba(14,74,60,0.55)", "transparent"]}
-            locations={[0, 0.36, 0.58, 0.86]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-            style={{ position: "absolute", left: 0, top: 0, bottom: 0, right: 0 }}
-          />
-          <View style={{ position: "absolute", left: 16, top: 18, right: "36%" }}>
-            <Text style={{ color: "#fff", fontSize: 18, fontWeight: "800", lineHeight: 24 }}>
-              Find the Best{"\n"}
-              <Text style={{ color: "#7CDE6A" }}>Property</Text> Near You
-            </Text>
-            <Text style={{ color: "#D5EDE4", marginTop: 4, fontSize: 12 }}>Trusted. Local. Easy.</Text>
+      <ScrollView
+        refreshControl={refreshControl}
+        contentContainerStyle={{ paddingHorizontal: PAD, paddingTop: 12, paddingBottom: 28 }}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
+        <AccountStatusCard />
+        <StaffWarningCard />
+
+        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: GAP }}>
+          {categories.map((item) => (
             <PressScale
-              onPress={() => openCategory(navigation, "property")}
+              key={item.label}
+              onPress={() => openCategory(navigation, homeCategoryKey[item.label] ?? "property")}
               style={{
-                marginTop: 12,
-                alignSelf: "flex-start",
-                backgroundColor: "#fff",
-                paddingHorizontal: 14,
-                paddingVertical: 8,
-                borderRadius: 20,
-                flexDirection: "row",
+                width: TILE,
+                backgroundColor: item.bg,
+                borderRadius: 16,
+                paddingVertical: 14,
+                paddingHorizontal: 2,
                 alignItems: "center",
-                gap: 4,
               }}
             >
-              <Text style={{ color: FOREST, fontWeight: "800", fontSize: 12 }}>Browse property</Text>
-              <Ionicons name="arrow-forward" size={12} color={FOREST} />
+              <Ionicons name={item.icon} size={34} color={item.color} />
+              <Text style={{ fontSize: 10, fontWeight: "700", marginTop: 4, color: "#111827" }} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
+                {item.label}
+              </Text>
             </PressScale>
-          </View>
+          ))}
         </View>
-      ) : null}
 
-      <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 20, marginBottom: 10 }}>
-        <Text style={{ fontSize: 18, fontWeight: "800", color: colors.navy }}>
-          {submitted ? `Results in ${place.label}` : place.source === "all" ? "Latest listings" : `Nearby in ${place.label}`}
-        </Text>
+        {!submitted ? (
+          <View style={{ marginTop: 18, height: 156, borderRadius: 18, overflow: "hidden", ...shadow.card }}>
+            <Image source={housePhoto} style={{ position: "absolute", right: 0, top: 0, width: "62%", height: "100%" }} resizeMode="cover" />
+            <LinearGradient
+              colors={[FOREST, FOREST, "rgba(14,74,60,0.55)", "transparent"]}
+              locations={[0, 0.36, 0.58, 0.86]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={{ position: "absolute", left: 0, top: 0, bottom: 0, right: 0 }}
+            />
+            <View style={{ position: "absolute", left: 16, top: 18, right: "36%" }}>
+              <Text style={{ color: "#fff", fontSize: 18, fontWeight: "800", lineHeight: 24 }}>
+                Find the Best{"\n"}
+                <Text style={{ color: "#7CDE6A" }}>Property</Text> Near You
+              </Text>
+              <Text style={{ color: "#D5EDE4", marginTop: 4, fontSize: 12 }}>Trusted. Local. Easy.</Text>
+              <PressScale
+                onPress={() => openCategory(navigation, "property")}
+                style={{
+                  marginTop: 12,
+                  alignSelf: "flex-start",
+                  backgroundColor: "#fff",
+                  paddingHorizontal: 14,
+                  paddingVertical: 8,
+                  borderRadius: 20,
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 4,
+                }}
+              >
+                <Text style={{ color: FOREST, fontWeight: "800", fontSize: 12 }}>Browse property</Text>
+                <Ionicons name="arrow-forward" size={12} color={FOREST} />
+              </PressScale>
+            </View>
+          </View>
+        ) : null}
+
         {submitted ? (
-          <PressScale onPress={() => { setQuery(""); setSubmitted(""); }}>
-            <Text style={{ color: GREEN, fontWeight: "700" }}>Clear</Text>
-          </PressScale>
+          <View style={{ marginTop: 16 }}>
+            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+              <Text style={{ fontSize: 18, fontWeight: "800", color: colors.navy }}>Results in {place.label}</Text>
+              <PressScale
+                onPress={() => {
+                  setQuery("");
+                  setSubmitted("");
+                }}
+              >
+                <Text style={{ color: GREEN, fontWeight: "700" }}>Clear</Text>
+              </PressScale>
+            </View>
+            {live.length ? (
+              <ListingGrid items={live} />
+            ) : (
+              <View style={{ backgroundColor: "#fff", borderRadius: 16, padding: 18, ...shadow.card }}>
+                <Text style={{ color: colors.muted, textAlign: "center" }}>
+                  No matches for “{submitted}”. Try a related word like apartment, car, or bike.
+                </Text>
+              </View>
+            )}
+          </View>
         ) : (
-          <PressScale onPress={() => openCategory(navigation, "property")}>
-            <Text style={{ color: GREEN, fontWeight: "700" }}>View all ›</Text>
-          </PressScale>
+          <>
+            <MarketplaceSection
+              title="Recommended"
+              icon="thumbs-up"
+              iconColor="#2563EB"
+              items={recommended}
+              onViewMore={() => openCategory(navigation, "property")}
+              emptyText={live.length ? undefined : place.source === "all" ? "No listings yet." : `No listings in ${place.label} yet.`}
+            />
+
+            <MarketplaceSection
+              title="Trending"
+              icon="stats-chart"
+              iconColor="#2563EB"
+              items={trending}
+              chips={TREND_CHIPS.map(({ key, label }) => ({ key, label }))}
+              activeChip={trendChip}
+              onChip={setTrendChip}
+              onViewMore={() => {
+                const chip = TREND_CHIPS.find((c) => c.key === trendChip);
+                openCategory(navigation, chip?.catalog || "property");
+              }}
+            />
+
+            {verifiedSellers.length ? (
+              <MarketplaceSection
+                title="By verified sellers"
+                icon="checkmark-circle"
+                iconColor="#2563EB"
+                items={verifiedSellers}
+                onViewMore={() => openCategory(navigation, "property")}
+              />
+            ) : null}
+
+            <MarketplaceSection
+              title="Latest Uploads"
+              icon="cloud-upload"
+              iconColor="#111827"
+              items={latest}
+              mode="grid"
+              onViewMore={() => openCategory(navigation, "property")}
+            />
+          </>
         )}
-      </View>
-      <NearbyAds keyword={submitted} />
-    </>
+      </ScrollView>
+    </View>
   );
-}
-
-function NearbyAds({ keyword }: { keyword: string }) {
-  const { feedParams, place } = useBuyerLocation();
-  const [live, setLive] = useState<CatalogItem[]>([]);
-
-  useEffect(() => {
-    const load = () => {
-      void fetchListingFeed({ ...feedParams, q: keyword || undefined })
-        .then((rows) => setLive(listingsToCatalog(rows)))
-        .catch(() => setLive([]));
-    };
-    load();
-    return subscribeListingsChanged(load);
-  }, [keyword, feedParams.place, feedParams.lat, feedParams.lng, feedParams.radius_km]);
-
-  if (!live.length) {
-    return (
-      <View style={{ backgroundColor: "#fff", borderRadius: 16, padding: 18, ...shadow.card }}>
-        <Text style={{ color: colors.muted, textAlign: "center" }}>
-          {keyword
-            ? `No matches for “${keyword}”${place.source === "all" ? "" : ` in ${place.label}`}. Try a related word like apartment, for rent, car, or bike.`
-            : place.source === "all"
-              ? "No listings yet."
-              : `No listings in ${place.label} yet. Choose All Nepal or another place from the pin above.`}
-        </Text>
-      </View>
-    );
-  }
-
-  return <ListingGrid items={live} />;
 }

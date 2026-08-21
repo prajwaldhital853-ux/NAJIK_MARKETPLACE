@@ -1,6 +1,18 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
-import { Alert, Dimensions, Image, Pressable, Share, Text, View } from "react-native";
+import type { RefObject } from "react";
+import {
+  Alert,
+  Dimensions,
+  Image,
+  Pressable,
+  ScrollView,
+  Share,
+  Text,
+  View,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
+} from "react-native";
 import { catalogMeta, listingBlurb, type CatalogItem } from "../data/catalog";
 import { formatDistance } from "../geo";
 import { openListing } from "../navigation/browse";
@@ -110,6 +122,35 @@ export function ListingGrid({ items }: { items: CatalogItem[] }) {
         <ClassifiedGridCard key={item.id} item={item} width={LISTING_CARD_W} />
       ))}
     </View>
+  );
+}
+
+/** Horizontal marketplace rail (Hamro Bazar style). */
+export function ListingRail({
+  items,
+  cardWidth = Math.min(168, LISTING_CARD_W),
+  scrollRef,
+  onScroll,
+}: {
+  items: CatalogItem[];
+  cardWidth?: number;
+  scrollRef?: RefObject<ScrollView | null>;
+  onScroll?: (e: NativeSyntheticEvent<NativeScrollEvent>) => void;
+}) {
+  if (!items.length) return null;
+  return (
+    <ScrollView
+      ref={scrollRef}
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      onScroll={onScroll}
+      scrollEventThrottle={16}
+      contentContainerStyle={{ gap: 10, paddingRight: 4 }}
+    >
+      {items.map((item) => (
+        <ClassifiedGridCard key={item.id} item={item} width={cardWidth} />
+      ))}
+    </ScrollView>
   );
 }
 

@@ -14,7 +14,7 @@ const SessionCtx = createContext<{
   staff: Staff | null;
   ready: boolean;
   apiSession: boolean;
-  login: (email: string, password: string) => Promise<Staff | null>;
+  login: (email: string, password: string) => Promise<Staff>;
   logout: () => void;
 } | null>(null);
 
@@ -94,11 +94,11 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       setStaff(live);
       setApiSession(true);
       return live;
-    } catch {
+    } catch (err) {
       clearStaffTokens();
       setStaff(null);
       setApiSession(false);
-      return null;
+      throw err;
     }
   }, []);
 

@@ -97,7 +97,7 @@ export function SavedScreen() {
   return (
     <View style={{ flex: 1, backgroundColor: "#fff" }}>
       <AppHeader right="bell-chat" />
-      <ScrollView refreshControl={refreshControl} contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: 36 }} showsVerticalScrollIndicator={false}>
+      <View style={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: 10, backgroundColor: "#fff", borderBottomWidth: 1, borderBottomColor: "#EEF0F3" }}>
         <View style={{ flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between" }}>
           <View style={{ flex: 1, paddingRight: 10 }}>
             <Text style={{ fontSize: 26, fontWeight: "800", color: "#111827" }}>Saved Items</Text>
@@ -125,7 +125,6 @@ export function SavedScreen() {
           style={{
             flexDirection: "row",
             marginTop: 16,
-            marginBottom: 14,
             backgroundColor: "#fff",
             borderWidth: 1,
             borderColor: "#E6E8EC",
@@ -154,7 +153,9 @@ export function SavedScreen() {
             );
           })}
         </View>
+      </View>
 
+      <ScrollView refreshControl={refreshControl} contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 36 }} showsVerticalScrollIndicator={false}>
         {list.map((item) => (
           <SavedCard
             key={item.id}

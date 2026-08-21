@@ -506,6 +506,28 @@ export async function updateBranding(payload: {
   });
 }
 
+export type SystemStatusCheck = {
+  id: string;
+  label: string;
+  ok: boolean;
+  status: string;
+  detail: string;
+  href?: string;
+};
+
+export type SystemStatus = {
+  overall: "operational" | "attention" | "problems";
+  label: string;
+  checked_at: string;
+  problem_count: number;
+  checks: SystemStatusCheck[];
+  counts: Record<string, number>;
+};
+
+export async function fetchSystemStatus() {
+  return staffRequest<SystemStatus>("/api/health/status/");
+}
+
 /** @deprecated use updateBranding */
 export async function uploadSignatory(image_uri: string) {
   return updateBranding({ signatory_uri: image_uri });

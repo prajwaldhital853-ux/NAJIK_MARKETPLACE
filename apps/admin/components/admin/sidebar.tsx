@@ -28,6 +28,7 @@ import {
 import { NAV } from "@/lib/nav";
 import { useAdmin } from "@/lib/store";
 import { CountBadge } from "./inbox-list";
+import { OperationalStatus } from "./operational-status";
 
 const ICONS: Record<string, React.ReactNode> = {
   layout: <LayoutDashboard size={14} />,
@@ -161,12 +162,8 @@ export function Sidebar({
           <LifeBuoy size={12} />
           Need help
         </a>
-        <div className="mt-1 flex items-center justify-between px-2 text-[10px] text-faint">
-          <span className="flex items-center gap-1.5">
-            <span className="h-1.5 w-1.5 rounded-full bg-green" />
-            Operational
-          </span>
-          <span>v2.5.0</span>
+        <div className="mt-1 px-0">
+          <OperationalStatus />
         </div>
       </div>
     </aside>

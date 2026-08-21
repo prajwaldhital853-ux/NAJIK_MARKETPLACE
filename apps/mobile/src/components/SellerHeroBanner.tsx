@@ -102,35 +102,37 @@ export function serviceHeroTitle(service?: string) {
   return SERVICE_TITLES[service] || service;
 }
 
-function postedCopy(service?: string) {
+function postedCopy(service?: string, count = 0) {
+  const n = Math.max(0, count);
+  const listingsWord = n === 1 ? "listing" : "listings";
   const value = (service || "").toLowerCase();
   if (value.includes("job")) {
     return {
-      title: "Your job has been posted successfully! 🎉",
-      body: "Your opening is now live and visible to thousands of job seekers.",
+      title: `You have ${n} job ${listingsWord} posted`,
+      body: n ? "Open My Listings to manage openings buyers can apply to." : "",
     };
   }
   if (value.includes("used") || value.includes("market")) {
     return {
-      title: "Your item has been posted successfully! 🎉",
-      body: "Buyers nearby can see it in Used Items Marketplace after admin approval.",
+      title: `You have ${n} item ${listingsWord} posted`,
+      body: n ? "Buyers can see approved items in Used Items Marketplace." : "",
     };
   }
   if (value.includes("vehicle")) {
     return {
-      title: "Your vehicle has been posted successfully! 🎉",
-      body: "Your listing is now live and visible to thousands of potential buyers.",
+      title: `You have ${n} vehicle ${listingsWord} posted`,
+      body: n ? "Approved vehicles stay visible to buyers nearby." : "",
     };
   }
   if (value.includes("local")) {
     return {
-      title: "Your service has been posted successfully! 🎉",
-      body: "Your listing is now live and visible to thousands of potential customers.",
+      title: `You have ${n} service ${listingsWord} posted`,
+      body: n ? "Customers can find your approved services on NAJIK." : "",
     };
   }
   return {
-    title: "Your property has been posted successfully! 🎉",
-    body: "Your listing is now live and visible to thousands of potential customers.",
+    title: `You have ${n} ${listingsWord} posted`,
+    body: n ? "Your approved listings are live for buyers." : "",
   };
 }
 
@@ -144,6 +146,7 @@ type Props = {
   variant?: "home" | "profile";
   location?: string;
   showPosted?: boolean;
+  listingCount?: number;
   onPress?: () => void;
   onCamera?: () => void;
   onViewListing?: () => void;
@@ -158,6 +161,7 @@ export function SellerHeroBanner({
   rejected,
   variant = "home",
   showPosted,
+  listingCount = 0,
   onPress,
   onCamera,
   onViewListing,
@@ -165,7 +169,8 @@ export function SellerHeroBanner({
   const home = variant === "home";
   const scene = serviceHeroPhoto(serviceType);
   const serviceLabel = serviceHeroTitle(serviceType);
-  const posted = postedCopy(serviceType);
+  const posted = postedCopy(serviceType, listingCount);
+  const showSuccessCard = Boolean(showPosted && listingCount > 0);
   const avatar = home ? AVATAR : 52;
   const badge = verified
     ? home
@@ -287,7 +292,7 @@ export function SellerHeroBanner({
         </View>
       </View>
 
-      {showPosted ? (
+      {showSuccessCard ? (
         <View
           style={{
             marginTop: f(0.01, 4),
@@ -317,9 +322,11 @@ export function SellerHeroBanner({
             <Text style={{ fontWeight: "800", color: colors.navy, fontSize: f(0.03, 12) }}>
               {posted.title}
             </Text>
-            <Text style={{ color: colors.textSecondary, fontSize: f(0.025, 10) }}>
-              {posted.body}
-            </Text>
+            {posted.body ? (
+              <Text style={{ color: colors.textSecondary, fontSize: f(0.025, 10) }}>
+                {posted.body}
+              </Text>
+            ) : null}
           </View>
           <PressScale onPress={onViewListing}>
             <View

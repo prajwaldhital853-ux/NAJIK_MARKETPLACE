@@ -144,6 +144,8 @@ class ProviderApplicationMeView(APIView):
         for field in ("full_name", "address", "contact", "service_type"):
             if field in data:
                 edit[field] = data[field]
+        if "profile_data" in data:
+            edit["profile_data"] = data["profile_data"] or {}
         app.pending_edit = edit
         if data.get("nagrita_uri"):
             app.pending_nagrita = data["nagrita_uri"]
@@ -151,6 +153,10 @@ class ProviderApplicationMeView(APIView):
             app.pending_nagrita_back = data["nagrita_back_uri"]
         if data.get("photo_uri"):
             app.pending_photo = data["photo_uri"]
+        if data.get("nation_card_uri"):
+            app.nation_card = data["nation_card_uri"]
+        if data.get("other_document_uri"):
+            app.other_document = data["other_document_uri"]
         app.save()
         return Response(ProviderApplicationSerializer(app, context={"request": request}).data)
 

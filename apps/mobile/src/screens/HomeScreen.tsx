@@ -81,6 +81,7 @@ function SellerHomeScreen() {
           rejected={rejected}
           variant="home"
           showPosted={verified}
+          listingCount={posts.length}
           onPress={() => navigation.jumpTo("Profile")}
           onCamera={() => navigation.jumpTo("Profile")}
           onViewListing={() => navigation.jumpTo("Listings")}

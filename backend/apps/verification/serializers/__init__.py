@@ -233,6 +233,8 @@ def apply_pending_profile(app: ProviderApplication):
     for field in ("full_name", "address", "contact", "service_type"):
         if field in edit and edit[field] is not None:
             setattr(app, field, edit[field])
+    if "profile_data" in edit:
+        app.profile_data = edit.get("profile_data") or {}
     if app.pending_nagrita:
         app.nagrita = app.pending_nagrita
         app.pending_nagrita = ""
@@ -247,6 +249,9 @@ def apply_pending_profile(app: ProviderApplication):
     if app.full_name and app.owner.full_name != app.full_name:
         app.owner.full_name = app.full_name
         app.owner.save(update_fields=["full_name"])
+    if app.address and getattr(app.owner, "address", None) != app.address:
+        app.owner.address = app.address
+        app.owner.save(update_fields=["address"])
     return app
 
 

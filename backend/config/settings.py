@@ -121,6 +121,15 @@ STORAGES = {
 }
 MEDIA_URL = "media/"
 MEDIA_ROOT = Path(env("MEDIA_ROOT", default=str(BASE_DIR / "media")))
+
+# Persist uploads on Cloudinary when CLOUDINARY_URL is set (Render / production).
+CLOUDINARY_URL = env("CLOUDINARY_URL", default="")
+if CLOUDINARY_URL:
+    INSTALLED_APPS = [*INSTALLED_APPS, "cloudinary", "cloudinary_storage"]
+    STORAGES["default"] = {
+        "BACKEND": "cloudinary_storage.storage.MediaCloudinaryStorage",
+    }
+    MEDIA_URL = "/media/"  # cloudinary_storage rewrites .url to CDN
 FILE_UPLOAD_MAX_MEMORY_SIZE = 2 * 1024 * 1024
 DATA_UPLOAD_MAX_MEMORY_SIZE = 12 * 1024 * 1024
 OTP_STUB = env.bool("OTP_STUB", default=True)

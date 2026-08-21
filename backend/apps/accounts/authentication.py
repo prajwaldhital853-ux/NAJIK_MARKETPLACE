@@ -18,9 +18,8 @@ class AppJWTAuthentication(JWTAuthentication):
             raise AuthenticationFailed("Invalid token.", code="invalid_token") from exc
         except InvalidToken as exc:
             raise AuthenticationFailed("Invalid token.", code="invalid_token") from exc
-        if not user.is_active:
-            code = "user_deactivated" if getattr(user, "account_status", "") == "deactivated" else "user_blocked"
-            raise AuthenticationFailed(inactive_auth_error(user), code=code)
+        # Inactive / blocked accounts still authenticate so restricted screens
+        # (ID card, profile me) can work. Views enforce IsAppUser.is_active.
         return user
 
 

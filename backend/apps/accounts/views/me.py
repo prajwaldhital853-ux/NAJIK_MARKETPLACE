@@ -42,6 +42,7 @@ class MePhotoPatchSerializer(serializers.Serializer):
 class MeView(APIView):
     authentication_classes = [AppJWTAuthentication]
     permission_classes = [IsAppUser]
+    allow_inactive = True
 
     def get(self, request):
         user = AppUser.objects.select_related("provider_application").get(pk=request.user.pk)

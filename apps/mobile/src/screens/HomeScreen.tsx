@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { useCallback, useState } from "react";
-import { ScrollView, Text, View } from "react-native";
+import { Alert, ScrollView, Text, View } from "react-native";
 import { AppHeader } from "../components/AppHeader";
 import { AuthImage } from "../components/AuthImage";
 import { useAppRefreshControl } from "../components/KeyboardScreen";
@@ -10,7 +10,7 @@ import { SellerHeroBanner } from "../components/SellerHeroBanner";
 import { ListingAdminNotesCard, StaffWarningCard } from "../components/StaffWarningBanner";
 import { useAuth } from "../context/AuthContext";
 import { isPendingProvider, isProvider, isRejectedProvider, isVerifiedProvider } from "../demo";
-import { fetchMyListings, type ApiListing } from "../listingsApi";
+import { fetchMyListings, deleteMyListing, type ApiListing } from "../listingsApi";
 import { subscribeListingsChanged } from "../listingsRefresh";
 import { openListing } from "../navigation/browse";
 import { colors, shadow } from "../theme";
@@ -119,6 +119,35 @@ function RecentPostCard({ item }: { item: ApiListing }) {
   const priceDigits = String(item.price).replace(/\D/g, "");
   const price = Number(priceDigits);
   const photoUrl = item.photos[0]?.url;
+
+  function openMenu() {
+    Alert.alert(item.title, undefined, [
+      {
+        text: "View details",
+        onPress: () => openListing(navigation, item.id, true),
+      },
+      {
+        text: "Delete listing",
+        style: "destructive",
+        onPress: () => {
+          Alert.alert("Delete listing", `Remove “${item.title}” permanently? This also removes it from the admin panel.`, [
+            { text: "Cancel", style: "cancel" },
+            {
+              text: "Delete",
+              style: "destructive",
+              onPress: () => {
+                void deleteMyListing(item.id).catch((err) =>
+                  Alert.alert("Delete failed", err instanceof Error ? err.message : "Could not delete listing."),
+                );
+              },
+            },
+          ]);
+        },
+      },
+      { text: "Cancel", style: "cancel" },
+    ]);
+  }
+
   return (
     <PressScale
       onPress={() => openListing(navigation, item.id, true)}
@@ -139,13 +168,9 @@ function RecentPostCard({ item }: { item: ApiListing }) {
       <View style={{ flex: 1, paddingLeft: photoUrl ? 12 : 0 }}>
         <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
           <Text style={{ fontWeight: "800", fontSize: 14, flex: 1, color: colors.navy }}>{item.title}</Text>
-          {!photoUrl ? (
-            <View style={{ backgroundColor: pending ? "#F59E0B" : "#1B7D2C", paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6, alignSelf: "flex-start" }}>
-              <Text style={{ color: "#fff", fontSize: 9, fontWeight: "800" }}>{pending ? "PENDING" : "LIVE"}</Text>
-            </View>
-          ) : (
+          <PressScale onPress={openMenu} hitSlop={8}>
             <Ionicons name="ellipsis-vertical" size={16} color={colors.muted} />
-          )}
+          </PressScale>
         </View>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 4, marginTop: 4 }}>
           <Ionicons name="location-outline" size={12} color={colors.muted} />

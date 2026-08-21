@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { useEffect, useMemo, useState } from "react";
-import { Alert, Dimensions, Image, ScrollView, Text, View } from "react-native";
+import { Alert, Dimensions, Modal, Pressable, ScrollView, Text, View } from "react-native";
 import { AppHeader } from "../components/AppHeader";
 import { Avatar } from "../components/Avatar";
 import { useAppRefreshControl } from "../components/KeyboardScreen";
@@ -84,6 +84,7 @@ export function ProfileScreen() {
   const { user, logout } = useAuth();
   const navigation = useNavigation<any>();
   const [editOpen, setEditOpen] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const [activeCount, setActiveCount] = useState(0);
   const [pendingCount, setPendingCount] = useState(0);
   const [myListings, setMyListings] = useState<ApiListing[]>([]);
@@ -142,6 +143,57 @@ export function ProfileScreen() {
     <View style={{ flex: 1, backgroundColor: "#F7F8FA" }}>
       <AppHeader right="bell" />
       <SellerProfileEditModal visible={editOpen} onClose={() => setEditOpen(false)} />
+      <Modal visible={detailsOpen} animationType="slide" transparent onRequestClose={() => setDetailsOpen(false)}>
+        <Pressable style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.45)", justifyContent: "flex-end" }} onPress={() => setDetailsOpen(false)}>
+          <Pressable
+            onPress={(e) => e.stopPropagation()}
+            style={{ backgroundColor: "#fff", borderTopLeftRadius: 18, borderTopRightRadius: 18, maxHeight: "88%", padding: 16, paddingBottom: 28 }}
+          >
+            <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 12 }}>
+              <Text style={{ flex: 1, fontSize: 17, fontWeight: "800", color: colors.navy }}>Full profile</Text>
+              <PressScale onPress={() => setDetailsOpen(false)}>
+                <Ionicons name="close" size={22} color={colors.navy} />
+              </PressScale>
+            </View>
+            <ScrollView showsVerticalScrollIndicator={false}>
+              <DetailRow label="Full name" value={user?.full_name || "—"} />
+              <DetailRow label="Phone" value={user?.phone || "—"} />
+              <DetailRow label="Email" value={user?.email || "—"} />
+              <DetailRow label="Service" value={String(user?.service_type || "—")} />
+              <DetailRow label="Address" value={user?.address || "—"} />
+              <DetailRow label="Contact" value={user?.contact || "—"} />
+              <DetailRow label="Member since" value={memberSince(user?.date_joined)} />
+              <DetailRow label="Account status" value={user?.account_status || (verified ? "active" : pending ? "pending" : rejected ? "rejected" : "—")} />
+              <DetailRow label="KYC" value={user?.verification_status || "—"} />
+              {Object.entries(user?.profile_data || {})
+                .filter(([, value]) => String(value || "").trim())
+                .map(([key, value]) => (
+                  <DetailRow key={key} label={prettyProfileKey(key)} value={String(value)} />
+                ))}
+              {verified || rejected ? (
+                <PressScale
+                  onPress={() => {
+                    setDetailsOpen(false);
+                    openEdit();
+                  }}
+                  style={{ marginTop: 16, backgroundColor: GREEN, borderRadius: 12, paddingVertical: 12, alignItems: "center" }}
+                >
+                  <Text style={{ color: "#fff", fontWeight: "800" }}>Edit profile</Text>
+                </PressScale>
+              ) : null}
+              <PressScale
+                onPress={() => {
+                  setDetailsOpen(false);
+                  openProviderIdCard(navigation);
+                }}
+                style={{ marginTop: 10, borderWidth: 1.5, borderColor: GREEN, borderRadius: 12, paddingVertical: 12, alignItems: "center" }}
+              >
+                <Text style={{ color: GREEN, fontWeight: "800" }}>Open My ID Card</Text>
+              </PressScale>
+            </ScrollView>
+          </Pressable>
+        </Pressable>
+      </Modal>
       <ScrollView refreshControl={refreshControl} contentContainerStyle={{ padding: 16, paddingBottom: 36 }} showsVerticalScrollIndicator={false}>
         <StaffWarningCard />
         <ListingAdminNotesCard listings={myListings} />
@@ -194,23 +246,19 @@ export function ProfileScreen() {
           pending={pending}
           rejected={rejected}
           variant="profile"
-          onPress={openEdit}
+          onPress={() => setDetailsOpen(true)}
           onCamera={openEdit}
         />
 
         <View style={{ marginTop: 14, backgroundColor: "#fff", borderRadius: 16, padding: 14, ...shadow.card }}>
-          <Text style={{ fontWeight: "800", color: colors.navy, marginBottom: 10 }}>Profile details</Text>
-          <DetailRow label="Full name" value={user?.full_name || "—"} />
+          <Text style={{ fontWeight: "800", color: colors.navy, marginBottom: 10 }}>Profile</Text>
+          <DetailRow label="Name" value={user?.full_name || "—"} />
           <DetailRow label="Phone" value={user?.phone || "—"} />
           <DetailRow label="Email" value={user?.email || "—"} />
-          <DetailRow label="Address" value={user?.address || "—"} />
-          <DetailRow label="Contact" value={user?.contact || "—"} />
-          <DetailRow label="Service" value={String(user?.service_type || "—")} />
-          {Object.entries(user?.profile_data || {})
-            .filter(([, value]) => String(value || "").trim())
-            .map(([key, value]) => (
-              <DetailRow key={key} label={prettyProfileKey(key)} value={String(value)} />
-            ))}
+          <DetailRow label="Service type" value={String(user?.service_type || "—")} />
+          <PressScale onPress={() => setDetailsOpen(true)} style={{ marginTop: 10 }}>
+            <Text style={{ color: GREEN, fontWeight: "800", fontSize: 12 }}>Tap profile bar for full details ›</Text>
+          </PressScale>
         </View>
 
         <View style={{ marginTop: 10, backgroundColor: "#0D4A2A", borderRadius: 14, paddingVertical: 12, flexDirection: "row" }}>
@@ -273,6 +321,7 @@ export function ProfileScreen() {
               key={item.title}
               onPress={() => {
                 if (item.page === "idcard") {
+                  // Available for pending, verified, blocked download, and restricted accounts.
                   openProviderIdCard(navigation);
                   return;
                 }

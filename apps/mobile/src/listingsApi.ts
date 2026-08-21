@@ -141,6 +141,11 @@ export async function createListing(payload: ListingWritePayload) {
   return row;
 }
 
+export async function deleteMyListing(id: string) {
+  await withAppAuth((token) => api<void>(`/api/listings/me/${id}/`, { method: "DELETE", token }));
+  emitListingsChanged();
+}
+
 export async function updateListing(id: string, payload: ListingWritePayload) {
   const row = await withAppAuth((token) =>
     api<ApiListing>(`/api/listings/me/${id}/`, {

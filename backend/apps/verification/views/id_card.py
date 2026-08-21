@@ -30,6 +30,7 @@ def _qr_png_response(data: str) -> HttpResponse:
 class ProviderIdCardMeView(APIView):
     authentication_classes = [AppJWTAuthentication]
     permission_classes = [IsAppUser]
+    allow_inactive = True
 
     def get(self, request):
         if request.user.account_type != "provider":
@@ -53,6 +54,7 @@ class ProviderIdCardMeView(APIView):
 class ProviderIdCardMeQrView(APIView):
     authentication_classes = [AppJWTAuthentication]
     permission_classes = [IsAppUser]
+    allow_inactive = True
 
     def get(self, request):
         if request.user.account_type != "provider":
@@ -65,6 +67,7 @@ class ProviderIdCardMeQrView(APIView):
 class ProviderIdCardMePrintView(APIView):
     authentication_classes = [AppJWTAuthentication]
     permission_classes = [IsAppUser]
+    allow_inactive = True
 
     def get(self, request):
         if request.user.account_type != "provider":

@@ -8,7 +8,7 @@ import { useAppRefreshControl } from "../components/KeyboardScreen";
 import { PressScale } from "../components/PressScale";
 import { useAuth } from "../context/AuthContext";
 import { canPostServices, isPendingProvider } from "../demo";
-import { fetchMyListings, type ApiListing } from "../listingsApi";
+import { fetchMyListings, deleteMyListing, type ApiListing } from "../listingsApi";
 import { subscribeListingsChanged } from "../listingsRefresh";
 import { openListing, openSellerPage } from "../navigation/browse";
 import { colors, shadow } from "../theme";
@@ -344,6 +344,20 @@ function VerifiedBody() {
                   compact
                   onOpen={() => openListing(navigation, item.id, true)}
                   onPromote={() => openSellerPage(navigation, "promotions")}
+                  onDelete={() => {
+                    Alert.alert("Delete listing", `Remove “${item.title}” permanently? This also removes it from the admin panel.`, [
+                      { text: "Cancel", style: "cancel" },
+                      {
+                        text: "Delete",
+                        style: "destructive",
+                        onPress: () => {
+                          void deleteMyListing(item.id).catch((err) =>
+                            Alert.alert("Delete failed", err instanceof Error ? err.message : "Could not delete listing."),
+                          );
+                        },
+                      },
+                    ]);
+                  }}
                 />
               </View>
             ))}
@@ -355,6 +369,20 @@ function VerifiedBody() {
               item={item}
               onOpen={() => openListing(navigation, item.id, true)}
               onPromote={() => openSellerPage(navigation, "promotions")}
+              onDelete={() => {
+                Alert.alert("Delete listing", `Remove “${item.title}” permanently? This also removes it from the admin panel.`, [
+                  { text: "Cancel", style: "cancel" },
+                  {
+                    text: "Delete",
+                    style: "destructive",
+                    onPress: () => {
+                      void deleteMyListing(item.id).catch((err) =>
+                        Alert.alert("Delete failed", err instanceof Error ? err.message : "Could not delete listing."),
+                      );
+                    },
+                  },
+                ]);
+              }}
             />
           ))
         )
@@ -482,11 +510,13 @@ function ListingManageCard({
   item,
   onOpen,
   onPromote,
+  onDelete,
   compact,
 }: {
   item: ApiListing;
   onOpen: () => void;
   onPromote: () => void;
+  onDelete: () => void;
   compact?: boolean;
 }) {
   const pending = item.status === "pending" || item.status === "draft";
@@ -622,9 +652,10 @@ function ListingManageCard({
             </PressScale>
             <PressScale
               onPress={() =>
-                Alert.alert(item.title, pending ? "Hidden from buyers until admin approval." : "Promote or share this listing.", [
+                Alert.alert(item.title, undefined, [
                   { text: "Promote", onPress: onPromote },
-                  { text: "Close" },
+                  { text: "Delete listing", style: "destructive", onPress: onDelete },
+                  { text: "Cancel", style: "cancel" },
                 ])
               }
             >

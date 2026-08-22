@@ -205,6 +205,9 @@ class ChatThreadSerializer(serializers.ModelSerializer):
         listing = obj.listing
         if not listing:
             return ""
+        owner = listing.owner
+        if getattr(owner, "hide_phone_on_ads", False) or not getattr(owner, "allow_buyer_calls", True):
+            return ""
         return listing.contact_phone or ""
 
     def get_last_message(self, obj):

@@ -35,6 +35,7 @@ class ProviderApplicationSerializer(serializers.ModelSerializer):
     pending_nagrita_uri = serializers.SerializerMethodField()
     pending_nagrita_back_uri = serializers.SerializerMethodField()
     has_pending_edit = serializers.SerializerMethodField()
+    membership_plan_name = serializers.SerializerMethodField()
     owner_id = serializers.UUIDField(source="owner.id", read_only=True)
     owner_email = serializers.EmailField(source="owner.email", read_only=True, allow_null=True)
     owner_phone = serializers.CharField(source="owner.phone", read_only=True, allow_null=True, allow_blank=True)
@@ -65,6 +66,9 @@ class ProviderApplicationSerializer(serializers.ModelSerializer):
             "nation_card_uri",
             "other_document_uri",
             "profile_data",
+            "membership_plan_id",
+            "membership_fee_label",
+            "membership_plan_name",
             "rejection_note",
             "pending_photo_uri",
             "pending_nagrita_uri",
@@ -112,6 +116,11 @@ class ProviderApplicationSerializer(serializers.ModelSerializer):
 
     def get_has_pending_edit(self, obj):
         return obj.has_pending_profile_edit()
+
+    def get_membership_plan_name(self, obj):
+        if obj.membership_plan_id:
+            return obj.membership_plan.name
+        return ""
 
     def _file_uri(self, obj, kind):
         request = self.context.get("request")
@@ -177,9 +186,17 @@ class ProviderApplicationStatusSerializer(serializers.Serializer):
             ProviderApplication.STATUS_PENDING,
             ProviderApplication.STATUS_VERIFIED,
             ProviderApplication.STATUS_REJECTED,
-        )
+        ),
+        required=False,
     )
     rejection_note = serializers.CharField(required=False, allow_blank=True, max_length=1000)
+    membership_plan_id = serializers.UUIDField(required=False, allow_null=True)
+    membership_fee_label = serializers.CharField(required=False, allow_blank=True, max_length=40)
+
+    def validate(self, attrs):
+        if not attrs.get("status") and "membership_plan_id" not in self.initial_data and "membership_fee_label" not in self.initial_data:
+            raise serializers.ValidationError("Provide status or membership fields.")
+        return attrs
 
 
 class ProviderProfileEditSerializer(serializers.Serializer):
@@ -255,6 +272,16 @@ def apply_pending_profile(app: ProviderApplication):
     return app
 
 
+def membership_fee_label_for(app) -> str:
+    if not app:
+        return ""
+    if (app.membership_fee_label or "").strip():
+        return app.membership_fee_label.strip()
+    if app.membership_plan_id and app.membership_plan:
+        return app.membership_plan.price_label or ""
+    return ""
+
+
 def provider_id_card_payload(card, request=None, *, for_staff=False):
     from apps.core.views.branding import card_branding_fields
 
@@ -295,6 +322,7 @@ def provider_id_card_payload(card, request=None, *, for_staff=False):
         "category": (app.service_type if app else "") or "",
         "phone": (app.phone if app else None) or owner.phone or "",
         "email": (app.email if app else None) or owner.email or "",
+        "membership_fee_label": membership_fee_label_for(app),
         "joined_on": joined,
         "kyc_status": app.status if app else "none",
         "is_verified": bool(app and app.status == "verified"),

@@ -148,6 +148,7 @@ export function ProviderRegisterScreen() {
 
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [referralCode, setReferralCode] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [dateField, setDateField] = useState<DateFieldKey | null>(null);
@@ -429,6 +430,7 @@ export function ProviderRegisterScreen() {
         nation_card_uri: nationCard,
         other_document_uri: otherDocument || undefined,
         profile_data,
+        referral_code: referralCode.trim() || undefined,
       });
       await requestGuestOtp(cleanPhone);
       navigation.navigate("ProviderOtp");
@@ -964,6 +966,16 @@ export function ProviderRegisterScreen() {
               onSuffixPress={() => setShowConfirmPassword((value) => !value)}
             />
             <PasswordRules password={password} />
+            <RegField
+              fieldKey="password"
+              invalid={false}
+              onBindRef={bindFieldRef}
+              icon="gift-outline"
+              placeholder="Friend's invite code (optional)"
+              value={referralCode}
+              onChangeText={setReferralCode}
+              autoCapitalize="characters"
+            />
           </>
         ) : null}
       </KeyboardScreen>

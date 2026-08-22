@@ -402,7 +402,7 @@ class StaffListingDetailView(APIView):
             listing.status = next_status
             listing.admin_reason = reason
             listing.reviewed_at = timezone.now()
-            listing.is_promoted = listing.status == Listing.STATUS_APPROVED and listing.promote_requested
+            listing.is_promoted = False
             if next_status == Listing.STATUS_APPROVED:
                 listing.pending_edit = {}
             listing.save(update_fields=["status", "admin_reason", "reviewed_at", "is_promoted", "pending_edit", "updated_at"])
@@ -473,3 +473,36 @@ class StaffUrgentListingListView(APIView):
         expire_urgent_listings()
         items = listing_queryset().filter(active_urgent_filter()).order_by("urgent_ends_at")
         return Response(ListingSerializer(items, many=True, context={"request": request}).data)
+
+
+class StaffPromoteListingListView(APIView):
+    authentication_classes = [StaffJWTAuthentication]
+    permission_classes = [IsStaffUser]
+
+    def get(self, request):
+        items = (
+            listing_queryset()
+            .filter(status=Listing.STATUS_APPROVED, promote_requested=True, is_promoted=False)
+            .order_by("-updated_at")
+        )
+        return Response(ListingSerializer(items, many=True, context={"request": request}).data)
+
+
+class StaffListingPromoteView(APIView):
+    authentication_classes = [StaffJWTAuthentication]
+    permission_classes = [IsStaffUser]
+
+    def post(self, request, pk):
+        listing = get_object_or_404(Listing, pk=pk)
+        if request.data.get("remove"):
+            listing.is_promoted = False
+            listing.promote_requested = False
+            listing.save(update_fields=["is_promoted", "promote_requested", "updated_at"])
+            listing = listing_queryset().get(pk=listing.pk)
+            return Response(ListingSerializer(listing, context={"request": request}).data)
+        if listing.status != Listing.STATUS_APPROVED:
+            return Response({"detail": "Only approved listings can be featured."}, status=status.HTTP_400_BAD_REQUEST)
+        listing.is_promoted = True
+        listing.save(update_fields=["is_promoted", "updated_at"])
+        listing = listing_queryset().get(pk=listing.pk)
+        return Response(ListingSerializer(listing, context={"request": request}).data)

@@ -160,6 +160,9 @@ function FrontCard({ card }: { card: ProviderIdCard }) {
         <DetailLine icon={<Briefcase size={14} />} label="Category" value={card.category || "—"} />
         <DetailLine icon={<Phone size={14} />} label="Phone" value={phoneLabel(card.phone)} />
         <DetailLine icon={<Mail size={14} />} label="Email" value={card.email || "—"} />
+        {card.membership_fee_label ? (
+          <DetailLine icon={<Briefcase size={14} />} label="Plan fee" value={card.membership_fee_label} />
+        ) : null}
         <DetailLine icon={<Calendar size={14} />} label="Joined On" value={joinedLabel(card.joined_on)} />
       </div>
 

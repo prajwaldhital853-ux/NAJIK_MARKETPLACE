@@ -61,6 +61,9 @@ class AppUser(AbstractBaseUser, PermissionsMixin):
     account_status = models.CharField(max_length=16, choices=STATUS_CHOICES, default=STATUS_ACTIVE)
     staff_warning = models.TextField(blank=True, default="")
     staff_warning_at = models.DateTimeField(null=True, blank=True)
+    allow_buyer_calls = models.BooleanField(default=True)
+    hide_phone_on_ads = models.BooleanField(default=False)
+    referral_code = models.CharField(max_length=32, unique=True, null=True, blank=True, db_index=True)
 
     objects = AppUserManager()
 

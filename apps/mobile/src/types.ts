@@ -34,6 +34,8 @@ export type AppUser = {
   staff_warning_at?: string | null;
   is_active?: boolean;
   account_status?: "active" | "blocked" | "deactivated";
+  allow_buyer_calls?: boolean;
+  hide_phone_on_ads?: boolean;
 };
 
 export type DealType = "For Sale" | "For Rent";

@@ -1,11 +1,12 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Alert, Image, Linking, Pressable, ScrollView, Share, Switch, Text, TextInput, View } from "react-native";
 import { AppHeader } from "../components/AppHeader";
 import { KeyboardScreen, useKeyboardScroll } from "../components/KeyboardScreen";
 import { PressScale } from "../components/PressScale";
 import { SellerProfileEditModal } from "../components/SellerProfileEditModal";
+import { updateProviderPrivacySettings } from "../authApi";
 import { useAuth } from "../context/AuthContext";
 import { useInbox } from "../context/InboxContext";
 import { BookingsBody } from "./BookingsScreen";
@@ -24,6 +25,7 @@ import {
 } from "../data/sellerHub";
 import { ChatInboxList } from "./ChatInboxScreen";
 import { openChatThread, openListing } from "../navigation/browse";
+import { fetchReferEarnMe } from "../referralsApi";
 import { colors, shadow } from "../theme";
 
 const GREEN = "#1B7D2C";
@@ -582,11 +584,25 @@ function MessagesBody() {
 }
 
 function SettingsBody() {
-  const { user } = useAuth();
-  const [call, setCall] = useState(true);
+  const { user, refreshVerification } = useAuth();
+  const [call, setCall] = useState(Boolean(user?.allow_buyer_calls ?? true));
   const [lead, setLead] = useState(true);
-  const [hide, setHide] = useState(false);
+  const [hide, setHide] = useState(Boolean(user?.hide_phone_on_ads ?? false));
   const [editOpen, setEditOpen] = useState(false);
+
+  useEffect(() => {
+    setCall(Boolean(user?.allow_buyer_calls ?? true));
+    setHide(Boolean(user?.hide_phone_on_ads ?? false));
+  }, [user?.allow_buyer_calls, user?.hide_phone_on_ads]);
+
+  async function savePrivacy(patch: { allow_buyer_calls?: boolean; hide_phone_on_ads?: boolean }) {
+    try {
+      await updateProviderPrivacySettings(patch);
+      await refreshVerification();
+    } catch {
+      Alert.alert("Settings", "Could not save phone privacy settings.");
+    }
+  }
 
   return (
     <>
@@ -608,8 +624,24 @@ function SettingsBody() {
       <Text style={{ fontWeight: "800", marginHorizontal: 16 }}>Alerts & privacy</Text>
       <View style={{ margin: 16, marginTop: 8, backgroundColor: "#fff", borderRadius: 18, padding: 6, ...shadow.card }}>
         <ToggleRow icon="notifications-outline" title="Lead alerts" value={lead} onChange={setLead} />
-        <ToggleRow icon="call" title="Allow buyer calls" value={call} onChange={setCall} />
-        <ToggleRow icon="eye-off-outline" title="Hide number on ads" value={hide} onChange={setHide} />
+        <ToggleRow
+          icon="call"
+          title="Allow buyer calls"
+          value={call}
+          onChange={(v) => {
+            setCall(v);
+            void savePrivacy({ allow_buyer_calls: v });
+          }}
+        />
+        <ToggleRow
+          icon="eye-off-outline"
+          title="Hide number on ads"
+          value={hide}
+          onChange={(v) => {
+            setHide(v);
+            void savePrivacy({ hide_phone_on_ads: v });
+          }}
+        />
         <SettingRow icon="language-outline" title="Language" value="English" />
         <SettingRow icon="moon-outline" title="Appearance" value="Light" last />
       </View>
@@ -672,19 +704,31 @@ function HelpBody() {
 }
 
 function InviteBody() {
-  const code = "NAJIK-SUNIL";
-  const friends = [
-    { n: "Ramesh", s: "Joined · posted" },
-    { n: "Sita", s: "Joined" },
-    { n: "Bikash", s: "Code used" },
-    { n: "Anita", s: "Pending" },
-  ];
+  const [data, setData] = useState<Awaited<ReturnType<typeof fetchReferEarnMe>> | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    void fetchReferEarnMe()
+      .then(setData)
+      .catch(() => setData(null))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const code = data?.invite_code || "—";
+  const description = data?.description || "Share your code. Earn when friends join and post their first live listing.";
+  const stats = data?.stats;
+  const friends = data?.recent || [];
+
   return (
     <>
       <QuickRow
         items={[
           { icon: "copy-outline", label: "Copy", onPress: () => Alert.alert("Copied", code) },
-          { icon: "logo-whatsapp", label: "WhatsApp", onPress: () => void Share.share({ message: `Join NAJIK with ${code}` }) },
+          {
+            icon: "logo-whatsapp",
+            label: "WhatsApp",
+            onPress: () => void Share.share({ message: `Join NAJIK as a service provider with my code ${code}` }),
+          },
           { icon: "chatbubble-outline", label: "SMS", onPress: () => Alert.alert("SMS", "Demo share.") },
           { icon: "qr-code-outline", label: "QR", onPress: () => Alert.alert("QR", "Show this code at your shop.") },
         ]}
@@ -692,18 +736,18 @@ function InviteBody() {
       <View style={{ marginHorizontal: 16, marginTop: 12, backgroundColor: "#fff", borderRadius: 16, padding: 14, ...shadow.card }}>
         <Text style={{ color: "#6B7280", fontWeight: "700", fontSize: 12 }}>Your invite code</Text>
         <View style={{ flexDirection: "row", alignItems: "center", marginTop: 6 }}>
-          <Text style={{ flex: 1, fontSize: 22, fontWeight: "800", letterSpacing: 1 }}>{code}</Text>
+          <Text style={{ flex: 1, fontSize: 22, fontWeight: "800", letterSpacing: 1 }}>{loading ? "…" : code}</Text>
           <PressScale onPress={() => Alert.alert("Copied", code)} style={{ backgroundColor: GREEN, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10 }}>
             <Text style={{ color: "#fff", fontWeight: "800", fontSize: 12 }}>Copy</Text>
           </PressScale>
         </View>
-        <Text style={{ color: "#6B7280", marginTop: 8, fontSize: 12, lineHeight: 18 }}>Friends who join as providers earn you Rs. 200 after their first listing.</Text>
+        <Text style={{ color: "#6B7280", marginTop: 8, fontSize: 12, lineHeight: 18 }}>{description}</Text>
       </View>
       <StatStrip
         items={[
-          { n: "12", l: "Invites sent" },
-          { n: "4", l: "Joined" },
-          { n: "Rs. 800", l: "Earned" },
+          { n: String(stats?.invites_sent ?? 0), l: "Invites sent" },
+          { n: String(stats?.joined ?? 0), l: "Joined" },
+          { n: stats?.earned_total_label ?? "Rs. 0", l: "Earned" },
         ]}
       />
       <Text style={{ fontWeight: "800", marginHorizontal: 16, marginTop: 18 }}>How it works</Text>
@@ -722,16 +766,21 @@ function InviteBody() {
         ))}
       </View>
       <Text style={{ fontWeight: "800", marginHorizontal: 16, marginTop: 18 }}>Recent invites</Text>
+      {!loading && friends.length === 0 ? (
+        <Text style={{ color: "#6B7280", marginHorizontal: 16, marginTop: 10, fontSize: 13 }}>No invites yet — share your code to start earning.</Text>
+      ) : null}
       {friends.map((row) => (
-        <View key={row.n} style={{ marginHorizontal: 16, marginTop: 10, backgroundColor: "#fff", borderRadius: 14, padding: 12, flexDirection: "row", alignItems: "center", ...shadow.card }}>
+        <View key={row.id} style={{ marginHorizontal: 16, marginTop: 10, backgroundColor: "#fff", borderRadius: 14, padding: 12, flexDirection: "row", alignItems: "center", ...shadow.card }}>
           <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: "#E7F6EC", alignItems: "center", justifyContent: "center" }}>
-            <Text style={{ fontWeight: "800", color: GREEN }}>{row.n[0]}</Text>
+            <Text style={{ fontWeight: "800", color: GREEN }}>{row.name[0] || "?"}</Text>
           </View>
           <View style={{ flex: 1, marginLeft: 10 }}>
-            <Text style={{ fontWeight: "800", fontSize: 13 }}>{row.n}</Text>
-            <Text style={{ color: "#6B7280", fontSize: 11, marginTop: 2 }}>{row.s}</Text>
+            <Text style={{ fontWeight: "800", fontSize: 13 }}>{row.name}</Text>
+            <Text style={{ color: "#6B7280", fontSize: 11, marginTop: 2 }}>{row.status_label}</Text>
           </View>
-          <Text style={{ color: GREEN, fontWeight: "800", fontSize: 12 }}>{row.s === "Pending" ? "—" : "Rs. 200"}</Text>
+          <Text style={{ color: GREEN, fontWeight: "800", fontSize: 12 }}>
+            {row.status === "earned" ? row.reward_label : "—"}
+          </Text>
         </View>
       ))}
     </>

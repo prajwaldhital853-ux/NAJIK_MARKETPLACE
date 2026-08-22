@@ -6,6 +6,9 @@ import { Btn, Field, StatusBadge, inputClass } from "@/components/admin/ui";
 import { useSession } from "@/lib/session";
 import { useAdmin } from "@/lib/store";
 import { UrgentSellAdminPanel } from "@/components/admin/urgent-sell-admin-panel";
+import { PromotionRequestsPanel } from "@/components/admin/promotion-requests-panel";
+import { ProviderLedgerPanel, ProviderPlansPanel } from "@/components/admin/provider-plans-panel";
+import { ReferEarnAdminPanel } from "@/components/admin/refer-earn-admin-panel";
 import {
   createHomeBannerSlide,
   deleteHomeBannerSlide,
@@ -196,6 +199,10 @@ export default function GeneralAppControlPage() {
       </section>
 
       <UrgentSellAdminPanel />
+      <PromotionRequestsPanel />
+      <ProviderPlansPanel />
+      <ProviderLedgerPanel />
+      <ReferEarnAdminPanel />
     </div>
   );
 }

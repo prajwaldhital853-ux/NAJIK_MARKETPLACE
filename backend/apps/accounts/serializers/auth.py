@@ -125,6 +125,8 @@ class AppUserPublicSerializer(serializers.ModelSerializer):
             "date_joined",
             "staff_warning",
             "staff_warning_at",
+            "allow_buyer_calls",
+            "hide_phone_on_ads",
             "is_active",
             "account_status",
         )

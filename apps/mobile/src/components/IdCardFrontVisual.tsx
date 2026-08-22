@@ -101,6 +101,7 @@ export type IdCardFrontData = {
   qr_uri?: string | null;
   public_qr_uri?: string | null;
   signature_uri?: string | null;
+  membership_fee_label?: string;
   branding_updated_at?: string | null;
 };
 
@@ -191,6 +192,9 @@ export function IdCardFrontVisual({
         <DetailRow icon="briefcase" label="Category" value={card.category || "—"} />
         <DetailRow icon="call" label="Phone" value={formatPhone(card.phone)} />
         <DetailRow icon="mail" label="Email" value={card.email || "—"} />
+        {card.membership_fee_label ? (
+          <DetailRow icon="cash" label="Plan fee" value={card.membership_fee_label} />
+        ) : null}
         <DetailRow icon="calendar" label="Joined On" value={formatJoined(card.joined_on)} />
       </View>
 

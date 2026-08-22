@@ -30,6 +30,7 @@ export type ProviderIdCard = {
   emergency_email?: string;
   website?: string;
   branding_updated_at?: string | null;
+  membership_fee_label?: string;
   created_at: string;
 };
 

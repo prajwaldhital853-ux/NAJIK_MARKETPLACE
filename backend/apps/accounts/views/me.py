@@ -21,6 +21,8 @@ class MePhotoPatchSerializer(serializers.Serializer):
     full_name = serializers.CharField(required=False, allow_blank=True, max_length=150)
     phone = serializers.CharField(required=False, allow_blank=True, max_length=15)
     address = serializers.CharField(required=False, allow_blank=True, max_length=255)
+    allow_buyer_calls = serializers.BooleanField(required=False)
+    hide_phone_on_ads = serializers.BooleanField(required=False)
 
     def validate_photo_uri(self, value):
         return file_from_data_uri(value, "avatar")
@@ -34,7 +36,8 @@ class MePhotoPatchSerializer(serializers.Serializer):
         return phone
 
     def validate(self, attrs):
-        if not any(key in self.initial_data for key in ("photo_uri", "full_name", "phone", "address")):
+        keys = ("photo_uri", "full_name", "phone", "address", "allow_buyer_calls", "hide_phone_on_ads")
+        if not any(key in self.initial_data for key in keys):
             raise serializers.ValidationError("Nothing to update.")
         return attrs
 
@@ -76,6 +79,12 @@ class MeView(APIView):
                     return Response({"detail": identity_taken_message(existing, "phone")}, status=status.HTTP_400_BAD_REQUEST)
                 user.phone = phone
                 updates.append("phone")
+        if "allow_buyer_calls" in data:
+            user.allow_buyer_calls = bool(data.get("allow_buyer_calls"))
+            updates.append("allow_buyer_calls")
+        if "hide_phone_on_ads" in data:
+            user.hide_phone_on_ads = bool(data.get("hide_phone_on_ads"))
+            updates.append("hide_phone_on_ads")
         if not updates:
             return Response({"detail": "Nothing to update."}, status=status.HTTP_400_BAD_REQUEST)
         user.save(update_fields=updates)

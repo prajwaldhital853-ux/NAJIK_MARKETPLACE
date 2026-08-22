@@ -159,6 +159,7 @@ export async function completeProviderRegister(payload: {
   nation_card_uri: string;
   other_document_uri?: string;
   profile_data?: Record<string, string>;
+  referral_code?: string;
 }) {
   const data = await api<AuthPayload>("/api/auth/register/provider/complete/", {
     method: "POST",
@@ -207,6 +208,19 @@ export async function updateBuyerPhoto(photo_uri: string) {
       method: "PATCH",
       token,
       body: JSON.stringify({ photo_uri }),
+    }),
+  );
+}
+
+export async function updateProviderPrivacySettings(payload: {
+  allow_buyer_calls?: boolean;
+  hide_phone_on_ads?: boolean;
+}) {
+  return withAppAuth((token) =>
+    api<AppUser>("/api/auth/me/", {
+      method: "PATCH",
+      token,
+      body: JSON.stringify(payload),
     }),
   );
 }

@@ -7,7 +7,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.core.models import HomeBannerSlide
+from apps.core.models import HomeBannerSlide, ProviderLedgerEntry, ProviderPlan
 from apps.staff.authentication import StaffJWTAuthentication
 from apps.staff.permissions import IsStaffUser
 from apps.verification.serializers import file_from_data_uri
@@ -158,3 +158,138 @@ class StaffHomeBannerDetailView(APIView):
             slide.image.delete(save=False)
         slide.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+def plan_payload(plan: ProviderPlan) -> dict:
+    return {
+        "id": str(plan.id),
+        "name": plan.name,
+        "price_label": plan.price_label,
+        "description": plan.description,
+        "sort_order": plan.sort_order,
+        "is_active": plan.is_active,
+        "created_at": plan.created_at,
+        "updated_at": plan.updated_at,
+    }
+
+
+class PublicProviderPlansView(APIView):
+    authentication_classes = []
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        plans = ProviderPlan.objects.filter(is_active=True)
+        return Response([plan_payload(plan) for plan in plans])
+
+
+class StaffProviderPlanListCreateView(APIView):
+    authentication_classes = [StaffJWTAuthentication]
+    permission_classes = [IsStaffUser]
+
+    def get(self, request):
+        plans = ProviderPlan.objects.all()
+        return Response([plan_payload(plan) for plan in plans])
+
+    def post(self, request):
+        name = (request.data.get("name") or "").strip()
+        price_label = (request.data.get("price_label") or "").strip()
+        if not name or not price_label:
+            return Response({"detail": "name and price_label are required."}, status=status.HTTP_400_BAD_REQUEST)
+        description = (request.data.get("description") or "").strip()
+        sort_order = request.data.get("sort_order")
+        try:
+            sort_order = int(sort_order) if sort_order is not None else 0
+        except (TypeError, ValueError):
+            sort_order = 0
+        plan = ProviderPlan.objects.create(
+            name=name,
+            price_label=price_label,
+            description=description,
+            sort_order=max(0, sort_order),
+            is_active=bool(request.data.get("is_active", True)),
+        )
+        return Response(plan_payload(plan), status=status.HTTP_201_CREATED)
+
+
+class StaffProviderPlanDetailView(APIView):
+    authentication_classes = [StaffJWTAuthentication]
+    permission_classes = [IsStaffUser]
+
+    def patch(self, request, pk):
+        plan = ProviderPlan.objects.filter(pk=pk).first()
+        if not plan:
+            return Response({"detail": "Plan not found."}, status=status.HTTP_404_NOT_FOUND)
+        if "name" in request.data:
+            plan.name = (request.data.get("name") or plan.name).strip()
+        if "price_label" in request.data:
+            plan.price_label = (request.data.get("price_label") or plan.price_label).strip()
+        if "description" in request.data:
+            plan.description = (request.data.get("description") or "").strip()
+        if "sort_order" in request.data:
+            try:
+                plan.sort_order = max(0, int(request.data.get("sort_order")))
+            except (TypeError, ValueError):
+                pass
+        if "is_active" in request.data:
+            plan.is_active = bool(request.data.get("is_active"))
+        plan.save()
+        return Response(plan_payload(plan))
+
+    def delete(self, request, pk):
+        plan = ProviderPlan.objects.filter(pk=pk).first()
+        if not plan:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+        plan.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+def ledger_payload(entry: ProviderLedgerEntry) -> dict:
+    return {
+        "id": str(entry.id),
+        "provider_id": str(entry.provider_id),
+        "provider_name": entry.provider.full_name or "",
+        "kind": entry.kind,
+        "title": entry.title,
+        "amount_label": entry.amount_label,
+        "note": entry.note,
+        "created_at": entry.created_at,
+        "created_by": str(entry.created_by_id) if entry.created_by_id else None,
+    }
+
+
+class StaffProviderLedgerListCreateView(APIView):
+    authentication_classes = [StaffJWTAuthentication]
+    permission_classes = [IsStaffUser]
+
+    def get(self, request):
+        items = ProviderLedgerEntry.objects.select_related("provider", "created_by").all()
+        provider = (request.query_params.get("provider") or "").strip()
+        if provider:
+            items = items.filter(provider_id=provider)
+        kind = (request.query_params.get("kind") or "").strip()
+        if kind:
+            items = items.filter(kind=kind)
+        return Response([ledger_payload(row) for row in items[:200]])
+
+    def post(self, request):
+        provider_id = (request.data.get("provider_id") or "").strip()
+        title = (request.data.get("title") or "").strip()
+        if not provider_id or not title:
+            return Response({"detail": "provider_id and title are required."}, status=status.HTTP_400_BAD_REQUEST)
+        from apps.accounts.models import AppUser
+
+        provider = AppUser.objects.filter(pk=provider_id, account_type=AppUser.ACCOUNT_PROVIDER).first()
+        if not provider:
+            return Response({"detail": "Service provider not found."}, status=status.HTTP_400_BAD_REQUEST)
+        kind = (request.data.get("kind") or ProviderLedgerEntry.KIND_OTHER).strip()
+        if kind not in dict(ProviderLedgerEntry.KIND_CHOICES):
+            kind = ProviderLedgerEntry.KIND_OTHER
+        entry = ProviderLedgerEntry.objects.create(
+            provider=provider,
+            kind=kind,
+            title=title,
+            amount_label=(request.data.get("amount_label") or "").strip()[:40],
+            note=(request.data.get("note") or "").strip(),
+            created_by=request.user if hasattr(request, "user") else None,
+        )
+        return Response(ledger_payload(entry), status=status.HTTP_201_CREATED)

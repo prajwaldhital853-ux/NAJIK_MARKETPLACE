@@ -1,5 +1,6 @@
 import uuid
 
+from django.conf import settings
 from django.db import models
 
 
@@ -76,3 +77,62 @@ class HomeBannerSlide(models.Model):
         if audience == "provider":
             return self.audience in {self.AUDIENCE_ALL, self.AUDIENCE_PROVIDER}
         return self.audience == self.AUDIENCE_ALL
+
+
+class ProviderPlan(models.Model):
+    """Service provider membership yojana — fee labels only; no in-app payment gateway."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    name = models.CharField(max_length=80)
+    price_label = models.CharField(max_length=40, help_text="Display only, e.g. Rs. 5,000/year")
+    description = models.TextField(blank=True, default="")
+    sort_order = models.PositiveSmallIntegerField(default=0)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["sort_order", "name"]
+
+    def __str__(self):
+        return f"{self.name} ({self.price_label})"
+
+
+class ProviderLedgerEntry(models.Model):
+    """Manual refund / promotion / plan records for providers on admin — no payment flow."""
+
+    KIND_REFUND = "refund"
+    KIND_PROMOTION = "promotion"
+    KIND_PLAN = "plan"
+    KIND_OTHER = "other"
+    KIND_CHOICES = (
+        (KIND_REFUND, "Refund"),
+        (KIND_PROMOTION, "Listing promotion"),
+        (KIND_PLAN, "Plan / yojana"),
+        (KIND_OTHER, "Other"),
+    )
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    provider = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="ledger_entries",
+    )
+    kind = models.CharField(max_length=16, choices=KIND_CHOICES, default=KIND_OTHER)
+    title = models.CharField(max_length=120)
+    amount_label = models.CharField(max_length=40, blank=True, default="")
+    note = models.TextField(blank=True, default="")
+    created_by = models.ForeignKey(
+        "staff.StaffUser",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="ledger_entries_created",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.title} ({self.provider_id})"

@@ -52,6 +52,14 @@ class ProviderApplication(models.Model):
     nation_card = models.FileField(upload_to=nation_card_path, blank=True)
     other_document = models.FileField(upload_to=other_document_path, blank=True)
     profile_data = models.JSONField(default=dict, blank=True)
+    membership_plan = models.ForeignKey(
+        "core.ProviderPlan",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="applications",
+    )
+    membership_fee_label = models.CharField(max_length=40, blank=True, default="")
     rejection_note = models.TextField(blank=True, default="")
     pending_edit = models.JSONField(default=dict, blank=True)
     pending_nagrita = models.FileField(upload_to=nagrita_path, blank=True)

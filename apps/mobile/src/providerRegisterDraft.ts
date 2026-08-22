@@ -14,6 +14,7 @@ export type ProviderRegisterDraft = {
   nation_card_uri: string;
   other_document_uri?: string;
   profile_data?: Record<string, string>;
+  referral_code?: string;
 };
 
 let draft: ProviderRegisterDraft | null = null;

@@ -280,6 +280,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           nation_card_uri: draft.nation_card_uri,
           other_document_uri: draft.other_document_uri,
           profile_data: draft.profile_data,
+          referral_code: draft.referral_code,
         });
         takeProviderRegisterDraft();
         resetListingsPoll();

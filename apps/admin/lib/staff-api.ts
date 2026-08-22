@@ -133,12 +133,14 @@ export async function patchProviderApplication(
   id: string,
   status: "pending" | "verified" | "rejected",
   rejection_note?: string,
+  membership?: { membership_plan_id?: string | null; membership_fee_label?: string },
 ) {
   return staffRequest<ProviderApplication>(`/api/admin/verification/applications/${id}/`, {
     method: "PATCH",
     body: JSON.stringify({
-      status,
+      ...(status ? { status } : {}),
       ...(status === "rejected" ? { rejection_note: rejection_note || "" } : {}),
+      ...membership,
     }),
   });
 }
@@ -288,6 +290,128 @@ export async function removeStaffListingUrgent(id: string) {
     method: "POST",
     body: JSON.stringify({ remove: true }),
   });
+}
+
+export async function listPromoteStaffListings() {
+  return staffRequest<StaffListing[]>("/api/admin/listings/promote/");
+}
+
+export async function setStaffListingPromote(id: string) {
+  return staffRequest<StaffListing>(`/api/admin/listings/${id}/promote/`, {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+}
+
+export async function removeStaffListingPromote(id: string) {
+  return staffRequest<StaffListing>(`/api/admin/listings/${id}/promote/`, {
+    method: "POST",
+    body: JSON.stringify({ remove: true }),
+  });
+}
+
+export type ProviderPlan = {
+  id: string;
+  name: string;
+  price_label: string;
+  description: string;
+  sort_order: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export async function listProviderPlans() {
+  return staffRequest<ProviderPlan[]>("/api/admin/app-control/provider-plans/");
+}
+
+export async function createProviderPlan(payload: {
+  name: string;
+  price_label: string;
+  description?: string;
+  sort_order?: number;
+}) {
+  return staffRequest<ProviderPlan>("/api/admin/app-control/provider-plans/", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function patchProviderPlan(id: string, payload: Partial<ProviderPlan>) {
+  return staffRequest<ProviderPlan>(`/api/admin/app-control/provider-plans/${id}/`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteProviderPlan(id: string) {
+  return staffRequest<void>(`/api/admin/app-control/provider-plans/${id}/`, { method: "DELETE" });
+}
+
+export type ProviderLedgerEntry = {
+  id: string;
+  provider_id: string;
+  provider_name: string;
+  kind: "refund" | "promotion" | "plan" | "other";
+  title: string;
+  amount_label: string;
+  note: string;
+  created_at: string;
+  created_by?: string | null;
+};
+
+export async function listProviderLedger(providerId?: string) {
+  const q = providerId ? `?provider=${encodeURIComponent(providerId)}` : "";
+  return staffRequest<ProviderLedgerEntry[]>(`/api/admin/app-control/provider-ledger/${q}`);
+}
+
+export async function createProviderLedgerEntry(payload: {
+  provider_id: string;
+  kind: ProviderLedgerEntry["kind"];
+  title: string;
+  amount_label?: string;
+  note?: string;
+}) {
+  return staffRequest<ProviderLedgerEntry>("/api/admin/app-control/provider-ledger/", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export type ReferEarnConfig = {
+  is_active: boolean;
+  reward_amount: number;
+  reward_label: string;
+  description: string;
+};
+
+export async function getReferEarnConfig() {
+  return staffRequest<ReferEarnConfig>("/api/admin/app-control/refer-earn/");
+}
+
+export async function patchReferEarnConfig(payload: Partial<ReferEarnConfig>) {
+  return staffRequest<ReferEarnConfig>("/api/admin/app-control/refer-earn/", {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
+export type StaffReferralRow = {
+  id: string;
+  invite_code: string;
+  status: "joined" | "earned";
+  reward_amount: number;
+  joined_at: string;
+  earned_at?: string | null;
+  referrer_id: string;
+  referrer_name: string;
+  referred_id: string;
+  referred_name: string;
+};
+
+export async function listStaffReferrals(status?: "joined" | "earned") {
+  const q = status ? `?status=${status}` : "";
+  return staffRequest<StaffReferralRow[]>(`/api/admin/app-control/referrals${q}`);
 }
 
 export type ChatReportParty = {
@@ -487,6 +611,7 @@ export type ProviderIdCard = {
   emergency_email?: string;
   website?: string;
   branding_updated_at?: string | null;
+  membership_fee_label?: string;
   created_at: string;
   owner_id: string;
   owner_name: string;

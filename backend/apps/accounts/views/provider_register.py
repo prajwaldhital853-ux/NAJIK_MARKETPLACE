@@ -86,6 +86,7 @@ class ProviderRegisterCompleteSerializer(serializers.Serializer):
     nation_card_uri = serializers.CharField()
     other_document_uri = serializers.CharField(required=False, allow_blank=True)
     profile_data = serializers.DictField(required=False)
+    referral_code = serializers.CharField(required=False, allow_blank=True, max_length=32)
 
     def validate_phone(self, value):
         phone = normalize_phone(value)
@@ -138,6 +139,18 @@ class ProviderRegisterCompleteSerializer(serializers.Serializer):
                     {field: f"This {field} is already registered as a {role} account."}
                 )
         attrs["profile_data"] = attrs.get("profile_data") or {}
+        ref_raw = (attrs.get("referral_code") or "").strip()
+        if ref_raw:
+            from apps.accounts.models.referral import validate_invite_code_for_registration
+
+            try:
+                attrs["referral_code"] = validate_invite_code_for_registration(
+                    ref_raw, attrs["phone"], attrs["email"]
+                )
+            except DjangoValidationError as exc:
+                raise serializers.ValidationError({"referral_code": exc.messages}) from exc
+        else:
+            attrs["referral_code"] = ""
         return attrs
 
 
@@ -196,6 +209,14 @@ class ProviderRegisterCompleteView(APIView):
             app.other_document = other_document
         app.save()
         ensure_provider_id_card(user)
+
+        from apps.accounts.models.referral import apply_referral_code, generate_referral_code
+
+        generate_referral_code(user)
+
+        referral_raw = (data.get("referral_code") or "").strip()
+        if referral_raw:
+            apply_referral_code(user, referral_raw)
 
         user = AppUser.objects.select_related("provider_application").get(pk=user.pk)
         tokens = AppTokenSerializer.for_user(user)

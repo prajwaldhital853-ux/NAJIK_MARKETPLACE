@@ -182,7 +182,7 @@ class StaffApplicationListView(APIView):
     permission_classes = [IsStaffUser]
 
     def get(self, request):
-        items = ProviderApplication.objects.select_related("owner").order_by("-created_at")
+        items = ProviderApplication.objects.select_related("owner", "membership_plan").order_by("-created_at")
         return Response(ProviderApplicationSerializer(items, many=True, context={"request": request}).data)
 
 
@@ -191,10 +191,33 @@ class StaffApplicationDetailView(APIView):
     permission_classes = [IsStaffUser]
 
     def patch(self, request, pk):
-        app = get_object_or_404(ProviderApplication, pk=pk)
+        app = get_object_or_404(ProviderApplication.objects.select_related("membership_plan"), pk=pk)
         serializer = ProviderApplicationStatusSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        next_status = serializer.validated_data["status"]
+        data = serializer.validated_data
+
+        if "membership_plan_id" in request.data or "membership_fee_label" in request.data:
+            plan_id = data.get("membership_plan_id")
+            if plan_id is None and "membership_plan_id" in request.data and request.data.get("membership_plan_id") is None:
+                app.membership_plan = None
+            elif plan_id:
+                from apps.core.models import ProviderPlan
+
+                plan = ProviderPlan.objects.filter(pk=plan_id).first()
+                if not plan:
+                    return Response({"detail": "Plan not found."}, status=status.HTTP_400_BAD_REQUEST)
+                app.membership_plan = plan
+            if "membership_fee_label" in request.data:
+                app.membership_fee_label = (data.get("membership_fee_label") or "").strip()[:40]
+            app.save(update_fields=["membership_plan", "membership_fee_label"])
+            if "status" not in data:
+                app.refresh_from_db()
+                return Response(ProviderApplicationSerializer(app, context={"request": request}).data)
+
+        if "status" not in data:
+            return Response({"detail": "status is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        next_status = data["status"]
         if app.has_pending_profile_edit() and app.status == ProviderApplication.STATUS_VERIFIED:
             if next_status == ProviderApplication.STATUS_VERIFIED:
                 apply_pending_profile(app)

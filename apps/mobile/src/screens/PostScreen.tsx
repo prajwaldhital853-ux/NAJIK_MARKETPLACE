@@ -845,7 +845,7 @@ export function PostScreen() {
               style={[toggleStyle, { backgroundColor: promote ? "#E4F6EA" : "#fff", borderColor: promote ? GREEN : colors.border }]}
             >
               <Ionicons name={promote ? "checkbox" : "square-outline"} size={20} color={GREEN} />
-              <Text style={{ fontWeight: "700" }}>Request promotion after approval</Text>
+              <Text style={{ fontWeight: "700" }}>Request featured listing (admin approves — no in-app payment)</Text>
             </PressScale>
           </View>
         ) : null}

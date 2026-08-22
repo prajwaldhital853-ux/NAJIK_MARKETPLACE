@@ -201,6 +201,18 @@ class ListingSerializer(serializers.ModelSerializer):
             photos = photos.filter(is_pending=False)
         return ListingPhotoSerializer(photos, many=True, context=self.context).data
 
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        request = self.context.get("request")
+        user = getattr(request, "user", None) if request else None
+        is_owner = bool(user and getattr(user, "is_authenticated", False) and getattr(user, "id", None) == instance.owner_id)
+        is_staff = bool(request and request.path.startswith("/api/admin/"))
+        owner = instance.owner
+        if not is_owner and not is_staff:
+            if getattr(owner, "hide_phone_on_ads", False) or not getattr(owner, "allow_buyer_calls", True):
+                data["contact_phone"] = ""
+        return data
+
 
 class ListingWriteSerializer(serializers.Serializer):
     category = serializers.ChoiceField(choices=Listing.CATEGORY_CHOICES)
@@ -246,10 +258,14 @@ class ListingWriteSerializer(serializers.Serializer):
             promote_requested=promote,
             status=Listing.STATUS_APPROVED if publish else Listing.STATUS_DRAFT,
             reviewed_at=timezone.now() if publish else None,
-            is_promoted=promote if publish else False,
+            is_promoted=False,
         )
         for index, photo in enumerate(photos):
             ListingPhoto.objects.create(listing=listing, image=photo, sort_order=index)
+        if publish and listing.status == Listing.STATUS_APPROVED:
+            from apps.accounts.models.referral import qualify_referral_for_listing
+
+            qualify_referral_for_listing(listing)
         return listing
 
     def update(self, instance, validated_data):
@@ -257,6 +273,7 @@ class ListingWriteSerializer(serializers.Serializer):
         promote = validated_data.pop("promote", None)
         publish = validated_data.pop("publish", False)
         validated_data.pop("owner", None)
+        was_approved = instance.status == Listing.STATUS_APPROVED
         if promote is not None:
             validated_data["promote_requested"] = promote
 
@@ -283,13 +300,17 @@ class ListingWriteSerializer(serializers.Serializer):
             instance.status = Listing.STATUS_APPROVED
             instance.admin_reason = ""
             instance.reviewed_at = timezone.now()
-            instance.is_promoted = instance.promote_requested
+            instance.is_promoted = False
             instance.pending_edit = {}
         instance.save()
         if photos is not None:
             instance.photos.all().delete()
             for index, photo in enumerate(photos):
                 ListingPhoto.objects.create(listing=instance, image=photo, sort_order=index)
+        if instance.status == Listing.STATUS_APPROVED and not was_approved:
+            from apps.accounts.models.referral import qualify_referral_for_listing
+
+            qualify_referral_for_listing(instance)
         return instance
 
 
@@ -302,7 +323,6 @@ def apply_pending_edit(listing: Listing):
             setattr(listing, field, edit[field])
     if "promote_requested" in edit:
         listing.promote_requested = bool(edit["promote_requested"])
-        listing.is_promoted = listing.promote_requested
     keep_ids = set(edit.get("keep_photo_ids") or [])
     if keep_ids or listing.photos.filter(is_pending=True).exists():
         listing.photos.filter(is_pending=False).exclude(id__in=keep_ids).delete()

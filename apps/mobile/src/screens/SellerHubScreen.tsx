@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute, useFocusEffect } from "@react-navigation/native";
 import * as Clipboard from "expo-clipboard";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Alert, AppState, Image, Linking, Modal, Pressable, ScrollView, Share, StyleSheet, Switch, Text, TextInput, View } from "react-native";
 import QRCode from "react-native-qrcode-svg";
 import { AppHeader } from "../components/AppHeader";
@@ -56,11 +56,12 @@ export function SellerHubScreen() {
   const route = useRoute<any>();
   const page: SellerPage = PAGES.includes(route.params?.page) ? route.params.page : "bookings";
   const meta = sellerPageMeta[page];
+  const keyboardForm = page === "add-fund";
 
   return (
     <View style={{ flex: 1, backgroundColor: "#F7F8FA" }}>
       <AppHeader onClose={() => navigation.goBack()} right="bell-chat" showPro />
-      <KeyboardScreen fill={false} contentStyle={{ paddingBottom: 28 }}>
+      <KeyboardScreen fill={false} adjustKeyboardInsets={keyboardForm} contentStyle={{ paddingBottom: keyboardForm ? 40 : 28 }}>
         <PageHead meta={meta} />
         <PageBody page={page} />
       </KeyboardScreen>
@@ -512,8 +513,6 @@ function PaymentsBody() {
   const pending = data?.pending_load;
   const approvedHistory = (data?.recent_load_requests ?? []).filter((r) => r.status !== "pending");
   const transactions = data?.transactions ?? [];
-  const referEarnTxs = transactions.filter((row) => row.kind === "referral_reward");
-  const otherTxs = transactions.filter((row) => row.kind !== "referral_reward");
 
   const loadedLabel = data?.loaded_balance_label ?? data?.balance_label ?? "Rs. 0";
   const referLabel = data?.refer_earn_total_label ?? "Rs. 0";
@@ -523,23 +522,57 @@ function PaymentsBody() {
     return row.kind_label || row.kind.replace(/_/g, " ");
   }
 
+  function ActivityCard({ row }: { row: (typeof transactions)[number] }) {
+    const invite = row.kind === "referral_reward";
+    return (
+      <View
+        key={row.id}
+        style={{
+          marginHorizontal: 16,
+          marginTop: 8,
+          backgroundColor: invite ? "#E8F1FE" : "#fff",
+          borderRadius: 14,
+          padding: 12,
+          borderWidth: invite ? 1 : 0,
+          borderColor: invite ? "#BFDBFE" : "transparent",
+          ...shadow.card,
+        }}
+      >
+        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
+          <Text style={{ flex: 1, fontWeight: "800", fontSize: 13, color: invite ? "#1D4ED8" : colors.navy }}>{txTitle(row)}</Text>
+          <Text style={{ fontWeight: "800", color: row.amount_paisa >= 0 ? GREEN : colors.red }}>{row.amount_label}</Text>
+        </View>
+        {row.listing_title ? (
+          <Text style={{ color: "#6B7280", fontSize: 11, marginTop: 4 }} numberOfLines={1}>
+            {invite ? `Friend: ${row.listing_title}` : row.listing_title}
+          </Text>
+        ) : null}
+        <Text style={{ color: "#8A8F98", fontSize: 10, marginTop: 4 }}>Balance {row.balance_after_label}</Text>
+      </View>
+    );
+  }
+
   return (
     <>
-      <View style={{ marginHorizontal: 16, marginTop: 12, borderRadius: 18, overflow: "hidden", backgroundColor: GREEN, ...shadow.card }}>
+      <View style={{ marginHorizontal: 16, marginTop: 12, borderRadius: 18, backgroundColor: GREEN, ...shadow.card }}>
         <View style={{ padding: 16 }}>
-          <Text style={{ color: "rgba(255,255,255,0.85)", fontSize: 12, fontWeight: "700" }}>Total balance</Text>
-          <Text style={{ color: "#fff", fontSize: 28, fontWeight: "900", marginTop: 4 }}>{loading ? "…" : totalLabel}</Text>
-          <View style={{ flexDirection: "row", marginTop: 12, gap: 8 }}>
-            <View style={{ flex: 1, backgroundColor: "rgba(255,255,255,0.12)", borderRadius: 10, padding: 10 }}>
-              <Text style={{ color: "rgba(255,255,255,0.8)", fontSize: 10, fontWeight: "700" }}>Loaded</Text>
-              <Text style={{ color: "#fff", fontWeight: "800", fontSize: 14, marginTop: 4 }}>{loading ? "…" : loadedLabel}</Text>
+          <Text style={{ color: "rgba(255,255,255,0.8)", fontSize: 11, fontWeight: "700", letterSpacing: 0.4 }}>TOTAL BALANCE</Text>
+          <Text style={{ color: "#fff", fontSize: 30, fontWeight: "900", marginTop: 2 }}>{loading ? "…" : totalLabel}</Text>
+          <View style={{ flexDirection: "row", marginTop: 14, gap: 10 }}>
+            <View style={{ flex: 1, borderTopWidth: 1, borderTopColor: "rgba(255,255,255,0.22)", paddingTop: 10 }}>
+              <Text style={{ color: "rgba(255,255,255,0.75)", fontSize: 10, fontWeight: "700" }}>Loaded</Text>
+              <Text style={{ color: "#fff", fontWeight: "800", fontSize: 15, marginTop: 3 }} numberOfLines={1}>
+                {loading ? "…" : loadedLabel}
+              </Text>
             </View>
-            <View style={{ flex: 1, backgroundColor: "rgba(255,255,255,0.12)", borderRadius: 10, padding: 10 }}>
-              <Text style={{ color: "rgba(255,255,255,0.8)", fontSize: 10, fontWeight: "700" }}>Invite & Earn</Text>
-              <Text style={{ color: "#fff", fontWeight: "800", fontSize: 14, marginTop: 4 }}>{loading ? "…" : referLabel}</Text>
+            <View style={{ flex: 1, borderTopWidth: 1, borderTopColor: "rgba(255,255,255,0.22)", paddingTop: 10 }}>
+              <Text style={{ color: "rgba(255,255,255,0.75)", fontSize: 10, fontWeight: "700" }}>Invite & Earn</Text>
+              <Text style={{ color: "#fff", fontWeight: "800", fontSize: 15, marginTop: 3 }} numberOfLines={1}>
+                {loading ? "…" : referLabel}
+              </Text>
             </View>
           </View>
-          <Text style={{ color: "rgba(255,255,255,0.9)", fontSize: 12, marginTop: 10 }}>
+          <Text style={{ color: "rgba(255,255,255,0.88)", fontSize: 11, marginTop: 12 }}>
             {cfg?.listing_fee_label ?? "Per listing"} · ≈ {balanceListings} live post{balanceListings === 1 ? "" : "s"} left
           </Text>
         </View>
@@ -575,14 +608,18 @@ function PaymentsBody() {
 
       {approvedHistory.length ? (
         <>
-          <Text style={{ fontWeight: "800", marginHorizontal: 16, marginTop: 18 }}>Top-up history</Text>
-          <View style={{ marginTop: 8 }}>
+          <Text style={{ fontWeight: "800", marginHorizontal: 16, marginTop: 18, marginBottom: 8 }}>Top-up history</Text>
+          <ScrollView
+            nestedScrollEnabled
+            showsVerticalScrollIndicator={approvedHistory.length > 3}
+            style={{ maxHeight: approvedHistory.length > 3 ? 168 : undefined }}
+          >
             {approvedHistory.map((row) => (
               <View
                 key={row.id}
                 style={{
                   marginHorizontal: 16,
-                  marginTop: 8,
+                  marginTop: 6,
                   backgroundColor: row.status === "approved" ? "#ECFDF5" : "#FEF2F2",
                   borderRadius: 12,
                   padding: 10,
@@ -596,49 +633,24 @@ function PaymentsBody() {
                 {row.admin_note ? <Text style={{ fontSize: 11, color: "#6B7280", marginTop: 2 }}>{row.admin_note}</Text> : null}
               </View>
             ))}
-          </View>
+          </ScrollView>
         </>
       ) : null}
 
-      {referEarnTxs.length ? (
-        <>
-          <Text style={{ fontWeight: "800", marginHorizontal: 16, marginTop: 18 }}>Invite & Earn history</Text>
-          <Text style={{ color: "#6B7280", marginHorizontal: 16, marginTop: 4, fontSize: 12 }}>
-            Rewards when friends publish their first live listing.
-          </Text>
-          <View style={{ marginTop: 8 }}>
-            {referEarnTxs.map((row) => (
-              <View key={row.id} style={{ marginHorizontal: 16, marginTop: 10, backgroundColor: "#E8F1FE", borderRadius: 14, padding: 12, borderWidth: 1, borderColor: "#BFDBFE", ...shadow.card }}>
-                <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
-                  <Text style={{ fontWeight: "800", fontSize: 13, color: "#1D4ED8" }}>{txTitle(row)}</Text>
-                  <Text style={{ fontWeight: "800", color: GREEN }}>{row.amount_label}</Text>
-                </View>
-                {row.listing_title ? <Text style={{ color: "#6B7280", fontSize: 11, marginTop: 4 }}>Friend: {row.listing_title}</Text> : null}
-                <Text style={{ color: "#8A8F98", fontSize: 10, marginTop: 4 }}>Balance {row.balance_after_label}</Text>
-              </View>
-            ))}
-          </View>
-        </>
-      ) : null}
-
-      <Text style={{ fontWeight: "800", marginHorizontal: 16, marginTop: 18 }}>Activity</Text>
-      {otherTxs.length === 0 && referEarnTxs.length === 0 && !loading ? (
-        <Text style={{ color: "#6B7280", marginHorizontal: 16, marginTop: 10, fontSize: 13 }}>No payment activity yet.</Text>
-      ) : otherTxs.length === 0 ? (
-        <Text style={{ color: "#6B7280", marginHorizontal: 16, marginTop: 10, fontSize: 13 }}>No other payment activity yet.</Text>
+      <Text style={{ fontWeight: "800", marginHorizontal: 16, marginTop: 18, marginBottom: 8 }}>Activity</Text>
+      {transactions.length === 0 && !loading ? (
+        <Text style={{ color: "#6B7280", marginHorizontal: 16, fontSize: 13 }}>No payment activity yet.</Text>
       ) : (
-        <View style={{ marginTop: 8 }}>
-          {otherTxs.map((row) => (
-            <View key={row.id} style={{ marginHorizontal: 16, marginTop: 10, backgroundColor: "#fff", borderRadius: 14, padding: 12, ...shadow.card }}>
-              <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
-                <Text style={{ fontWeight: "800", fontSize: 13 }}>{txTitle(row)}</Text>
-                <Text style={{ fontWeight: "800", color: row.amount_paisa >= 0 ? GREEN : colors.red }}>{row.amount_label}</Text>
-              </View>
-              {row.listing_title ? <Text style={{ color: "#6B7280", fontSize: 11, marginTop: 4 }}>{row.listing_title}</Text> : null}
-              <Text style={{ color: "#8A8F98", fontSize: 10, marginTop: 4 }}>Balance {row.balance_after_label}</Text>
-            </View>
+        <ScrollView
+          nestedScrollEnabled
+          showsVerticalScrollIndicator={transactions.length > 4}
+          style={{ maxHeight: transactions.length > 4 ? 320 : undefined }}
+          contentContainerStyle={{ paddingBottom: 4 }}
+        >
+          {transactions.map((row) => (
+            <ActivityCard key={row.id} row={row} />
           ))}
-        </View>
+        </ScrollView>
       )}
     </>
   );
@@ -646,19 +658,25 @@ function PaymentsBody() {
 
 function AddFundBody() {
   const navigation = useNavigation<any>();
-  const { onInputFocus } = useKeyboardScroll();
+  const { onInputFocus, scrollAnchorIntoView } = useKeyboardScroll();
   const { refresh: refreshInbox } = useInbox();
   const { data, loading, reload } = usePaymentsData();
   const [amount, setAmount] = useState("");
   const [paymentRef, setPaymentRef] = useState("");
   const [proofUri, setProofUri] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const formRef = useRef<View>(null);
 
   const fee = data?.config?.listing_fee_rupees ?? 0;
   const amountNum = Number(amount.replace(/\D/g, "")) || 0;
   const listingsYouGet = fee > 0 && amountNum > 0 ? Math.floor(amountNum / fee) : 0;
   const cfg = data?.config;
   const qrUrl = cfg?.qr_code_url ? resolvePaymentAssetUrl(cfg.qr_code_url) : "";
+
+  function focusField() {
+    onInputFocus();
+    scrollAnchorIntoView(formRef.current);
+  }
 
   async function submitPaid() {
     const rupees = amountNum;
@@ -712,7 +730,7 @@ function AddFundBody() {
       </View>
 
       {data?.can_request_load ? (
-        <View style={{ marginHorizontal: 16, marginTop: 12, backgroundColor: "#fff", borderRadius: 16, padding: 14, ...shadow.card }}>
+        <View ref={formRef} collapsable={false} style={{ marginHorizontal: 16, marginTop: 12, backgroundColor: "#fff", borderRadius: 16, padding: 14, ...shadow.card }}>
           <Text style={{ fontWeight: "800", marginBottom: 4 }}>I have paid</Text>
           <Text style={{ color: "#6B7280", fontSize: 12, marginBottom: 10 }}>
             Min Rs. {cfg?.min_load_rupees ?? 100} · max Rs. {cfg?.max_load_rupees ?? 50000}
@@ -721,7 +739,7 @@ function AddFundBody() {
             placeholder="Amount (Rs.)"
             value={amount}
             onChangeText={setAmount}
-            onFocus={onInputFocus}
+            onFocus={focusField}
             keyboardType="number-pad"
             style={{ borderWidth: 1, borderColor: "#E5E7EB", borderRadius: 10, padding: 12, marginBottom: 8, fontSize: 16, fontWeight: "700" }}
           />
@@ -736,7 +754,7 @@ function AddFundBody() {
             placeholder="Payment ID / transaction ref (optional)"
             value={paymentRef}
             onChangeText={setPaymentRef}
-            onFocus={onInputFocus}
+            onFocus={focusField}
             style={{ borderWidth: 1, borderColor: "#E5E7EB", borderRadius: 10, padding: 10, marginBottom: 8 }}
           />
           <PressScale

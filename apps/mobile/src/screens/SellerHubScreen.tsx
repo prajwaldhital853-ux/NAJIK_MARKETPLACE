@@ -7,12 +7,13 @@ import { KeyboardScreen, useKeyboardScroll } from "../components/KeyboardScreen"
 import { PressScale } from "../components/PressScale";
 import { SellerProfileEditModal } from "../components/SellerProfileEditModal";
 import { useAuth } from "../context/AuthContext";
+import { useInbox } from "../context/InboxContext";
+import { BookingsBody } from "./BookingsScreen";
 import {
   helpFaqs,
   kycSteps,
   payouts,
   promoPacks,
-  sellerBookings,
   sellerNotes,
   sellerPageMeta,
   sellerReviews,
@@ -96,7 +97,7 @@ function QuickRow({
 }
 
 function PageBody({ page }: { page: SellerPage }) {
-  if (page === "bookings") return <BookingsBody />;
+  if (page === "bookings") return <BookingsBody showSellers={false} />;
   if (page === "reviews") return <ReviewsBody />;
   if (page === "earnings") return <EarningsBody />;
   if (page === "promotions") return <PromosBody />;
@@ -163,73 +164,6 @@ function Chips({ items, value, onChange }: { items: string[]; value: string; onC
         );
       })}
     </ScrollView>
-  );
-}
-
-function BookingsBody() {
-  const [q, setQ] = useState("");
-  const [filter, setFilter] = useState("All");
-  const [rows, setRows] = useState(sellerBookings);
-  const list = rows.filter((row) => {
-    if (filter !== "All" && row.status !== filter) return false;
-    const hay = `${row.name} ${row.job} ${row.where}`.toLowerCase();
-    return !q.trim() || hay.includes(q.trim().toLowerCase());
-  });
-
-  function setStatus(id: string, status: (typeof sellerBookings)[0]["status"]) {
-    setRows((prev) => prev.map((row) => (row.id === id ? { ...row, status } : row)));
-  }
-
-  return (
-    <>
-      <QuickRow
-        items={[
-          { icon: "today-outline", label: "Today", onPress: () => setFilter("Upcoming") },
-          { icon: "checkmark-circle-outline", label: "Confirm", onPress: () => setFilter("Confirmed") },
-          { icon: "navigate-outline", label: "Route", onPress: () => Alert.alert("Route", "Demo map of today’s visits in Lahan.") },
-          { icon: "add-circle-outline", label: "New visit", onPress: () => Alert.alert("New visit", "Pick a listing and time in chat.") },
-        ]}
-      />
-      <StatStrip
-        items={[
-          { n: String(rows.filter((r) => r.status === "Upcoming").length), l: "Upcoming" },
-          { n: String(rows.filter((r) => r.status === "Confirmed").length), l: "Confirmed" },
-          { n: String(rows.filter((r) => r.status === "Completed").length), l: "Done" },
-        ]}
-      />
-      <Chips items={["All", "Upcoming", "Confirmed", "Completed", "Cancelled"]} value={filter} onChange={setFilter} />
-      <SearchBox value={q} onChange={setQ} placeholder="Find a client..." />
-      {list.map((row) => (
-        <View key={row.id} style={{ marginHorizontal: 16, marginTop: 12, backgroundColor: "#fff", borderRadius: 16, padding: 12, ...shadow.card }}>
-          <View style={{ flexDirection: "row", gap: 10 }}>
-            <Image source={row.photo} style={{ width: 72, height: 72, borderRadius: 12 }} />
-            <View style={{ flex: 1 }}>
-              <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
-                <Text style={{ fontWeight: "800", fontSize: 14, color: "#111827", flex: 1 }}>{row.name}</Text>
-                <StatusPill status={row.status} />
-              </View>
-              <Text style={{ color: "#4B5563", fontSize: 12, marginTop: 3 }}>{row.job}</Text>
-              <Text style={{ color: "#8A8F98", fontSize: 11, marginTop: 4 }}>
-                {row.when} · {row.where}
-              </Text>
-              <Text style={{ color: GREEN, fontWeight: "800", marginTop: 6 }}>{row.pay}</Text>
-            </View>
-          </View>
-          {row.status === "Upcoming" ? (
-            <View style={{ flexDirection: "row", gap: 8, marginTop: 12 }}>
-              <MiniBtn label="Confirm" fill onPress={() => setStatus(row.id, "Confirmed")} />
-              <MiniBtn label="Reschedule" onPress={() => Alert.alert("Reschedule", "Demo: pick a new slot in chat.")} />
-              <MiniBtn label="Cancel" danger onPress={() => setStatus(row.id, "Cancelled")} />
-            </View>
-          ) : row.status === "Confirmed" ? (
-            <View style={{ flexDirection: "row", gap: 8, marginTop: 12 }}>
-              <MiniBtn label="Mark done" fill onPress={() => setStatus(row.id, "Completed")} />
-              <MiniBtn label="Navigate" onPress={() => Alert.alert("Directions", row.where)} />
-            </View>
-          ) : null}
-        </View>
-      ))}
-    </>
   );
 }
 
@@ -636,7 +570,15 @@ function NotesBody() {
 
 function MessagesBody() {
   const navigation = useNavigation<any>();
-  return <ChatInboxList onOpen={(id) => openChatThread(navigation, id)} />;
+  const { dismissTarget, refresh } = useInbox();
+  return (
+    <ChatInboxList
+      onOpen={(id) => {
+        void dismissTarget({ target: "chat", target_id: id, kind: "message" }).then(() => refresh());
+        openChatThread(navigation, id);
+      }}
+    />
+  );
 }
 
 function SettingsBody() {

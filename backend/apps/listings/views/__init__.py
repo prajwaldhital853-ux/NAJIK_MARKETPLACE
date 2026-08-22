@@ -283,7 +283,8 @@ class ListingSoldView(APIView):
                     f"{listing.title} is no longer available.",
                     InboxNotice.KIND_LISTING,
                     "listing",
-                    listing.id,
+                    str(listing.id),
+                    sender_name=(request.user.full_name or request.user.phone or "Seller").strip(),
                 )
         listing = listing_queryset().get(pk=listing.pk)
         return Response(ListingSerializer(listing, context={"request": request}).data)

@@ -28,13 +28,19 @@ import {
   blockChatThread,
   fetchAuthedDataUri,
   fetchChatThread,
+  pingChatPresence,
   sendChatMessage,
   type ChatMessage,
   type ChatThread,
 } from "../chatApi";
+import { normTargetId } from "../inboxBridge";
+import { useAuth } from "../context/AuthContext";
+import { useInbox } from "../context/InboxContext";
+import { isProvider } from "../demo";
+import { bookingAction } from "../bookingsApi";
 import { mapsDirectionsUrl, requestUserPoint, reverseGeocode, searchPlaces, type PlaceHit } from "../geo";
 import { subscribeAppRefresh } from "../listingsRefresh";
-import { openListing, openSellerProfile } from "../navigation/browse";
+import { openBookings, openListing, openSellerPage, openSellerProfile } from "../navigation/browse";
 import { choosePhoto } from "../pickPhoto";
 import { colors } from "../theme";
 
@@ -59,6 +65,8 @@ export function ChatThreadScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const insets = useSafeAreaInsets();
+  const { user } = useAuth();
+  const { dismissTarget, refresh } = useInbox();
   const id = String(route.params?.id ?? "");
   const [thread, setThread] = useState<ChatThread | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -96,9 +104,15 @@ export function ChatThreadScreen() {
   }, [id]);
 
   useEffect(() => {
+    if (!id) return;
+    const clearChatNotices = () =>
+      void dismissTarget({ target: "chat", target_id: normTargetId(id), kind: "message" }).then(() => refresh());
+    clearChatNotices();
+    void pingChatPresence(id).catch(() => undefined);
     void load(false).catch((err) => Alert.alert("Chat", err instanceof Error ? err.message : "Could not open chat."));
     const tick = () => {
       if (AppState.currentState !== "active") return;
+      void pingChatPresence(id).catch(() => undefined);
       void load(true).catch(() => undefined);
     };
     const timer = setInterval(tick, 4000);
@@ -110,8 +124,10 @@ export function ChatThreadScreen() {
       clearInterval(timer);
       stop();
       sub.remove();
+      clearChatNotices();
+      void pingChatPresence("").catch(() => undefined);
     };
-  }, [id, load]);
+  }, [id, load, dismissTarget, refresh]);
 
   useEffect(() => {
     const cover = (event: { endCoordinates: { height: number; screenY: number } }) => {
@@ -303,7 +319,17 @@ export function ChatThreadScreen() {
                 {[thread.listing_price, thread.listing_location].filter(Boolean).join(" · ")}
               </Text>
             </View>
+            {thread.listing_sold ? (
+              <View style={{ backgroundColor: "#FEE2E2", paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 }}>
+                <Text style={{ color: "#DC2626", fontWeight: "800", fontSize: 11 }}>SOLD</Text>
+              </View>
+            ) : null}
           </PressScale>
+        ) : null}
+        {thread?.listing_sold ? (
+          <View style={{ backgroundColor: "#FEE2E2", marginHorizontal: 12, marginBottom: 8, borderRadius: 10, paddingVertical: 8, paddingHorizontal: 10 }}>
+            <Text style={{ color: "#DC2626", fontWeight: "800", fontSize: 12, textAlign: "center" }}>SOLD</Text>
+          </View>
         ) : null}
       </View>
 
@@ -329,7 +355,26 @@ export function ChatThreadScreen() {
           paddingTop: 10,
           paddingBottom: 12,
         }}
-        renderItem={({ item }) => <Bubble msg={item} onOpenPhoto={setPhotoUri} />}
+        renderItem={({ item }) => (
+          <Bubble
+            msg={item}
+            onOpenPhoto={setPhotoUri}
+            userId={user?.id}
+            onOpenBooking={(bookingId) => {
+              void dismissTarget({ kind: "booking", target_id: bookingId });
+              if (isProvider(user)) openSellerPage(navigation, "bookings", { bookingId });
+              else openBookings(navigation, bookingId);
+            }}
+            onBookingAct={async (bookingId, action) => {
+              try {
+                await bookingAction(bookingId, action);
+                await load(false);
+              } catch (err) {
+                Alert.alert("Booking", err instanceof Error ? err.message : "Could not update this booking.");
+              }
+            }}
+          />
+        )}
         ListEmptyComponent={
           <Text style={{ textAlign: "center", color: colors.muted, paddingHorizontal: 32, lineHeight: 20 }}>
             No messages yet. Say hello below.
@@ -447,8 +492,8 @@ function PlaceField({
         placeholder="Type a place in Nepal"
         style={{ marginTop: 10, borderWidth: 1, borderColor: "#E6E8EC", borderRadius: 12, padding: 10 }}
       />
-      {hits.map((hit) => (
-        <PressScale key={`${hit.lat}-${hit.lng}`} onPress={() => onPick(hit)} style={{ paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: "#F3F4F6" }}>
+      {hits.map((hit, index) => (
+        <PressScale key={`${hit.lat}-${hit.lng}-${hit.label}-${index}`} onPress={() => onPick(hit)} style={{ paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: "#F3F4F6" }}>
           <Text style={{ fontWeight: "700" }}>{hit.label}</Text>
         </PressScale>
       ))}
@@ -506,8 +551,8 @@ function ComposerBar({
     >
       {replies.length && !pendingImage && !pendingVoice && !recording ? (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 8 }} contentContainerStyle={{ gap: 6, paddingRight: 8 }}>
-          {replies.map((item) => (
-            <PressScale key={item} onPress={() => onQuick(item)} style={{ backgroundColor: colors.greenSoft, borderRadius: 14, paddingHorizontal: 10, paddingVertical: 6 }}>
+          {replies.map((item, index) => (
+            <PressScale key={`${item}-${index}`} onPress={() => onQuick(item)} style={{ backgroundColor: colors.greenSoft, borderRadius: 14, paddingHorizontal: 10, paddingVertical: 6 }}>
               <Text style={{ color: GREEN, fontWeight: "700", fontSize: 12 }}>{item}</Text>
             </PressScale>
           ))}
@@ -634,10 +679,22 @@ function VoiceWave({ uri, mine, seed }: { uri: string | null; mine: boolean; see
   );
 }
 
-function Bubble({ msg, onOpenPhoto }: { msg: ChatMessage; onOpenPhoto: (uri: string) => void }) {
+function Bubble({
+  msg,
+  onOpenPhoto,
+  userId,
+  onOpenBooking,
+  onBookingAct,
+}: {
+  msg: ChatMessage;
+  onOpenPhoto: (uri: string) => void;
+  userId?: string;
+  onOpenBooking: (bookingId: string) => void;
+  onBookingAct: (bookingId: string, action: "accept" | "reject" | "cancel") => Promise<void>;
+}) {
   const mine = msg.mine;
   return (
-    <View style={{ alignSelf: mine ? "flex-end" : "flex-start", maxWidth: "78%", marginVertical: 1 }}>
+    <View style={{ alignSelf: mine ? "flex-end" : "flex-start", maxWidth: "86%", marginVertical: 1 }}>
       <View
         style={{
           backgroundColor: mine ? GREEN : colors.white,
@@ -665,7 +722,9 @@ function Bubble({ msg, onOpenPhoto }: { msg: ChatMessage; onOpenPhoto: (uri: str
             <Text style={{ color: mine ? "#D1FAE5" : "#6B7280", fontSize: 11 }}>Open map</Text>
           </PressScale>
         ) : null}
-        {msg.kind === "booking" ? <BookingBubble text={msg.text} mine={mine} /> : null}
+        {msg.kind === "booking" ? (
+          <BookingBubble text={msg.text} mine={mine} userId={userId} onOpen={onOpenBooking} onAct={onBookingAct} />
+        ) : null}
         {msg.text && msg.kind === "text" ? (
           <Text style={{ color: mine ? "#fff" : "#111827", fontSize: 15, lineHeight: 20 }}>{msg.text}</Text>
         ) : null}
@@ -674,26 +733,114 @@ function Bubble({ msg, onOpenPhoto }: { msg: ChatMessage; onOpenPhoto: (uri: str
   );
 }
 
-function BookingBubble({ text, mine }: { text: string; mine: boolean }) {
-  let data: { status?: string; item?: string; when?: string; where?: string } = {};
+type BookingPayload = {
+  id?: string;
+  status?: string;
+  item?: string;
+  when?: string;
+  where?: string;
+  note?: string;
+  contact_name?: string;
+  contact_phone?: string;
+  requester_id?: string;
+  recipient_id?: string;
+};
+
+function BookingBubble({
+  text,
+  mine,
+  userId,
+  onOpen,
+  onAct,
+}: {
+  text: string;
+  mine: boolean;
+  userId?: string;
+  onOpen: (bookingId: string) => void;
+  onAct: (bookingId: string, action: "accept" | "reject" | "cancel") => Promise<void>;
+}) {
+  const [busy, setBusy] = useState(false);
+  let data: BookingPayload = {};
   try {
     data = JSON.parse(text || "{}");
   } catch {
     data = {};
   }
+  const pending = (data.status || "pending") === "pending";
+  const accepted = data.status === "accepted";
+  const isRecipient = Boolean(userId && data.recipient_id && userId === data.recipient_id);
+  const isRequester = Boolean(userId && data.requester_id && userId === data.requester_id);
+  const canAccept = pending && isRecipient;
+  const canCancel = (pending && isRequester) || (accepted && (isRequester || isRecipient));
+  const muted = mine ? "#D1FAE5" : "#6B7280";
+  const fg = mine ? "#fff" : "#111827";
+
+  async function act(action: "accept" | "reject" | "cancel") {
+    if (!data.id || busy) return;
+    setBusy(true);
+    try {
+      await onAct(data.id, action);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
-    <View style={{ minWidth: 180 }}>
+    <Pressable onPress={() => data.id && onOpen(data.id)} style={{ minWidth: 210 }}>
       <Text style={{ color: mine ? "#fff" : GREEN, fontWeight: "800", fontSize: 12 }}>BOOKING</Text>
-      <Text style={{ color: mine ? "#fff" : "#111827", fontWeight: "800", marginTop: 4 }}>{data.item || "Visit"}</Text>
+      <Text style={{ color: fg, fontWeight: "800", marginTop: 4 }}>{data.item || "Visit"}</Text>
       {data.when ? (
-        <Text style={{ color: mine ? "#D1FAE5" : "#6B7280", fontSize: 11, marginTop: 2 }}>
-          {new Date(data.when).toLocaleString()}
-        </Text>
+        <Text style={{ color: muted, fontSize: 11, marginTop: 4 }}>{new Date(data.when).toLocaleString()}</Text>
       ) : null}
-      {data.where ? <Text style={{ color: mine ? "#D1FAE5" : "#6B7280", fontSize: 11 }}>{data.where}</Text> : null}
+      {data.where ? <Text style={{ color: muted, fontSize: 11, marginTop: 2 }}>{data.where}</Text> : null}
+      {data.contact_name ? <Text style={{ color: muted, fontSize: 11, marginTop: 2 }}>Name: {data.contact_name}</Text> : null}
+      {data.contact_phone ? <Text style={{ color: muted, fontSize: 11 }}>Phone: {data.contact_phone}</Text> : null}
+      {data.note ? <Text style={{ color: muted, fontSize: 11, marginTop: 2 }}>{data.note}</Text> : null}
       <Text style={{ color: mine ? "#fff" : "#146B32", fontWeight: "800", fontSize: 11, marginTop: 6, textTransform: "capitalize" }}>
         {data.status || "pending"}
       </Text>
-    </View>
+      <Text style={{ color: muted, fontSize: 10, marginTop: 4 }}>Tap to open booking page</Text>
+      {canAccept || canCancel ? (
+        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
+          {canAccept ? (
+            <>
+              <MiniChatBtn label={busy ? "…" : "Accept"} fill mine={mine} onPress={() => void act("accept")} />
+              <MiniChatBtn label="Reject" danger mine={mine} onPress={() => void act("reject")} />
+            </>
+          ) : null}
+          {canCancel ? <MiniChatBtn label="Cancel" danger mine={mine} onPress={() => void act("cancel")} /> : null}
+        </View>
+      ) : null}
+    </Pressable>
+  );
+}
+
+function MiniChatBtn({
+  label,
+  onPress,
+  fill,
+  danger,
+  mine,
+}: {
+  label: string;
+  onPress: () => void;
+  fill?: boolean;
+  danger?: boolean;
+  mine?: boolean;
+}) {
+  return (
+    <PressScale
+      onPress={onPress}
+      style={{
+        paddingHorizontal: 10,
+        paddingVertical: 6,
+        borderRadius: 10,
+        backgroundColor: fill ? (mine ? "#fff" : GREEN) : "transparent",
+        borderWidth: 1,
+        borderColor: danger ? "#FECACA" : mine ? "#fff" : GREEN,
+      }}
+    >
+      <Text style={{ fontWeight: "800", fontSize: 11, color: fill ? (mine ? GREEN : "#fff") : danger ? "#B91C1C" : mine ? "#fff" : "#111827" }}>{label}</Text>
+    </PressScale>
   );
 }

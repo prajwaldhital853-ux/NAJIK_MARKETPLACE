@@ -1,307 +1,290 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useEffect, useMemo, useState } from "react";
+import { useState } from "react";
 import { Modal, Pressable, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import {
-  adToBs,
-  bsToAd,
-  clampYmd,
-  daysFor,
-  firstWeekday,
-  formatAd,
-  formatBs,
-  monthNames,
-  shiftMonth,
-  todayAd,
-  type CalendarMode,
-  type Ymd,
-  yearRange,
-} from "../nepaliDate";
-import { colors } from "../theme";
 import { PressScale } from "./PressScale";
 
 const GREEN = "#1B7D2C";
-const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+type CalendarSystem = "AD" | "BS";
+
+const BS_MONTHS = [
+  "Baishakh",
+  "Jestha",
+  "Ashadh",
+  "Shrawan",
+  "Bhadra",
+  "Ashwin",
+  "Kartik",
+  "Mangsir",
+  "Poush",
+  "Magh",
+  "Falgun",
+  "Chaitra",
+];
+
+const AD_MONTHS = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+];
+
+function bsToAd(bsYear: number, bsMonth: number, bsDay: number): Date {
+  const offset = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334];
+  const adYear = bsYear - 57;
+  const adMonth = (bsMonth + 8) % 12;
+  const adDay = bsDay + 17;
+  const daysInMonth = adMonth === 1 ? (adYear % 4 === 0 && (adYear % 100 !== 0 || adYear % 400 === 0) ? 29 : 28) : [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][adMonth];
+  
+  if (adDay > daysInMonth) {
+    return new Date(adYear, (adMonth + 1) % 12, adDay - daysInMonth);
+  }
+  return new Date(adYear, adMonth, adDay);
+}
+
+function adToBs(date: Date): { year: number; month: number; day: number } {
+  const adYear = date.getFullYear();
+  const adMonth = date.getMonth();
+  const adDay = date.getDate();
+  
+  const bsYear = adYear + 57;
+  const bsMonth = (adMonth + 4) % 12;
+  const bsDay = adDay - 17;
+  
+  if (bsDay < 1) {
+    return { year: bsYear, month: (bsMonth - 1 + 12) % 12, day: bsDay + 30 };
+  }
+  return { year: bsYear, month: bsMonth, day: bsDay };
+}
 
 export function DatePickerModal({
   visible,
-  title,
-  valueAd,
-  modes = ["AD", "BS"],
   onClose,
-  onPick,
+  onSelect,
+  initialDate,
 }: {
   visible: boolean;
-  title: string;
-  valueAd?: Ymd | null;
-  modes?: CalendarMode[];
   onClose: () => void;
-  onPick: (ad: Ymd) => void;
+  onSelect: (date: Date) => void;
+  initialDate?: Date;
 }) {
   const insets = useSafeAreaInsets();
-  const initial = valueAd || todayAd();
-  const [mode, setMode] = useState<CalendarMode>(modes[0] || "AD");
-  const [cursor, setCursor] = useState<Ymd>(initial);
-  const [selected, setSelected] = useState<Ymd>(initial);
-  const [yearOpen, setYearOpen] = useState(false);
+  const today = initialDate || new Date();
+  const [calendarSystem, setCalendarSystem] = useState<CalendarSystem>("AD");
+  const [selectedYear, setSelectedYear] = useState(today.getFullYear());
+  const [selectedMonth, setSelectedMonth] = useState(today.getMonth());
+  const [selectedDay, setSelectedDay] = useState(today.getDate());
 
-  useEffect(() => {
-    if (!visible) return;
-    const startMode = modes[0] || "AD";
-    const start = startMode === "BS" ? adToBs(initial) : initial;
-    setMode(startMode);
-    setCursor(start);
-    setSelected(start);
-    setYearOpen(false);
-  }, [visible]);
+  const bs = calendarSystem === "BS" ? adToBs(new Date(selectedYear, selectedMonth, selectedDay)) : null;
+  const displayYear = calendarSystem === "BS" && bs ? bs.year : selectedYear;
+  const displayMonth = calendarSystem === "BS" && bs ? bs.month : selectedMonth;
+  const displayDay = calendarSystem === "BS" && bs ? bs.day : selectedDay;
 
-  function switchMode(next: CalendarMode) {
-    if (next === mode) return;
-    const asAd = mode === "AD" ? selected : bsToAd(selected);
-    const converted = next === "AD" ? asAd : adToBs(asAd);
-    setMode(next);
-    setSelected(clampYmd(next, converted));
-    setCursor(clampYmd(next, converted));
-    setYearOpen(false);
-  }
+  const monthNames = calendarSystem === "BS" ? BS_MONTHS : AD_MONTHS;
+  const daysInMonth = calendarSystem === "BS" ? 30 : new Date(selectedYear, selectedMonth + 1, 0).getDate();
 
-  function confirm() {
-    const ad = mode === "AD" ? clampYmd("AD", selected) : bsToAd(clampYmd("BS", selected));
-    onPick(ad);
+  const years = Array.from({ length: 20 }, (_, i) => (calendarSystem === "BS" ? 2078 : 2021) + i);
+  const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
+
+  function handleSelect() {
+    if (calendarSystem === "BS" && bs) {
+      const adDate = bsToAd(bs.year, bs.month, bs.day);
+      onSelect(adDate);
+    } else {
+      onSelect(new Date(selectedYear, selectedMonth, selectedDay));
+    }
     onClose();
   }
 
-  function pickYear(year: number) {
-    const next = clampYmd(mode, { ...cursor, year });
-    setCursor(next);
-    setSelected((prev) => clampYmd(mode, { ...prev, year, month: next.month }));
-    setYearOpen(false);
-  }
-
-  const dayCount = daysFor(mode, cursor.year, cursor.month);
-  const startPad = firstWeekday(mode, cursor.year, cursor.month);
-  const cells = useMemo(() => {
-    const list: Array<number | null> = [];
-    for (let i = 0; i < startPad; i++) list.push(null);
-    for (let d = 1; d <= dayCount; d++) list.push(d);
-    while (list.length % 7 !== 0) list.push(null);
-    return list;
-  }, [dayCount, startPad]);
-
-  const years = useMemo(() => {
-    const { min, max } = yearRange(mode);
-    const list: number[] = [];
-    for (let y = max; y >= min; y--) list.push(y);
-    return list;
-  }, [mode]);
-
-  const monthLabel = monthNames(mode)[cursor.month - 1];
-  const previewAd = mode === "AD" ? selected : bsToAd(selected);
-  const previewBs = mode === "BS" ? selected : adToBs(selected);
-  const range = yearRange(mode);
-  const canPrev = cursor.year > range.min || cursor.month > 1;
-  const canNext = cursor.year < range.max || cursor.month < 12;
-  const bottomPad = Math.max(insets.bottom, 12);
-
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <Pressable style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.45)", justifyContent: "flex-end" }} onPress={onClose}>
-        <Pressable
-          onPress={(e) => e.stopPropagation()}
+    <Modal visible={visible} animationType="slide" onRequestClose={onClose} transparent>
+      <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "flex-end" }}>
+        <View
           style={{
             backgroundColor: "#fff",
-            borderTopLeftRadius: 18,
-            borderTopRightRadius: 18,
-            maxHeight: "90%",
+            borderTopLeftRadius: 24,
+            borderTopRightRadius: 24,
             paddingTop: 16,
-            paddingHorizontal: 16,
-            paddingBottom: bottomPad,
+            paddingBottom: Math.max(insets.bottom, 16),
           }}
         >
-          <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 12 }}>
-            <Text style={{ flex: 1, fontSize: 16, fontWeight: "800", color: colors.text }}>{title}</Text>
-            <PressScale onPress={onClose}>
-              <Ionicons name="close" size={22} color={colors.text} />
+          <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingBottom: 12 }}>
+            <Text style={{ flex: 1, fontWeight: "800", fontSize: 18 }}>Select Date</Text>
+            <Pressable onPress={onClose} hitSlop={10}>
+              <Ionicons name="close" size={24} color="#111827" />
+            </Pressable>
+          </View>
+
+          <View style={{ flexDirection: "row", gap: 8, paddingHorizontal: 16, marginBottom: 16 }}>
+            <PressScale
+              onPress={() => setCalendarSystem("AD")}
+              style={{
+                flex: 1,
+                paddingVertical: 10,
+                borderRadius: 12,
+                backgroundColor: calendarSystem === "AD" ? GREEN : "#F3F4F6",
+                alignItems: "center",
+              }}
+            >
+              <Text style={{ fontWeight: "800", fontSize: 13, color: calendarSystem === "AD" ? "#fff" : "#6B7280" }}>AD</Text>
+            </PressScale>
+            <PressScale
+              onPress={() => setCalendarSystem("BS")}
+              style={{
+                flex: 1,
+                paddingVertical: 10,
+                borderRadius: 12,
+                backgroundColor: calendarSystem === "BS" ? GREEN : "#F3F4F6",
+                alignItems: "center",
+              }}
+            >
+              <Text style={{ fontWeight: "800", fontSize: 13, color: calendarSystem === "BS" ? "#fff" : "#6B7280" }}>BS (Bikram Sambat)</Text>
             </PressScale>
           </View>
 
-          <ScrollView
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
-            style={{ flexGrow: 0 }}
-            contentContainerStyle={{ paddingBottom: 8 }}
-          >
-            {modes.length > 1 ? (
-              <View style={{ flexDirection: "row", backgroundColor: "#F3F4F6", borderRadius: 12, padding: 4, marginBottom: 12 }}>
-                {modes.map((item) => {
-                  const on = item === mode;
-                  return (
-                    <PressScale
-                      key={item}
-                      onPress={() => switchMode(item)}
+          <View style={{ flexDirection: "row", paddingHorizontal: 16, gap: 8, height: 160 }}>
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontWeight: "700", fontSize: 12, color: "#6B7280", marginBottom: 8, textAlign: "center" }}>Year</Text>
+              <ScrollView showsVerticalScrollIndicator={false}>
+                {years.map((year) => (
+                  <PressScale
+                    key={year}
+                    onPress={() => {
+                      if (calendarSystem === "BS" && bs) {
+                        const ad = bsToAd(year, displayMonth, Math.min(displayDay, 30));
+                        setSelectedYear(ad.getFullYear());
+                        setSelectedMonth(ad.getMonth());
+                        setSelectedDay(ad.getDate());
+                      } else {
+                        setSelectedYear(year);
+                      }
+                    }}
+                    style={{
+                      paddingVertical: 10,
+                      paddingHorizontal: 12,
+                      borderRadius: 10,
+                      backgroundColor: displayYear === year ? GREEN : "transparent",
+                      marginBottom: 4,
+                    }}
+                  >
+                    <Text
                       style={{
-                        flex: 1,
-                        height: 36,
-                        borderRadius: 10,
-                        alignItems: "center",
-                        justifyContent: "center",
-                        backgroundColor: on ? GREEN : "transparent",
+                        fontWeight: "700",
+                        fontSize: 14,
+                        color: displayYear === year ? "#fff" : "#111827",
+                        textAlign: "center",
                       }}
                     >
-                      <Text style={{ fontWeight: "800", color: on ? "#fff" : colors.text }}>{item}</Text>
-                    </PressScale>
-                  );
-                })}
-              </View>
-            ) : (
-              <View style={{ alignSelf: "flex-start", backgroundColor: "#E8F7EC", borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4, marginBottom: 10 }}>
-                <Text style={{ color: GREEN, fontWeight: "800", fontSize: 12 }}>{mode} calendar</Text>
-              </View>
-            )}
-
-            <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 10 }}>
-              <PressScale
-                onPress={() => {
-                  setYearOpen(false);
-                  if (canPrev) setCursor((c) => shiftMonth(mode, c, -1));
-                }}
-                style={{ width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center", backgroundColor: "#F3F4F6", opacity: canPrev ? 1 : 0.35 }}
-              >
-                <Ionicons name="chevron-back" size={18} color={colors.text} />
-              </PressScale>
-
-              <View style={{ flex: 1, alignItems: "center", gap: 6 }}>
-                <Text style={{ fontWeight: "800", fontSize: 16, color: colors.text }}>{monthLabel}</Text>
-                <PressScale
-                  onPress={() => setYearOpen((v) => !v)}
-                  style={{
-                    flexDirection: "row",
-                    alignItems: "center",
-                    gap: 4,
-                    backgroundColor: yearOpen ? "#E8F7EC" : "#F3F4F6",
-                    borderRadius: 10,
-                    paddingHorizontal: 12,
-                    paddingVertical: 6,
-                    borderWidth: 1,
-                    borderColor: yearOpen ? GREEN : "#E5E7EB",
-                  }}
-                >
-                  <Text style={{ fontWeight: "800", color: GREEN }}>{cursor.year}</Text>
-                  <Ionicons name={yearOpen ? "chevron-up" : "chevron-down"} size={14} color={GREEN} />
-                </PressScale>
-              </View>
-
-              <PressScale
-                onPress={() => {
-                  setYearOpen(false);
-                  if (canNext) setCursor((c) => shiftMonth(mode, c, 1));
-                }}
-                style={{ width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center", backgroundColor: "#F3F4F6", opacity: canNext ? 1 : 0.35 }}
-              >
-                <Ionicons name="chevron-forward" size={18} color={colors.text} />
-              </PressScale>
+                      {year}
+                    </Text>
+                  </PressScale>
+                ))}
+              </ScrollView>
             </View>
 
-            {yearOpen ? (
-              <View style={{ height: 200, borderWidth: 1, borderColor: "#E5E7EB", borderRadius: 12, marginBottom: 12, overflow: "hidden" }}>
-                <ScrollView nestedScrollEnabled showsVerticalScrollIndicator>
-                  {years.map((year) => {
-                    const on = year === cursor.year;
-                    return (
-                      <PressScale
-                        key={year}
-                        onPress={() => pickYear(year)}
-                        style={{
-                          height: 44,
-                          paddingHorizontal: 16,
-                          flexDirection: "row",
-                          alignItems: "center",
-                          justifyContent: "space-between",
-                          backgroundColor: on ? "#E8F7EC" : "#fff",
-                          borderBottomWidth: 1,
-                          borderBottomColor: "#F3F4F6",
-                        }}
-                      >
-                        <Text style={{ fontWeight: on ? "800" : "600", color: on ? GREEN : colors.text, fontSize: 15 }}>{year}</Text>
-                        {on ? <Ionicons name="checkmark" size={16} color={GREEN} /> : null}
-                      </PressScale>
-                    );
-                  })}
-                </ScrollView>
-              </View>
-            ) : (
-              <>
-                <View style={{ flexDirection: "row", marginBottom: 4 }}>
-                  {WEEKDAYS.map((day) => (
-                    <Text key={day} style={{ flex: 1, textAlign: "center", fontSize: 11, fontWeight: "700", color: colors.muted, paddingVertical: 6 }}>
+            <View style={{ flex: 1.5 }}>
+              <Text style={{ fontWeight: "700", fontSize: 12, color: "#6B7280", marginBottom: 8, textAlign: "center" }}>Month</Text>
+              <ScrollView showsVerticalScrollIndicator={false}>
+                {monthNames.map((month, idx) => (
+                  <PressScale
+                    key={month}
+                    onPress={() => {
+                      if (calendarSystem === "BS" && bs) {
+                        const ad = bsToAd(displayYear, idx, Math.min(displayDay, 30));
+                        setSelectedYear(ad.getFullYear());
+                        setSelectedMonth(ad.getMonth());
+                        setSelectedDay(ad.getDate());
+                      } else {
+                        setSelectedMonth(idx);
+                      }
+                    }}
+                    style={{
+                      paddingVertical: 10,
+                      paddingHorizontal: 12,
+                      borderRadius: 10,
+                      backgroundColor: displayMonth === idx ? GREEN : "transparent",
+                      marginBottom: 4,
+                    }}
+                  >
+                    <Text
+                      style={{
+                        fontWeight: "700",
+                        fontSize: 14,
+                        color: displayMonth === idx ? "#fff" : "#111827",
+                        textAlign: "center",
+                      }}
+                    >
+                      {month}
+                    </Text>
+                  </PressScale>
+                ))}
+              </ScrollView>
+            </View>
+
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontWeight: "700", fontSize: 12, color: "#6B7280", marginBottom: 8, textAlign: "center" }}>Day</Text>
+              <ScrollView showsVerticalScrollIndicator={false}>
+                {days.map((day) => (
+                  <PressScale
+                    key={day}
+                    onPress={() => {
+                      if (calendarSystem === "BS" && bs) {
+                        const ad = bsToAd(displayYear, displayMonth, day);
+                        setSelectedYear(ad.getFullYear());
+                        setSelectedMonth(ad.getMonth());
+                        setSelectedDay(ad.getDate());
+                      } else {
+                        setSelectedDay(day);
+                      }
+                    }}
+                    style={{
+                      paddingVertical: 10,
+                      paddingHorizontal: 12,
+                      borderRadius: 10,
+                      backgroundColor: displayDay === day ? GREEN : "transparent",
+                      marginBottom: 4,
+                    }}
+                  >
+                    <Text
+                      style={{
+                        fontWeight: "700",
+                        fontSize: 14,
+                        color: displayDay === day ? "#fff" : "#111827",
+                        textAlign: "center",
+                      }}
+                    >
                       {day}
                     </Text>
-                  ))}
-                </View>
-
-                <View style={{ flexDirection: "row", flexWrap: "wrap" }}>
-                  {cells.map((day, index) => {
-                    if (day == null) {
-                      return <View key={`empty-${index}`} style={{ width: "14.28%", height: 40 }} />;
-                    }
-                    const on = selected.year === cursor.year && selected.month === cursor.month && selected.day === day;
-                    const today =
-                      mode === "AD"
-                        ? (() => {
-                            const t = todayAd();
-                            return t.year === cursor.year && t.month === cursor.month && t.day === day;
-                          })()
-                        : (() => {
-                            const t = adToBs(todayAd());
-                            return t.year === cursor.year && t.month === cursor.month && t.day === day;
-                          })();
-                    return (
-                      <PressScale
-                        key={`d-${day}`}
-                        onPress={() => setSelected({ year: cursor.year, month: cursor.month, day })}
-                        style={{ width: "14.28%", height: 40, alignItems: "center", justifyContent: "center" }}
-                      >
-                        <View
-                          style={{
-                            width: 32,
-                            height: 32,
-                            borderRadius: 16,
-                            alignItems: "center",
-                            justifyContent: "center",
-                            backgroundColor: on ? GREEN : today ? "#E8F7EC" : "transparent",
-                            borderWidth: today && !on ? 1 : 0,
-                            borderColor: GREEN,
-                          }}
-                        >
-                          <Text style={{ fontWeight: on || today ? "800" : "600", color: on ? "#fff" : colors.text }}>{day}</Text>
-                        </View>
-                      </PressScale>
-                    );
-                  })}
-                </View>
-              </>
-            )}
-
-            <Text style={{ marginTop: 10, color: colors.textSecondary, fontSize: 12, textAlign: "center" }}>
-              {formatAd(previewAd)} (AD) · {formatBs(previewBs)} (BS)
-            </Text>
-          </ScrollView>
+                  </PressScale>
+                ))}
+              </ScrollView>
+            </View>
+          </View>
 
           <PressScale
-            onPress={confirm}
+            onPress={handleSelect}
             style={{
-              marginTop: 10,
-              height: 48,
-              borderRadius: 12,
+              marginHorizontal: 16,
+              marginTop: 16,
               backgroundColor: GREEN,
+              paddingVertical: 14,
+              borderRadius: 12,
               alignItems: "center",
-              justifyContent: "center",
             }}
           >
-            <Text style={{ color: "#fff", fontWeight: "800" }}>Confirm date</Text>
+            <Text style={{ color: "#fff", fontWeight: "800", fontSize: 15 }}>Confirm</Text>
           </PressScale>
-        </Pressable>
-      </Pressable>
+        </View>
+      </View>
     </Modal>
   );
 }

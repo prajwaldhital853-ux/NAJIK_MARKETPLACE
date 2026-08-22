@@ -135,7 +135,10 @@ DATA_UPLOAD_MAX_MEMORY_SIZE = 12 * 1024 * 1024
 OTP_STUB = env.bool("OTP_STUB", default=True)
 GOOGLE_CLIENT_IDS = env.list("GOOGLE_CLIENT_IDS", default=[])
 GOOGLE_CLIENT_SECRET = env("GOOGLE_CLIENT_SECRET", default="")
-GOOGLE_REDIRECT_URI = env("GOOGLE_REDIRECT_URI", default="https://auth.expo.io/@prajwal851/najik")
+GOOGLE_REDIRECT_URI = env(
+    "GOOGLE_REDIRECT_URI",
+    default="https://najik-api-p9k2m7q.onrender.com/api/auth/google/callback/",
+)
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 

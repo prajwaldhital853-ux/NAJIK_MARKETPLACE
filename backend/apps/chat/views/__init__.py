@@ -22,6 +22,7 @@ from apps.chat.serializers import (
     admin_party,
     pair_blocked,
 )
+from apps.chat.presence import is_viewing_thread, mark_viewing_thread
 from apps.staff.authentication import StaffJWTAuthentication
 from apps.staff.permissions import IsStaffUser
 
@@ -70,6 +71,7 @@ class PresenceView(APIView):
 
     def post(self, request):
         touch_presence(request.user)
+        mark_viewing_thread(request.user, request.data.get("thread_id"))
         return Response({"ok": True, "last_seen": request.user.last_seen.isoformat()})
 
 
@@ -87,19 +89,29 @@ class ChatThreadListView(APIView):
         serializer = ChatStartSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
         listing = serializer.validated_data["listing"]
-        thread, created = ChatThread.objects.get_or_create(
-            listing=listing,
-            buyer=request.user,
-            defaults={
-                "seller": listing.owner,
-                "listing_title": listing.title,
-                "listing_price": listing.price or "",
-                "listing_location": listing.location or "",
-            },
-        )
-        if thread.seller_id != listing.owner_id:
-            return Response({"detail": "This chat is only between the listing buyer and seller."}, status=status.HTTP_403_FORBIDDEN)
+        
+        existing = ChatThread.objects.filter(listing=listing, buyer=request.user, seller=listing.owner).first()
+        if existing:
+            thread = existing
+            created = False
+            thread.listing_title = listing.title
+            thread.listing_price = listing.price or ""
+            thread.listing_location = listing.location or ""
+            thread.save(update_fields=["listing_title", "listing_price", "listing_location", "updated_at"])
+        else:
+            thread, created = ChatThread.objects.get_or_create(
+                listing=listing,
+                buyer=request.user,
+                seller=listing.owner,
+                defaults={
+                    "listing_title": listing.title,
+                    "listing_price": listing.price or "",
+                    "listing_location": listing.location or "",
+                },
+            )
+        
         thread = participant_threads(request.user).get(pk=thread.pk)
+        mark_viewing_thread(request.user, thread.id)
         mark_read(thread, request.user)
         return Response(
             ChatThreadSerializer(thread, context={"request": request, "include_messages": True}).data,
@@ -114,6 +126,7 @@ class ChatThreadDetailView(APIView):
     def get(self, request, pk):
         touch_presence(request.user)
         thread = get_object_or_404(participant_threads(request.user), pk=pk)
+        mark_viewing_thread(request.user, thread.id)
         mark_read(thread, request.user)
         since = request.query_params.get("since")
         parsed = parse_datetime(since) if since else None
@@ -160,10 +173,23 @@ class ChatMessageCreateView(APIView):
             preview = "Sent a voice note"
         elif data["kind"] == ChatMessage.KIND_LOCATION:
             preview = "Shared a location"
+        elif data["kind"] == ChatMessage.KIND_BOOKING:
+            preview = "Booking update"
         from apps.notifications.models import InboxNotice
         from apps.notifications.services import notify_user
 
-        notify_user(other, "New message", preview[:160], InboxNotice.KIND_MESSAGE, "chat", thread.id)
+        other_thread = ChatThread.objects.filter(pk=thread.pk).first()
+        if not is_viewing_thread(other, other_thread):
+            sender_name = (request.user.full_name or request.user.phone or "Someone").strip()
+            notify_user(
+                other,
+                "New message",
+                preview[:160],
+                InboxNotice.KIND_MESSAGE,
+                "chat",
+                str(thread.id),
+                sender_name=sender_name,
+            )
         return Response(ChatMessageSerializer(msg, context={"request": request}).data, status=status.HTTP_201_CREATED)
 
 

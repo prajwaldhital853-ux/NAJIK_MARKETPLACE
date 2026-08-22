@@ -23,6 +23,7 @@ class InboxNotice(models.Model):
     kind = models.CharField(max_length=16, choices=KIND_CHOICES, default=KIND_OTHER)
     target = models.CharField(max_length=24, blank=True)
     target_id = models.CharField(max_length=64, blank=True)
+    sender_name = models.CharField(max_length=120, blank=True)
     is_read = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
 

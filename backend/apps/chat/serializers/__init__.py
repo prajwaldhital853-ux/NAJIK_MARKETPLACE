@@ -1,3 +1,4 @@
+import json
 import base64
 import re
 import uuid
@@ -153,6 +154,7 @@ class ChatThreadSerializer(serializers.ModelSerializer):
     listing_photo = serializers.SerializerMethodField()
     contact_phone = serializers.SerializerMethodField()
     listing_id = serializers.SerializerMethodField()
+    listing_sold = serializers.SerializerMethodField()
     messages = serializers.SerializerMethodField()
     quick_replies = serializers.SerializerMethodField()
     i_am_buyer = serializers.SerializerMethodField()
@@ -166,6 +168,7 @@ class ChatThreadSerializer(serializers.ModelSerializer):
             "listing_price",
             "listing_location",
             "listing_photo",
+            "listing_sold",
             "contact_phone",
             "created_at",
             "updated_at",
@@ -188,6 +191,13 @@ class ChatThreadSerializer(serializers.ModelSerializer):
     def get_other(self, obj):
         return public_party(obj.other_user(self.context["request"].user), self.context["request"])
 
+    def get_listing_sold(self, obj):
+        listing = obj.listing
+        if not listing:
+            return False
+        extras = listing.extras or {}
+        return extras.get("sold") in (True, "true")
+
     def get_listing_photo(self, obj):
         return listing_photo_url(obj.listing, self.context.get("request"))
 
@@ -208,6 +218,28 @@ class ChatThreadSerializer(serializers.ModelSerializer):
             preview = preview or "Voice message"
         elif msg.kind == ChatMessage.KIND_LOCATION:
             preview = preview or msg.location_label or "Shared location"
+        elif msg.kind == ChatMessage.KIND_BOOKING:
+            preview = msg.location_label or "Booking"
+            try:
+                data = json.loads(msg.text or "{}")
+                item = (data.get("item") or "").strip()
+                status = (data.get("status") or "").strip()
+                if item and status:
+                    preview = f"Booking: {item} · {status}"
+                elif item:
+                    preview = f"Booking: {item}"
+            except Exception:
+                if str(preview).lstrip().startswith("{"):
+                    preview = "Booking request"
+        elif isinstance(preview, str) and preview.lstrip().startswith("{"):
+            try:
+                data = json.loads(preview)
+                if data.get("type") == "booking" or data.get("item"):
+                    item = (data.get("item") or "").strip()
+                    status = (data.get("status") or "").strip()
+                    preview = f"Booking: {item} · {status}".strip(" ·") if item else "Booking request"
+            except Exception:
+                preview = "Booking request"
         return {"id": str(msg.id), "kind": msg.kind, "text": preview, "created_at": msg.created_at.isoformat(), "mine": str(msg.sender_id) == str(self.context["request"].user.id)}
 
     def get_unread_count(self, obj):

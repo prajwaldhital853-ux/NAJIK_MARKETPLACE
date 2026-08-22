@@ -7,11 +7,34 @@ import { AuthImage } from "../components/AuthImage";
 import { KeyboardScreen } from "../components/KeyboardScreen";
 import { PressScale } from "../components/PressScale";
 import { listChatThreads, type ChatThread } from "../chatApi";
+import { useInbox } from "../context/InboxContext";
 import { subscribeAppRefresh } from "../listingsRefresh";
 import { openChatThread } from "../navigation/browse";
 import { colors, shadow } from "../theme";
 
 const GREEN = "#1B7D2C";
+
+function previewLastMessage(row: ChatThread) {
+  const msg = row.last_message;
+  if (!msg) return "No messages yet";
+  const raw = (msg.text || "").trim();
+  if (msg.kind === "booking" || raw.startsWith("{")) {
+    try {
+      const data = JSON.parse(raw);
+      if (data?.type === "booking" || data?.item || data?.status) {
+        const item = data.item || "Visit";
+        const status = data.status || "pending";
+        return `Booking: ${item} · ${status}`;
+      }
+    } catch {
+      if (msg.kind === "booking") return "Booking request";
+    }
+  }
+  if (msg.kind === "image") return raw || "Photo";
+  if (msg.kind === "voice") return raw || "Voice message";
+  if (msg.kind === "location") return raw || "Shared location";
+  return raw || "No messages yet";
+}
 
 function rel(iso?: string | null) {
   if (!iso) return "";
@@ -93,7 +116,7 @@ export function ChatInboxList({ onOpen }: { onOpen: (id: string) => void }) {
               {row.listing_title}
             </Text>
             <Text style={{ color: "#111827", fontSize: 13, marginTop: 4 }} numberOfLines={1}>
-              {row.last_message?.text || "No messages yet"}
+              {previewLastMessage(row)}
             </Text>
           </View>
           {row.unread_count ? (
@@ -109,11 +132,17 @@ export function ChatInboxList({ onOpen }: { onOpen: (id: string) => void }) {
 
 export function ChatInboxScreen() {
   const navigation = useNavigation<any>();
+  const { dismissTarget, refresh } = useInbox();
   return (
     <View style={{ flex: 1, backgroundColor: "#F7F8FA" }}>
       <AppHeader onClose={() => navigation.goBack()} />
       <KeyboardScreen adjustKeyboardInsets={false} fill={false} contentStyle={{ paddingBottom: 24 }}>
-        <ChatInboxList onOpen={(id) => openChatThread(navigation, id)} />
+        <ChatInboxList
+          onOpen={(id) => {
+            void dismissTarget({ target: "chat", target_id: id, kind: "message" }).then(() => refresh());
+            openChatThread(navigation, id);
+          }}
+        />
       </KeyboardScreen>
     </View>
   );

@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useNavigation, useRoute } from "@react-navigation/native";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigation, useRoute, useFocusEffect } from "@react-navigation/native";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   Dimensions,
@@ -20,12 +20,14 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AppHeader } from "../components/AppHeader";
 import { AuthImage } from "../components/AuthImage";
-import { classifiedMore, ConditionPill, LINE, ListingGrid, listingTags, postedLabel } from "../components/ClassifiedCard";
+import { classifiedMore, ConditionPill, LINE, ListingGrid, listingTags, postedLabel, SalePrice, splitPrice } from "../components/ClassifiedCard";
 import { OsmWebMap } from "../components/OsmWebMap";
 import { KeyboardScreen, useKeyboardScroll } from "../components/KeyboardScreen";
 import { PressScale } from "../components/PressScale";
 import { ReportComplaintModal } from "../components/ReportComplaintModal";
 import { useAuth } from "../context/AuthContext";
+import { useInbox } from "../context/InboxContext";
+import { normTargetId } from "../inboxBridge";
 import { isProvider } from "../demo";
 import { catalogMeta, listingById, type CatalogItem } from "../data/catalog";
 import { apiCategoryForKey, liveListingById, listingsToCatalog, listingToCatalog } from "../data/liveListings";
@@ -50,10 +52,18 @@ export function ListingDetailScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const { user } = useAuth();
+  const { dismissTarget } = useInbox();
   const id = String(route.params?.id ?? "");
   const manage = Boolean(route.params?.manage);
   const [item, setItem] = useState<CatalogItem | undefined>(listingById(id) || liveListingById(id));
   const [live, setLive] = useState<ApiListing | null>(null);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!id) return;
+      void dismissTarget({ target: "listing", target_id: normTargetId(id) });
+    }, [id, dismissTarget]),
+  );
 
   useEffect(() => {
     const cached = listingById(id) || liveListingById(id);
@@ -299,14 +309,16 @@ function ListingBody({
       <View style={{ flexDirection: "row", alignItems: "center", flexWrap: "wrap", paddingHorizontal: 16, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: LINE }}>
         <Ionicons name="eye-outline" size={15} color="#6B7280" />
         <Text style={{ color: "#6B7280", fontSize: 13, marginLeft: 6, marginRight: 10 }}>{rich.views} views</Text>
-        {listingTags(item).map((tag) => (
-          <ConditionPill key={tag} label={tag} />
+        {listingTags(item).map((tag, index) => (
+          <ConditionPill key={`${tag}-${index}`} label={tag} />
         ))}
       </View>
 
       <View style={{ paddingHorizontal: 16, paddingTop: 14, paddingBottom: 8 }}>
         <Text style={{ fontWeight: "800", fontSize: 22, color: "#111", lineHeight: 28 }}>{item.title}</Text>
-        <Text style={{ fontWeight: "800", fontSize: 20, color: GREEN, marginTop: 8 }}>{item.price}</Text>
+        <View style={{ marginTop: 8 }}>
+          <SalePrice amount={splitPrice(item.price).amount} unit={splitPrice(item.price).unit} originalPrice={item.originalPrice} discountPercent={item.discountPercent} />
+        </View>
         <Text style={{ color: "#6B7280", fontSize: 12, marginTop: 6 }}>{postedLabel(item.time)}</Text>
       </View>
 
@@ -491,8 +503,8 @@ function ListingBody({
             </Pressable>
           ) : null}
 
-          {rich.highlights.map((row) => (
-            <View key={row} style={{ flexDirection: "row", alignItems: "flex-start", gap: 8, marginTop: 8 }}>
+          {rich.highlights.map((row, index) => (
+            <View key={`${row}-${index}`} style={{ flexDirection: "row", alignItems: "flex-start", gap: 8, marginTop: 8 }}>
               <Text style={{ color: "#111", fontSize: 14 }}>•</Text>
               <Text style={{ color: "#374151", fontSize: 14, flex: 1 }}>{row}</Text>
             </View>
@@ -626,11 +638,11 @@ function ListingBody({
               >
                 <Text style={{ fontWeight: "700", fontSize: 12, color: !activeKeyword ? "#fff" : "#374151" }}>All related</Text>
               </PressScale>
-              {relatedKeywords.map((kw) => {
+              {relatedKeywords.map((kw, index) => {
                 const on = activeKeyword === kw;
                 return (
                   <PressScale
-                    key={kw}
+                    key={`${kw}-${index}`}
                     onPress={() => setActiveKeyword(on ? null : kw)}
                     onLongPress={() => openMapSearch(navigation, { q: kw, key: item.key })}
                     style={{
@@ -782,20 +794,29 @@ function CommentsTab({
   onReview: () => void;
 }) {
   const { onInputFocus } = useKeyboardScroll();
+  const total = reviews.length + comments.length;
   return (
     <View style={{ paddingHorizontal: 16, paddingTop: 14 }}>
-      {reviews.length === 0 && comments.length === 0 ? (
+      {total === 0 ? (
         <Text style={{ color: "#6B7280", fontSize: 13, marginBottom: 12 }}>No comments or reviews yet.</Text>
-      ) : null}
-      {reviews.map((review) => (
-        <CommentRow key={`${review.name}-${review.text}`} review={review} />
-      ))}
-      {comments.map((row, i) => (
-        <View key={`${row.time}-${i}`} style={{ paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: LINE }}>
-          <Text style={{ fontWeight: "700", fontSize: 13 }}>{row.name}</Text>
-          <Text style={{ color: "#4B5563", fontSize: 13, marginTop: 6, lineHeight: 20 }}>{row.text}</Text>
-        </View>
-      ))}
+      ) : (
+        <ScrollView
+          nestedScrollEnabled
+          showsVerticalScrollIndicator
+          style={{ maxHeight: 328 }}
+          contentContainerStyle={{ paddingBottom: 4 }}
+        >
+          {reviews.map((review) => (
+            <CommentRow key={`${review.name}-${review.text}`} review={review} />
+          ))}
+          {comments.map((row, i) => (
+            <View key={`${row.time}-${i}`} style={{ paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: LINE }}>
+              <Text style={{ fontWeight: "700", fontSize: 13 }}>{row.name}</Text>
+              <Text style={{ color: "#4B5563", fontSize: 13, marginTop: 6, lineHeight: 20 }}>{row.text}</Text>
+            </View>
+          ))}
+        </ScrollView>
+      )}
       <View style={{ flexDirection: "row", alignItems: "center", marginTop: 14, gap: 8 }}>
         <TextInput
           value={comment}

@@ -4,6 +4,7 @@ import uuid
 
 from django.core.exceptions import ObjectDoesNotExist
 from django.core.files.base import ContentFile
+from django.utils import timezone
 from rest_framework import serializers
 
 from apps.listings.models import Listing, ListingComment, ListingPhoto, ListingReview, ListingSave
@@ -235,7 +236,9 @@ class ListingWriteSerializer(serializers.Serializer):
             owner=owner,
             **validated_data,
             promote_requested=promote,
-            status=Listing.STATUS_PENDING if publish else Listing.STATUS_DRAFT,
+            status=Listing.STATUS_APPROVED if publish else Listing.STATUS_DRAFT,
+            reviewed_at=timezone.now() if publish else None,
+            is_promoted=promote if publish else False,
         )
         for index, photo in enumerate(photos):
             ListingPhoto.objects.create(listing=listing, image=photo, sort_order=index)
@@ -250,27 +253,24 @@ class ListingWriteSerializer(serializers.Serializer):
             validated_data["promote_requested"] = promote
 
         if instance.status == Listing.STATUS_APPROVED and publish:
-            edit = {field: validated_data.get(field, getattr(instance, field)) for field in EDIT_FIELDS}
+            for key, value in validated_data.items():
+                setattr(instance, key, value)
             if promote is not None:
-                edit["promote_requested"] = promote
-            live_ids = [str(photo.id) for photo in instance.photos.filter(is_pending=False)]
-            edit["keep_photo_ids"] = live_ids if photos is None else []
-            instance.pending_edit = edit
-            instance.admin_reason = ""
-            instance.save(update_fields=["pending_edit", "admin_reason", "updated_at"])
+                instance.is_promoted = promote
+            instance.save()
             if photos is not None:
-                instance.photos.filter(is_pending=True).delete()
+                instance.photos.all().delete()
                 for index, photo in enumerate(photos):
-                    ListingPhoto.objects.create(listing=instance, image=photo, sort_order=index, is_pending=True)
+                    ListingPhoto.objects.create(listing=instance, image=photo, sort_order=index)
             return instance
 
         for key, value in validated_data.items():
             setattr(instance, key, value)
         if publish:
-            instance.status = Listing.STATUS_PENDING
+            instance.status = Listing.STATUS_APPROVED
             instance.admin_reason = ""
-            instance.reviewed_at = None
-            instance.is_promoted = False
+            instance.reviewed_at = timezone.now()
+            instance.is_promoted = instance.promote_requested
             instance.pending_edit = {}
         instance.save()
         if photos is not None:

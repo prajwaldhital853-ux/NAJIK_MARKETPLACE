@@ -1,12 +1,13 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import * as ImagePicker from "expo-image-picker";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Alert, ActivityIndicator, Image, Keyboard, Modal, Text, TextInput, View } from "react-native";
+import { useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
+import { Alert, ActivityIndicator, Image, Keyboard, Modal, Pressable, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AppHeader } from "../components/AppHeader";
 import { AuthImage } from "../components/AuthImage";
 import { KeyboardScreen, useKeyboardScroll } from "../components/KeyboardScreen";
+import { FormToast } from "../components/FormToast";
 import { OsmWebMap } from "../components/OsmWebMap";
 import { searchPlaces, LAHAN, requestUserPoint, reverseGeocode, type PlaceHit } from "../geo";
 import { PressScale } from "../components/PressScale";
@@ -39,6 +40,8 @@ const STEPS = [
   { key: "Media", next: "Review", icon: "image-outline" as const },
   { key: "Review", next: "Submit", icon: "eye-outline" as const },
 ];
+
+type FieldKey = "title" | "location" | "pin" | "description" | "phone";
 
 export function PostScreen() {
   const navigation = useNavigation<any>();
@@ -102,6 +105,11 @@ export function PostScreen() {
   const [customFeature, setCustomFeature] = useState("");
   const [promote, setPromote] = useState(false);
   const [error, setError] = useState("");
+  const [errorField, setErrorField] = useState<FieldKey | null>(null);
+  const [errorTick, setErrorTick] = useState(0);
+  const [toast, setToast] = useState("");
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const fieldRefs = useRef<Partial<Record<FieldKey, View | null>>>({});
   const [busy, setBusy] = useState(false);
   const [keepPhotos, setKeepPhotos] = useState(true);
 
@@ -204,27 +212,59 @@ export function PostScreen() {
     );
   }
 
-  function validate() {
-    if (step === 0) {
-      if (!title.trim()) return `Add a ${copy.titleLabel.toLowerCase()}.`;
-      if (!location.trim()) return "Enter the listing location.";
-      if (lat == null || lng == null) return "Pin the exact location on the map.";
-      if (!description.trim()) return "Add a short description.";
+  function showToast(message: string) {
+    setToast(message);
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setToast(""), 5000);
+  }
+
+  useEffect(() => {
+    return () => {
+      if (toastTimer.current) clearTimeout(toastTimer.current);
+    };
+  }, []);
+
+  function clearFieldError(field?: FieldKey) {
+    if (!field || errorField === field) {
+      setErrorField(null);
+      setError("");
     }
-    if (step === 1 && !contactPhone.replace(/\s/g, "")) return "Enter a contact phone number.";
-    if (step === 2) return "";
-    if (step === 3) return "";
-    return "";
+  }
+
+  function bindFieldRef(key: FieldKey, ref: View | null) {
+    fieldRefs.current[key] = ref;
+  }
+
+  function reportError(result: { field: FieldKey; message: string }) {
+    setError(result.message);
+    setErrorField(result.field);
+    setErrorTick((value) => value + 1);
+    showToast(result.message);
+  }
+
+  function validateAt(index: number): { field: FieldKey; message: string } | null {
+    if (index === 0) {
+      if (!title.trim()) return { field: "title", message: `Add a ${copy.titleLabel.toLowerCase()}.` };
+      if (!location.trim()) return { field: "location", message: "Enter the listing location." };
+      if (lat == null || lng == null) return { field: "pin", message: "Pin the exact location on the map." };
+      if (!description.trim()) return { field: "description", message: "Add a short description." };
+    }
+    if (index === 1 && !contactPhone.replace(/\s/g, "")) return { field: "phone", message: "Enter a contact phone number." };
+    return null;
   }
 
   async function applyPin(point: { lat: number; lng: number }, geocode = true) {
     skipGeocode.current = true;
     setLat(point.lat);
     setLng(point.lng);
+    clearFieldError("pin");
     if (!geocode) return;
     try {
       const geo = await reverseGeocode(point);
-      if (geo.location) setLocation(geo.location);
+      if (geo.location) {
+        setLocation(geo.location);
+        clearFieldError("location");
+      }
       if (geo.city) setCity(geo.city);
       if (geo.district) setDistrict(geo.district);
     } catch {
@@ -337,47 +377,34 @@ export function PostScreen() {
   async function save(publish: boolean) {
     if (publish) {
       for (let index = 0; index < 4; index += 1) {
-        const previous = step;
-        setStep(index);
-        const message = (() => {
-          if (index === 0) {
-            if (!title.trim()) return `Add a ${copy.titleLabel.toLowerCase()}.`;
-            if (!location.trim()) return "Enter the listing location.";
-            if (lat == null || lng == null) return "Pin the exact location on the map.";
-            if (!description.trim()) return "Add a short description.";
-          }
-          if (index === 1 && !contactPhone.replace(/\s/g, "")) return "Enter a contact phone number.";
-          if (index === 2) return "";
-          if (index === 3) return "";
-          return "";
-        })();
-        if (message) {
-          setError(message);
+        const result = validateAt(index);
+        if (result) {
           setStep(index);
+          reportError(result);
           return;
         }
-        setStep(previous);
       }
     } else if (!title.trim()) {
-      setError("Add a title before saving a draft.");
+      setStep(0);
+      reportError({ field: "title", message: "Add a title before saving a draft." });
       return;
     }
     setBusy(true);
     setError("");
+    setErrorField(null);
     try {
       const row = listingId ? await updateListing(listingId, payload(publish)) : await createListing(payload(publish));
-      const editQueued = Boolean(row.has_pending_edit);
       Alert.alert(
-        publish ? (editQueued ? "Edit sent for review" : "Sent for review") : "Draft saved",
+        publish ? "Listing published" : "Draft saved",
         publish
-          ? editQueued
-            ? "NAJIK admin will approve your changes. The live listing stays as-is until then."
-            : "This listing is pending. It stays hidden from buyers until NAJIK admin approves it."
+          ? "Your listing is live in the marketplace feed. Buyers can see it right away."
           : "You can edit and publish this listing later.",
         [{ text: "My listings", onPress: () => (isProvider(user) ? navigation.navigate("Tabs", { screen: "Listings" }) : navigation.jumpTo("Home")) }],
       );
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not save this listing.");
+      const message = err instanceof Error ? err.message : "Could not save this listing.";
+      setError(message);
+      showToast(message);
     } finally {
       setBusy(false);
     }
@@ -385,12 +412,13 @@ export function PostScreen() {
 
   function next() {
     Keyboard.dismiss();
-    const message = validate();
-    if (message) {
-      setError(message);
+    const result = validateAt(step);
+    if (result) {
+      reportError(result);
       return;
     }
     setError("");
+    setErrorField(null);
     if (step < 4) setStep((value) => value + 1);
     else void save(true);
   }
@@ -449,6 +477,7 @@ export function PostScreen() {
       </View>
 
       <KeyboardScreen key={`post-step-${step}`} style={{ backgroundColor: "#fff" }} contentStyle={{ padding: 16, paddingBottom: 28 }}>
+        <ErrorScrollHelper errorField={errorField} errorTick={errorTick} fieldRefs={fieldRefs} />
         {step === 0 ? (
           <View>
             <View
@@ -513,7 +542,7 @@ export function PostScreen() {
               <>
                 <Text style={{ fontWeight: "700", marginBottom: 6 }}>{copy.typeLabel}</Text>
                 <PressScale
-                  onPress={() => setTypeOpen((value) => !value)}
+                  onPress={() => setTypeOpen(true)}
                   style={{
                     borderWidth: 1,
                     borderColor: "#E6E8EC",
@@ -527,37 +556,15 @@ export function PostScreen() {
                 >
                   <Ionicons name={types.find((item) => item.key === propertyType)?.icon || "home-outline"} size={16} color={GREEN} />
                   <Text style={{ flex: 1, marginLeft: 8, fontWeight: "700", color: colors.navy }}>{propertyType}</Text>
-                  <Ionicons name={typeOpen ? "chevron-up" : "chevron-down"} size={16} color="#6B7280" />
+                  <Ionicons name="chevron-down" size={16} color="#6B7280" />
                 </PressScale>
-                {typeOpen
-                  ? types.map((item) => (
-                      <PressScale
-                        key={item.key}
-                        onPress={() => {
-                          setPropertyType(item.key);
-                          setTypeOpen(false);
-                        }}
-                        style={{
-                          marginTop: 6,
-                          borderWidth: 1,
-                          borderColor: propertyType === item.key ? GREEN : "#E6E8EC",
-                          borderRadius: 12,
-                          padding: 12,
-                          flexDirection: "row",
-                          alignItems: "center",
-                          gap: 8,
-                        }}
-                      >
-                        <Ionicons name={item.icon} size={16} color={GREEN} />
-                        <Text style={{ fontWeight: "700", flex: 1 }}>{item.key}</Text>
-                        {propertyType === item.key ? <Ionicons name="checkmark" size={16} color={GREEN} /> : null}
-                      </PressScale>
-                    ))
-                  : null}
               </>
             ) : null}
 
-            <View style={{ marginTop: 14 }}>
+            <View
+              ref={(node) => bindFieldRef("title", node)}
+              style={{ marginTop: 14 }}
+            >
               <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
                 <Text style={{ fontWeight: "700" }}>{copy.titleLabel}</Text>
                 <Text style={{ color: title.length > 60 ? colors.red : "#9AA0A6", fontSize: 11 }}>{title.length}/60</Text>
@@ -565,16 +572,19 @@ export function PostScreen() {
               <Text style={{ color: colors.muted, fontSize: 11, marginTop: 2, marginBottom: 6 }}>{copy.titleHint}</Text>
               <TextInput
                 value={title}
-                onChangeText={(value) => setTitle(value.slice(0, 60))}
+                onChangeText={(value) => {
+                  setTitle(value.slice(0, 60));
+                  clearFieldError("title");
+                }}
                 onFocus={onInputFocus}
                 placeholder={copy.titlePlaceholder}
                 placeholderTextColor="#9AA0A6"
                 maxLength={60}
-                style={inputStyle}
+                style={[inputStyle, errorField === "title" ? invalidStyle : null]}
               />
             </View>
 
-            <View style={{ marginTop: 14 }}>
+            <View ref={(node) => bindFieldRef("location", node)} style={{ marginTop: 14 }}>
               <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
                 <Text style={{ fontWeight: "700" }}>{vertical === "jobs" ? "Job location" : "Location"}</Text>
                 <PressScale onPress={useCurrentLocation} style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
@@ -584,11 +594,14 @@ export function PostScreen() {
               </View>
               <TextInput
                 value={location}
-                onChangeText={setLocation}
+                onChangeText={(value) => {
+                  setLocation(value);
+                  clearFieldError("location");
+                }}
                 onFocus={onInputFocus}
                 placeholder="Shantinagar, New Baneshwor, Ward 31..."
                 placeholderTextColor="#9AA0A6"
-                style={[inputStyle, { marginTop: 6 }]}
+                style={[inputStyle, { marginTop: 6 }, errorField === "location" ? invalidStyle : null]}
               />
               {placeHits.length ? (
                 <View style={{ marginTop: 6, borderWidth: 1, borderColor: "#E6E8EC", borderRadius: 12, backgroundColor: "#fff", overflow: "hidden" }}>
@@ -606,13 +619,27 @@ export function PostScreen() {
                   ))}
                 </View>
               ) : null}
-              <View style={{ marginTop: 10, height: 180, borderRadius: 14, overflow: "hidden", backgroundColor: "#E8EEF3" }}>
+              <View
+                ref={(node) => bindFieldRef("pin", node)}
+                style={{
+                  marginTop: 10,
+                  height: 180,
+                  borderRadius: 14,
+                  overflow: "hidden",
+                  backgroundColor: "#E8EEF3",
+                  borderWidth: errorField === "pin" ? 1.6 : 0,
+                  borderColor: colors.red,
+                }}
+              >
                 <OsmWebMap
                   mode="pick"
                   center={lat != null && lng != null ? { lat, lng } : LAHAN}
                   zoom={15}
                   pin={lat != null && lng != null ? { lat, lng } : LAHAN}
-                  onPin={(point) => void applyPin(point)}
+                  onPin={(point) => {
+                    clearFieldError("pin");
+                    void applyPin(point);
+                  }}
                 />
                 <View style={{ position: "absolute", left: 8, right: 8, bottom: 8, flexDirection: "row", gap: 8 }}>
                   <PressScale
@@ -628,25 +655,28 @@ export function PostScreen() {
               </Text>
             </View>
 
-            <View style={{ marginTop: 14 }}>
+            <View ref={(node) => bindFieldRef("description", node)} style={{ marginTop: 14 }}>
               <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
                 <Text style={{ fontWeight: "700" }}>{copy.descLabel}</Text>
                 <Text style={{ color: description.length > 1000 ? colors.red : "#9AA0A6", fontSize: 11 }}>{description.length}/1000</Text>
               </View>
               <TextInput
                 value={description}
-                onChangeText={(value) => setDescription(value.slice(0, 1000))}
+                onChangeText={(value) => {
+                  setDescription(value.slice(0, 1000));
+                  clearFieldError("description");
+                }}
                 onFocus={onInputFocus}
                 placeholder={copy.descPlaceholder}
                 placeholderTextColor="#9AA0A6"
                 multiline
                 maxLength={1000}
-                style={[inputStyle, { minHeight: 110, textAlignVertical: "top", marginTop: 6 }]}
+                style={[inputStyle, { minHeight: 110, textAlignVertical: "top", marginTop: 6 }, errorField === "description" ? invalidStyle : null]}
               />
               <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 10 }}>
-                {features.map((item) => (
+                {features.map((item, index) => (
                   <PressScale
-                    key={item}
+                    key={`${item}-${index}`}
                     onPress={() => setFeatures((current) => current.filter((value) => value !== item))}
                     style={{
                       backgroundColor: "#E7F6EC",
@@ -735,7 +765,19 @@ export function PostScreen() {
               </Text>
             ) : null}
             <Field label="Contact name" value={contactName} onChangeText={setContactName} onFocus={onInputFocus} placeholder="Your name" />
-            <Field label="Phone" value={contactPhone} onChangeText={setContactPhone} onFocus={onInputFocus} placeholder="98xxxxxxxx" keyboardType="phone-pad" />
+            <Field
+              label="Phone"
+              value={contactPhone}
+              onChangeText={(value) => {
+                setContactPhone(value);
+                clearFieldError("phone");
+              }}
+              onFocus={onInputFocus}
+              placeholder="98xxxxxxxx"
+              keyboardType="phone-pad"
+              invalid={errorField === "phone"}
+              onBindRef={(ref) => bindFieldRef("phone", ref)}
+            />
             <Field label="Email (optional)" value={contactEmail} onChangeText={setContactEmail} onFocus={onInputFocus} placeholder="you@email.com" />
             <Text style={{ fontWeight: "700", marginTop: 14, marginBottom: 8 }}>
               {vertical === "jobs" ? "How should applicants reach you?" : "How should buyers reach you?"}
@@ -841,7 +883,9 @@ export function PostScreen() {
             <Text style={{ fontWeight: "800", fontSize: 20, marginTop: 12 }}>{title || "Untitled listing"}</Text>
             <Text style={{ color: GREEN, fontWeight: "800", marginTop: 4 }}>
               {price.replace(/\D/g, "")
-                ? `Rs. ${Number(price.replace(/\D/g, "")).toLocaleString("en-IN")}`
+                ? Number(discountPct) > 0
+                  ? `Rs. ${Math.max(0, Math.round(Number(price.replace(/\D/g, "")) * (100 - Number(discountPct)) / 100)).toLocaleString("en-IN")}  (${Number(discountPct)}% off)`
+                  : `Rs. ${Number(price.replace(/\D/g, "")).toLocaleString("en-IN")}`
                 : negotiable
                   ? "Price negotiable"
                   : "Price on request"}
@@ -853,8 +897,8 @@ export function PostScreen() {
             <Text style={{ color: colors.muted, marginTop: 4 }}>{location}</Text>
             <Text style={{ marginTop: 10, lineHeight: 20 }}>{description}</Text>
             <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 10 }}>
-              {features.map((item) => (
-                <Text key={item} style={{ backgroundColor: "#E7F6EC", color: GREEN, fontWeight: "700", fontSize: 11, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 10 }}>
+              {features.map((item, index) => (
+                <Text key={`${item}-${index}`} style={{ backgroundColor: "#E7F6EC", color: GREEN, fontWeight: "700", fontSize: 11, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 10 }}>
                   {item}
                 </Text>
               ))}
@@ -972,11 +1016,55 @@ export function PostScreen() {
             center={lat != null && lng != null ? { lat, lng } : LAHAN}
             zoom={16}
             pin={lat != null && lng != null ? { lat, lng } : LAHAN}
-            onPin={(point) => void applyPin(point)}
+            onPin={(point) => {
+              clearFieldError("pin");
+              void applyPin(point);
+            }}
           />
           <Text style={{ color: "#D1D5DB", padding: 12, fontSize: 12 }}>Tap or drag the pin. Buyers use this point for directions.</Text>
         </View>
       </Modal>
+      <Modal visible={typeOpen} transparent animationType="fade" onRequestClose={() => setTypeOpen(false)}>
+        <Pressable style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.4)", justifyContent: "flex-end" }} onPress={() => setTypeOpen(false)}>
+          <Pressable
+            onPress={() => undefined}
+            style={{ backgroundColor: "#fff", borderTopLeftRadius: 18, borderTopRightRadius: 18, padding: 16, paddingBottom: Math.max(insets.bottom, 16) }}
+          >
+            <Text style={{ fontSize: 16, fontWeight: "800", marginBottom: 10 }}>{copy.typeLabel}</Text>
+            {types.map((item) => {
+              const on = propertyType === item.key;
+              return (
+                <PressScale
+                  key={item.key}
+                  onPress={() => {
+                    setPropertyType(item.key);
+                    setTypeOpen(false);
+                  }}
+                  style={{
+                    height: 48,
+                    borderRadius: 10,
+                    paddingHorizontal: 12,
+                    marginBottom: 6,
+                    flexDirection: "row",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    backgroundColor: on ? "#E8F7EC" : "#F9FAFB",
+                    borderWidth: 1,
+                    borderColor: on ? GREEN : "#E5E7EB",
+                  }}
+                >
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                    <Ionicons name={item.icon} size={16} color={GREEN} />
+                    <Text style={{ fontWeight: "700", color: on ? GREEN : colors.navy }}>{item.key}</Text>
+                  </View>
+                  {on ? <Ionicons name="checkmark-circle" size={18} color={GREEN} /> : null}
+                </PressScale>
+              );
+            })}
+          </Pressable>
+        </Pressable>
+      </Modal>
+      {toast ? <FormToast message={toast} /> : null}
     </View>
   );
 }
@@ -990,6 +1078,12 @@ const inputStyle = {
   paddingHorizontal: 12,
   paddingVertical: 12,
   color: "#0B1D2A",
+};
+
+const invalidStyle = {
+  borderColor: colors.red,
+  backgroundColor: "#FFF5F5",
+  borderWidth: 1.6,
 };
 
 const toggleStyle = {
@@ -1036,6 +1130,8 @@ function Field({
   placeholder,
   multiline,
   keyboardType,
+  invalid,
+  onBindRef,
 }: {
   label: string;
   value: string;
@@ -1044,9 +1140,11 @@ function Field({
   placeholder: string;
   multiline?: boolean;
   keyboardType?: "default" | "number-pad" | "phone-pad";
+  invalid?: boolean;
+  onBindRef?: (ref: View | null) => void;
 }) {
   return (
-    <View style={{ marginTop: 12 }}>
+    <View ref={(node) => onBindRef?.(node)} style={{ marginTop: 12 }}>
       <Text style={{ fontWeight: "700", marginBottom: 6 }}>{label}</Text>
       <TextInput
         value={value}
@@ -1056,10 +1154,30 @@ function Field({
         placeholderTextColor={colors.muted}
         multiline={multiline}
         keyboardType={keyboardType}
-        style={[inputStyle, { minHeight: multiline ? 110 : 50, textAlignVertical: multiline ? "top" : "center" }]}
+        style={[inputStyle, { minHeight: multiline ? 110 : 50, textAlignVertical: multiline ? "top" : "center" }, invalid ? invalidStyle : null]}
       />
     </View>
   );
+}
+
+function ErrorScrollHelper({
+  errorField,
+  errorTick,
+  fieldRefs,
+}: {
+  errorField: FieldKey | null;
+  errorTick: number;
+  fieldRefs: MutableRefObject<Partial<Record<FieldKey, View | null>>>;
+}) {
+  const { scrollAnchorIntoView } = useKeyboardScroll();
+  useEffect(() => {
+    if (!errorField) return;
+    const timer = setTimeout(() => {
+      scrollAnchorIntoView(fieldRefs.current[errorField] || null);
+    }, 80);
+    return () => clearTimeout(timer);
+  }, [errorField, errorTick, fieldRefs, scrollAnchorIntoView]);
+  return null;
 }
 
 function Counter({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {

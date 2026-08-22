@@ -11,6 +11,7 @@ from apps.accounts.authentication import AppJWTAuthentication
 from apps.accounts.models import AppUser
 from apps.accounts.permissions import IsAppUser
 from apps.chat.models import ChatMessage, ChatThread
+from apps.chat.presence import is_viewing_thread
 from apps.listings.models import Booking, Listing
 from apps.notifications.models import InboxNotice
 from apps.notifications.services import notify_user
@@ -124,10 +125,33 @@ def booking_chat_payload(booking: Booking):
         "note": booking.note,
         "contact_name": booking.contact_name,
         "contact_phone": booking.contact_phone,
+        "requester_id": str(booking.requester_id),
+        "recipient_id": str(booking.recipient_id),
+        "thread": str(booking.thread_id) if booking.thread_id else None,
     }
 
 
-def post_booking_message(booking: Booking, sender, label: str):
+def booking_friendly_text(booking: Booking, action: str) -> str:
+    item = booking.item or booking.listing.title
+    when = booking.scheduled_at.strftime("%d %b %Y, %I:%M %p").replace(" 0", " ")
+    where = booking.location
+    if action == "request":
+        return f"Hi, I've sent a booking request for {item} on {when} at {where}. Please accept if that time works for you."
+    if action == "accept":
+        return f"Good news — I've accepted the booking for {item} on {when}. See you at {where}."
+    if action == "reject":
+        return f"Sorry, I have to decline the booking for {item} on {when}. Feel free to send another time that works."
+    return f"I've cancelled the booking for {item} on {when}. Sorry for the inconvenience — we can reschedule anytime."
+
+
+def maybe_notify_booking(user, booking, title: str, body: str, sender_name: str = ""):
+    thread = ChatThread.objects.filter(pk=booking.thread_id).first() if booking.thread_id else booking.thread
+    if is_viewing_thread(user, thread):
+        return
+    notify_user(user, title, body, InboxNotice.KIND_BOOKING, "booking", booking.id, sender_name=sender_name)
+
+
+def post_booking_message(booking: Booking, sender, action: str, label: str):
     if not booking.thread_id:
         return
     ChatMessage.objects.create(
@@ -136,6 +160,12 @@ def post_booking_message(booking: Booking, sender, label: str):
         kind="booking",
         text=json.dumps(booking_chat_payload(booking)),
         location_label=label,
+    )
+    ChatMessage.objects.create(
+        thread=booking.thread,
+        sender=sender,
+        kind="text",
+        text=booking_friendly_text(booking, action),
     )
     ChatThread.objects.filter(pk=booking.thread_id).update(updated_at=booking.updated_at)
 
@@ -182,14 +212,13 @@ class BookingListCreateView(APIView):
             contact_phone=(serializer.validated_data.get("contact_phone") or user.phone or "").strip()[:15],
             note=(serializer.validated_data.get("note") or "").strip(),
         )
-        post_booking_message(booking, user, "Booking request")
-        notify_user(
+        post_booking_message(booking, user, "request", "Booking request")
+        maybe_notify_booking(
             recipient,
-            "New booking request",
-            f"{user.full_name or 'Someone'} sent a booking for {listing.title}.",
-            InboxNotice.KIND_BOOKING,
-            "booking",
-            booking.id,
+            booking,
+            "Booking request",
+            f"For {listing.title}",
+            sender_name=(user.full_name or user.phone or "Someone").strip(),
         )
         booking = Booking.objects.select_related("listing", "requester", "recipient", "thread").get(pk=booking.pk)
         return Response(BookingSerializer(booking, context={"request": request}).data, status=status.HTTP_201_CREATED)
@@ -229,13 +258,13 @@ class BookingActionView(APIView):
         else:
             return Response({"detail": "Use accept, reject, or cancel."}, status=status.HTTP_400_BAD_REQUEST)
         booking.save(update_fields=["status", "updated_at"])
-        post_booking_message(booking, request.user, title)
-        notify_user(
+        post_booking_message(booking, request.user, action, title)
+        actor = (request.user.full_name or request.user.phone or "Someone").strip()
+        maybe_notify_booking(
             booking.other_user(request.user),
+            booking,
             title,
             f"{booking.listing.title} · {booking.location}",
-            InboxNotice.KIND_BOOKING,
-            "booking",
-            booking.id,
+            sender_name=actor,
         )
         return Response(BookingSerializer(booking, context={"request": request}).data)

@@ -11,7 +11,7 @@ export type ChatParty = {
 
 export type ChatMessage = {
   id: string;
-  kind: "text" | "image" | "voice" | "location";
+  kind: "text" | "image" | "voice" | "location" | "booking";
   text: string;
   lat: number | null;
   lng: number | null;
@@ -31,6 +31,7 @@ export type ChatThread = {
   listing_price: string;
   listing_location: string;
   listing_photo: string | null;
+  listing_sold?: boolean;
   contact_phone: string;
   created_at: string;
   updated_at: string;
@@ -44,8 +45,14 @@ export type ChatThread = {
   quick_replies: string[];
 };
 
-export async function pingChatPresence() {
-  return withAppAuth((token) => api<{ ok: boolean }>("/api/chat/presence/", { method: "POST", token }));
+export async function pingChatPresence(threadId?: string | null) {
+  return withAppAuth((token) =>
+    api<{ ok: boolean }>("/api/chat/presence/", {
+      method: "POST",
+      token,
+      body: JSON.stringify({ thread_id: threadId || "" }),
+    }),
+  );
 }
 
 export async function listChatThreads() {

@@ -27,6 +27,8 @@ class ChatThread(models.Model):
     listing_location = models.CharField(max_length=160, blank=True)
     buyer = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="buyer_chats")
     seller = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="seller_chats")
+    buyer_viewing_at = models.DateTimeField(null=True, blank=True)
+    seller_viewing_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

@@ -1,5 +1,6 @@
 import type { CatalogKey } from "../data/catalog";
 import type { SellerPage } from "../data/sellerHub";
+import { dismissInboxTargetOnVisit, normTargetId } from "../inboxBridge";
 
 export function openCategory(
   navigation: { navigate: (...args: any[]) => void },
@@ -21,15 +22,18 @@ export function openListing(
   id: string,
   manage = false,
 ) {
+  dismissInboxTargetOnVisit({ target: "listing", target_id: normTargetId(id) });
   navigation.navigate("ListingDetail", { id, manage });
 }
 
-export function openSellerPage(navigation: { navigate: (...args: any[]) => void }, page: SellerPage) {
-  navigation.navigate("SellerHub", { page });
+export function openSellerPage(navigation: { navigate: (...args: any[]) => void }, page: SellerPage, extra?: object) {
+  navigation.navigate("SellerHub", { page, ...extra });
 }
 
-export function openBookings(navigation: { navigate: (...args: any[]) => void }) {
-  navigateNamed(navigation, "Bookings");
+export function openBookings(navigation: { navigate: (...args: any[]) => void }, bookingId?: string) {
+  if (bookingId) dismissInboxTargetOnVisit({ kind: "booking", target_id: normTargetId(bookingId) });
+  else dismissInboxTargetOnVisit({ kind: "booking" });
+  navigateNamed(navigation, "Bookings", bookingId ? { bookingId } : undefined);
 }
 
 export function openChatInbox(navigation: { navigate: (...args: any[]) => void }) {
@@ -50,6 +54,8 @@ function navigateNamed(navigation: any, name: string, params?: object) {
 }
 
 export function openChatThread(navigation: { navigate: (...args: any[]) => void }, id: string) {
+  const threadId = normTargetId(id);
+  dismissInboxTargetOnVisit({ target: "chat", target_id: threadId, kind: "message" });
   navigateNamed(navigation, "ChatThread", { id });
 }
 

@@ -270,10 +270,10 @@ function SavedCard({ item, onRemove, onOpen }: { item: SavedItem; onRemove: () =
           </View>
         ) : null}
 
-        {item.tags ? (
-          <View style={{ flexDirection: "row", gap: 6, marginTop: 6 }}>
-            {item.tags.map((tag) => (
-              <View key={tag} style={{ backgroundColor: "#E7F6EC", paddingHorizontal: 8, paddingVertical: 3, borderRadius: 12 }}>
+            {item.tags ? (
+          <View style={{ flexDirection: "row", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
+            {item.tags.map((tag, index) => (
+              <View key={`${tag}-${index}`} style={{ backgroundColor: "#E7F6EC", paddingHorizontal: 8, paddingVertical: 3, borderRadius: 12 }}>
                 <Text style={{ color: GREEN, fontSize: 10, fontWeight: "700" }}>{tag}</Text>
               </View>
             ))}

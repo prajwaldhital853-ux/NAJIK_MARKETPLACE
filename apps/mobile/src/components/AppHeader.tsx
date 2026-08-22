@@ -1,10 +1,10 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { useEffect, useState } from "react";
-import { Modal, Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { Modal, Pressable, ScrollView, Text, TextInput, View, Dimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "../context/AuthContext";
-import { useInbox } from "../context/InboxContext";
+import { useInbox, noticeSenderLabel, noticeKindLabel } from "../context/InboxContext";
 import { isPendingProvider, isProvider } from "../demo";
 import { openBookings, openChatThread, openListing, openSellerPage } from "../navigation/browse";
 import { lookupPlace, useBuyerLocation } from "../context/BuyerLocationContext";
@@ -173,23 +173,27 @@ function NotificationBell() {
   const navigation = useNavigation<any>();
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
-  const { items, unread, mark, markAll, refresh } = useInbox();
+  const { items, unread, mark, markAll, refresh, dismiss, dismissTarget } = useInbox();
   const [open, setOpen] = useState(false);
+  const sheetMax = Math.min(360, Math.round(Dimensions.get("window").height * 0.48));
 
-  function go(item: (typeof items)[0]) {
-    void mark(item.id, true);
+  async function go(item: (typeof items)[0]) {
     setOpen(false);
+    await dismiss(item.id);
     if (item.target === "chat" && item.target_id) {
+      await dismissTarget({ target: "chat", target_id: item.target_id, kind: "message" });
       openChatThread(navigation, item.target_id);
       return;
     }
     if (item.target === "listing" && item.target_id) {
+      await dismissTarget({ target: "listing", target_id: item.target_id });
       openListing(navigation, item.target_id);
       return;
     }
     if (item.target === "booking" || item.kind === "booking") {
-      if (isProvider(user)) openSellerPage(navigation, "bookings");
-      else openBookings(navigation);
+      await dismissTarget({ kind: "booking", target_id: item.target_id || undefined });
+      if (isProvider(user)) openSellerPage(navigation, "bookings", { bookingId: item.target_id });
+      else openBookings(navigation, item.target_id);
     }
   }
 
@@ -233,7 +237,7 @@ function NotificationBell() {
               marginHorizontal: 12,
               backgroundColor: "#fff",
               borderRadius: 18,
-              maxHeight: 420,
+              maxHeight: sheetMax + 56,
               overflow: "hidden",
               ...shadow.card,
             }}
@@ -247,25 +251,38 @@ function NotificationBell() {
               ) : null}
             </View>
             {items.length ? (
-              <ScrollView style={{ maxHeight: 360 }}>
+              <View style={{ maxHeight: sheetMax }}>
+                <ScrollView nestedScrollEnabled keyboardShouldPersistTaps="handled">
               {items.map((item) => (
-                <Pressable
+                <View
                   key={item.id}
-                  onPress={() => go(item)}
-                  style={{ paddingHorizontal: 14, paddingVertical: 10, backgroundColor: item.is_read ? "#fff" : "#F0FDF4", borderTopWidth: 1, borderTopColor: "#F3F4F6" }}
+                  style={{
+                    paddingHorizontal: 14,
+                    paddingVertical: 10,
+                    backgroundColor: item.is_read ? "#fff" : "#F0FDF4",
+                    borderTopWidth: 1,
+                    borderTopColor: "#F3F4F6",
+                  }}
                 >
-                  <Text style={{ fontWeight: "800", color: "#111827" }}>{item.title}</Text>
-                  {item.body ? <Text style={{ color: "#6B7280", fontSize: 12, marginTop: 3 }} numberOfLines={2}>{item.body}</Text> : null}
-                  <Pressable
-                    onPress={() => void mark(item.id, !item.is_read)}
-                    hitSlop={8}
-                    style={{ marginTop: 6, alignSelf: "flex-start" }}
-                  >
-                    <Text style={{ color: GREEN, fontSize: 11, fontWeight: "800" }}>{item.is_read ? "Mark unread" : "Mark read"}</Text>
+                  <Pressable onPress={() => void go(item)}>
+                    <Text style={{ color: GREEN, fontSize: 10, fontWeight: "800", letterSpacing: 0.4 }}>
+                      {noticeKindLabel(item.kind)}
+                    </Text>
+                    <Text style={{ fontWeight: "800", color: "#111827", fontSize: 15, marginTop: 2 }}>{noticeSenderLabel(item)}</Text>
+                    {item.title && item.title !== noticeSenderLabel(item) && item.title !== "New message" && item.title !== "Notification" ? (
+                      <Text style={{ fontWeight: "700", color: "#374151", fontSize: 12, marginTop: 2 }}>{item.title}</Text>
+                    ) : null}
+                    {item.body ? <Text style={{ color: "#6B7280", fontSize: 12, marginTop: 3 }} numberOfLines={2}>{item.body}</Text> : null}
                   </Pressable>
-                </Pressable>
+                  {!item.is_read ? (
+                    <Pressable onPress={() => void mark(item.id, true)} hitSlop={8} style={{ marginTop: 6, alignSelf: "flex-start" }}>
+                      <Text style={{ color: GREEN, fontSize: 11, fontWeight: "800" }}>Mark read</Text>
+                    </Pressable>
+                  ) : null}
+                </View>
               ))}
-              </ScrollView>
+                </ScrollView>
+              </View>
             ) : (
               <Text style={{ padding: 16, color: "#8A8F98" }}>No notifications yet.</Text>
             )}

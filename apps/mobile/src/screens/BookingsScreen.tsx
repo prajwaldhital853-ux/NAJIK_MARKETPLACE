@@ -1,11 +1,12 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useFocusEffect, useNavigation } from "@react-navigation/native";
+import { useFocusEffect, useNavigation, useRoute } from "@react-navigation/native";
 import { useCallback, useMemo, useState } from "react";
 import { Alert, Image, ScrollView, Text, TextInput, View } from "react-native";
 import { AppHeader } from "../components/AppHeader";
 import { BookingFormModal } from "../components/BookingFormModal";
 import { PressScale } from "../components/PressScale";
 import { useAuth } from "../context/AuthContext";
+import { useInbox } from "../context/InboxContext";
 import { isProvider } from "../demo";
 import { bookingAction, fetchBookings, type ApiBooking } from "../bookingsApi";
 import { fetchListingFeed } from "../listingsApi";
@@ -30,6 +31,8 @@ export function BookingsScreen() {
 
 export function BookingsBody({ showSellers = false }: { showSellers?: boolean }) {
   const navigation = useNavigation<any>();
+  const route = useRoute<any>();
+  const { dismissTarget } = useInbox();
   const [rows, setRows] = useState<ApiBooking[]>([]);
   const [tab, setTab] = useState<"mine" | "sellers">(showSellers ? "sellers" : "mine");
   const [filter, setFilter] = useState("All");
@@ -43,6 +46,9 @@ export function BookingsBody({ showSellers = false }: { showSellers?: boolean })
 
   useFocusEffect(
     useCallback(() => {
+      const focusId = String(route.params?.bookingId || "");
+      if (focusId) void dismissTarget({ kind: "booking", target_id: focusId }).catch(() => undefined);
+      else void dismissTarget({ kind: "booking" }).catch(() => undefined);
       load();
       if (showSellers) {
         void fetchListingFeed()
@@ -68,8 +74,10 @@ export function BookingsBody({ showSellers = false }: { showSellers?: boolean })
           })
           .catch(() => setSellers([]));
       }
-    }, [load, showSellers]),
+    }, [load, showSellers, dismissTarget]),
   );
+
+  const focusId = String(route.params?.bookingId || "");
 
   const list = rows.filter((row) => {
     if (filter !== "All" && row.status !== filter.toLowerCase()) return false;
@@ -189,7 +197,19 @@ export function BookingsBody({ showSellers = false }: { showSellers?: boolean })
         )
       ) : (
         list.map((row) => (
-          <View key={row.id} style={{ marginHorizontal: 16, marginTop: 12, backgroundColor: "#fff", borderRadius: 16, padding: 12, ...shadow.card }}>
+          <View
+            key={row.id}
+            style={{
+              marginHorizontal: 16,
+              marginTop: 12,
+              backgroundColor: "#fff",
+              borderRadius: 16,
+              padding: 12,
+              borderWidth: focusId && focusId === row.id ? 2 : 0,
+              borderColor: GREEN,
+              ...shadow.card,
+            }}
+          >
             <View style={{ flexDirection: "row", justifyContent: "space-between", gap: 8 }}>
               <Text style={{ fontWeight: "800", flex: 1 }}>{row.listing_title}</Text>
               <StatusPill status={row.status} />
@@ -198,6 +218,8 @@ export function BookingsBody({ showSellers = false }: { showSellers?: boolean })
             <Text style={{ color: "#8A8F98", marginTop: 4, fontSize: 11 }}>
               {new Date(row.scheduled_at).toLocaleString()} · {row.location}
             </Text>
+            {row.contact_name ? <Text style={{ color: "#374151", marginTop: 6, fontSize: 12 }}>Name: {row.contact_name}</Text> : null}
+            {row.contact_phone ? <Text style={{ color: "#374151", marginTop: 2, fontSize: 12 }}>Phone: {row.contact_phone}</Text> : null}
             {row.note ? <Text style={{ color: "#374151", marginTop: 6, fontSize: 12 }}>{row.note}</Text> : null}
             <View style={{ flexDirection: "row", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
               {row.status === "pending" && !row.i_requested ? (

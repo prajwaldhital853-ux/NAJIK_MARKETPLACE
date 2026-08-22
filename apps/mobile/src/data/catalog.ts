@@ -30,6 +30,7 @@ export type CatalogItem = {
   discountPercent?: number;
   verified?: boolean;
   available?: boolean;
+  sold?: boolean;
   distanceKm?: number;
   apiCategory?: string;
 };

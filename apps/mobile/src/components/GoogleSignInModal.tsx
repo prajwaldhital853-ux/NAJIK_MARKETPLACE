@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Dimensions, Modal, Pressable, Text, View } from "react-native";
+import { ActivityIndicator, Alert, Dimensions, Modal, Pressable, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { WebView } from "react-native-webview";
-import { GOOGLE_CLIENT_ID, GOOGLE_REDIRECT_URI } from "../config";
+import type { WebViewErrorEvent, WebViewNavigation } from "react-native-webview/lib/WebViewTypes";
+import { GOOGLE_REDIRECT_URI } from "../config";
+import { googleAuthUrl, googleResultFromUrl, isGoogleRedirectUrl } from "../googleAuth";
 import { colors, shadow } from "../theme";
 
 const { height: SCREEN_H } = Dimensions.get("window");
@@ -16,31 +18,6 @@ const webViewBootstrap = (bottomPad: number) => `
 })();
 true;
 `;
-
-export function googleAuthUrl() {
-  const params = new URLSearchParams({
-    client_id: GOOGLE_CLIENT_ID,
-    redirect_uri: GOOGLE_REDIRECT_URI,
-    response_type: "code",
-    scope: "openid email profile",
-    prompt: "select_account",
-    access_type: "online",
-  });
-  return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
-}
-
-export function googleResultFromUrl(url: string): { code?: string; error?: string } | null {
-  const base = GOOGLE_REDIRECT_URI.replace(/\/$/, "");
-  if (!url || !url.startsWith(base)) return null;
-  const raw = url.replace(/#/, "?");
-  const query = raw.includes("?") ? raw.slice(raw.indexOf("?") + 1) : "";
-  if (!query) return null;
-  const params = new URLSearchParams(query);
-  const code = params.get("code") || undefined;
-  const error = params.get("error") || undefined;
-  if (!code && !error) return null;
-  return { code, error };
-}
 
 export function GoogleSignInModal({
   visible,
@@ -64,19 +41,40 @@ export function GoogleSignInModal({
     }
   }, [visible]);
 
+  function finishWithError(message: string) {
+    if (done.current) return;
+    done.current = true;
+    onClose();
+    Alert.alert("Google sign-in", message);
+  }
+
   function capture(url: string) {
     if (done.current) return;
-    const hit = googleResultFromUrl(url);
+    const hit = googleResultFromUrl(url, GOOGLE_REDIRECT_URI);
     if (!hit) return;
     if (hit.error) {
-      done.current = true;
-      onClose();
+      finishWithError("Google sign-in was cancelled or denied.");
       return;
     }
     if (!hit.code || codeSent.current === hit.code) return;
     done.current = true;
     codeSent.current = hit.code;
     onCode(hit.code);
+  }
+
+  function onNavChange(nav: WebViewNavigation) {
+    capture(nav.url);
+  }
+
+  function onShouldStartLoad(url: string) {
+    capture(url);
+    return !isGoogleRedirectUrl(url, GOOGLE_REDIRECT_URI);
+  }
+
+  function onWebError(event: WebViewErrorEvent) {
+    const { domain, code, description } = event.nativeEvent;
+    const detail = [description, domain, code != null ? `code ${code}` : ""].filter(Boolean).join(" · ");
+    finishWithError(detail || "Could not load Google sign-in. Check your internet connection and try again.");
   }
 
   return (
@@ -114,14 +112,19 @@ export function GoogleSignInModal({
           <View style={{ flex: 1, marginBottom: insets.bottom }}>
             {visible ? (
               <WebView
-                source={{ uri: googleAuthUrl() }}
+                source={{ uri: googleAuthUrl(GOOGLE_REDIRECT_URI) }}
                 style={{ flex: 1, backgroundColor: colors.white }}
-                onShouldStartLoadWithRequest={(req) => {
-                  capture(req.url);
-                  return !googleResultFromUrl(req.url);
-                }}
+                originWhitelist={["https://*", "http://*"]}
+                onShouldStartLoadWithRequest={(req) => onShouldStartLoad(req.url)}
+                onNavigationStateChange={onNavChange}
                 onLoadStart={() => setLoading(true)}
                 onLoadEnd={() => setLoading(false)}
+                onError={onWebError}
+                onHttpError={(e) => {
+                  if (e.nativeEvent.statusCode >= 400) {
+                    finishWithError(`Google sign-in page failed (${e.nativeEvent.statusCode}). Try again.`);
+                  }
+                }}
                 injectedJavaScript={webViewBootstrap(insets.bottom + 40)}
                 setSupportMultipleWindows={false}
                 thirdPartyCookiesEnabled

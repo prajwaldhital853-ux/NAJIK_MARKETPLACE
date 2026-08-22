@@ -198,4 +198,12 @@ class GoogleAuthCallbackView(APIView):
     authentication_classes = []
 
     def get(self, request):
+        code = (request.query_params.get("code") or "").strip()
+        error = (request.query_params.get("error") or "").strip()
+        if code or error:
+            return Response(
+                "<!DOCTYPE html><html><body style='font-family:sans-serif;text-align:center;padding:48px'>"
+                "<p>Sign-in complete. You can return to the NAJIK app.</p></body></html>",
+                content_type="text/html",
+            )
         return Response({"ok": True})

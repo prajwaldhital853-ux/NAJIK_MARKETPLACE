@@ -1,13 +1,16 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useEffect, useState } from "react";
-import { Alert, LayoutAnimation, Modal, Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { useEffect, useRef, useState } from "react";
+import { ActivityIndicator, Keyboard, LayoutAnimation, Modal, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { createBooking } from "../bookingsApi";
 import { useAuth } from "../context/AuthContext";
 import { useInbox } from "../context/InboxContext";
-import { searchPlaces, type PlaceHit } from "../geo";
+import { requestUserPoint, reverseGeocode, searchPlaces, type PlaceHit } from "../geo";
+import { FormToast } from "./FormToast";
 import { PressScale } from "./PressScale";
-import { colors, shadow } from "../theme";
+import { DatePickerModal } from "./DatePickerModal";
+import { TimePickerModal } from "./TimePickerModal";
+import { shadow } from "../theme";
 
 const GREEN = "#1B7D2C";
 
@@ -32,28 +35,56 @@ export function BookingFormModal({
   const { user } = useAuth();
   const { refresh: refreshInbox } = useInbox();
   const [step, setStep] = useState<"form" | "confirm">("form");
-  const [date, setDate] = useState("");
-  const [time, setTime] = useState("");
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [where, setWhere] = useState(listingLocation || "");
   const [lat, setLat] = useState<number | null>(null);
   const [lng, setLng] = useState<number | null>(null);
   const [hits, setHits] = useState<PlaceHit[]>([]);
+  const [locMode, setLocMode] = useState<"current" | "manual">("manual");
+  const [locBusy, setLocBusy] = useState(false);
   const [item, setItem] = useState(listingTitle);
   const [name, setName] = useState(user?.full_name || "");
   const [phone, setPhone] = useState(user?.phone || "");
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
+  const [toast, setToast] = useState("");
+  const [toastOk, setToastOk] = useState(false);
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showTimePicker, setShowTimePicker] = useState(false);
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function showToast(message: string, ok = false) {
+    setToastOk(ok);
+    setToast(message);
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setToast(""), 4200);
+  }
+
+  useEffect(() => {
+    return () => {
+      if (toastTimer.current) clearTimeout(toastTimer.current);
+    };
+  }, []);
 
   useEffect(() => {
     if (!visible) return;
     setStep("form");
     setItem(listingTitle);
     setWhere(listingLocation || "");
+    setLat(null);
+    setLng(null);
+    setHits([]);
+    setLocMode("manual");
     setName(user?.full_name || "");
     setPhone(user?.phone || "");
+    setToast("");
   }, [visible, listingTitle, listingLocation, user?.full_name, user?.phone]);
 
   useEffect(() => {
+    if (locMode !== "manual") {
+      setHits([]);
+      return;
+    }
     const q = where.trim();
     if (q.length < 2) {
       setHits([]);
@@ -63,24 +94,62 @@ export function BookingFormModal({
       void searchPlaces(q, 8).then(setHits);
     }, 280);
     return () => clearTimeout(t);
-  }, [where]);
+  }, [where, locMode]);
 
   function isoWhen() {
-    if (!date.trim() || !time.trim()) return "";
-    const value = new Date(`${date.trim()}T${time.trim()}:00`);
-    if (Number.isNaN(value.getTime())) return "";
-    return value.toISOString();
+    return selectedDate.toISOString();
+  }
+
+  function formatDate(date: Date) {
+    const year = date.getFullYear();
+    const month = (date.getMonth() + 1).toString().padStart(2, "0");
+    const day = date.getDate().toString().padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  }
+
+  function formatTime(date: Date) {
+    const hour = date.getHours();
+    const minute = date.getMinutes();
+    const period = hour >= 12 ? "PM" : "AM";
+    const displayHour = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
+    return `${displayHour.toString().padStart(2, "0")}:${minute.toString().padStart(2, "0")} ${period}`;
+  }
+
+  async function useCurrentLocation() {
+    setLocBusy(true);
+    try {
+      const point = await requestUserPoint();
+      if (!point) {
+        showToast("Allow location to use where you are, or type a place below.");
+        return;
+      }
+      const geo = await reverseGeocode(point);
+      setWhere(geo.location || "Current location");
+      setLat(point.lat);
+      setLng(point.lng);
+      setHits([]);
+      setLocMode("current");
+    } catch {
+      showToast("Could not find your location. Type a place instead.");
+    } finally {
+      setLocBusy(false);
+    }
   }
 
   function goConfirm() {
-    if (!isoWhen()) {
-      Alert.alert("Missing time", "Add a date (YYYY-MM-DD) and time (HH:MM).");
-      return;
-    }
     if (!where.trim()) {
-      Alert.alert("Location", "Add a Google Maps meeting place.");
+      showToast("Add a meeting place or use your current location.");
       return;
     }
+    if (!name.trim()) {
+      showToast("Please enter your name.");
+      return;
+    }
+    if (!phone.trim()) {
+      showToast("Please enter your phone number.");
+      return;
+    }
+    Keyboard.dismiss();
     try {
       LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     } catch {
@@ -105,10 +174,11 @@ export function BookingFormModal({
         note: note.trim(),
       });
       await refreshInbox();
+      showToast("Booking sent. The other person will see it in chat.", true);
       onSent?.();
-      onClose();
+      setTimeout(() => onClose(), 900);
     } catch (err) {
-      Alert.alert("Could not send", err instanceof Error ? err.message : "Try again.");
+      showToast(err instanceof Error ? err.message : "Could not send this booking.");
     } finally {
       setBusy(false);
     }
@@ -116,72 +186,281 @@ export function BookingFormModal({
 
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
-      <View style={{ flex: 1, backgroundColor: "#F7F8FA", paddingTop: insets.top }}>
-        <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingVertical: 10 }}>
+      <View style={{ flex: 1, backgroundColor: "#F9FAFB", paddingTop: insets.top }}>
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            paddingHorizontal: 16,
+            paddingVertical: 14,
+            backgroundColor: "#fff",
+            borderBottomWidth: 1,
+            borderBottomColor: "#E5E7EB",
+          }}
+        >
           <Pressable onPress={step === "confirm" ? () => setStep("form") : onClose} hitSlop={10}>
-            <Ionicons name={step === "confirm" ? "arrow-back" : "close"} size={24} color="#111827" />
+            <Ionicons name={step === "confirm" ? "arrow-back" : "close"} size={26} color="#111827" />
           </Pressable>
-          <Text style={{ flex: 1, textAlign: "center", fontWeight: "800", fontSize: 17 }}>
-            {step === "confirm" ? "Confirm booking" : "Booking request"}
+          <Text style={{ flex: 1, textAlign: "center", fontWeight: "800", fontSize: 18, color: "#111827" }}>
+            {step === "confirm" ? "Confirm Booking" : "Book a Visit"}
           </Text>
-          <View style={{ width: 24 }} />
+          <View style={{ width: 26 }} />
         </View>
-        <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 32 }}>
-          <View style={{ backgroundColor: "#fff", borderRadius: 18, padding: 16, ...shadow.card }}>
-            <Text style={{ fontWeight: "800", color: GREEN, fontSize: 12, marginBottom: 8 }}>ITEM</Text>
-            <Text style={{ fontWeight: "800", fontSize: 16, color: "#111827" }}>{listingTitle}</Text>
-            {step === "form" ? (
-              <>
-                <Field label="Date" value={date} onChange={setDate} placeholder="2026-08-25" />
-                <Field label="Time" value={time} onChange={setTime} placeholder="14:30" />
-                <Field label="Google Maps location" value={where} onChange={setWhere} placeholder="Meeting point" />
-                {hits.map((hit) => (
+
+        <ScrollView
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={{ padding: 16, paddingBottom: Math.max(insets.bottom, 24) }}
+          style={{ flex: 1 }}
+        >
+          <View style={{ backgroundColor: "#fff", borderRadius: 20, padding: 18, ...shadow.card, marginBottom: 16 }}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 12 }}>
+              <View
+                style={{
+                  width: 44,
+                  height: 44,
+                  borderRadius: 12,
+                  backgroundColor: "#F0FDF4",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <Ionicons name="document-text" size={22} color={GREEN} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontWeight: "800", fontSize: 11, color: GREEN, letterSpacing: 0.5 }}>BOOKING FOR</Text>
+                <Text style={{ fontWeight: "800", fontSize: 16, color: "#111827", marginTop: 2 }}>{listingTitle}</Text>
+              </View>
+            </View>
+          </View>
+
+          {step === "form" ? (
+            <>
+              <View style={{ backgroundColor: "#fff", borderRadius: 20, padding: 18, ...shadow.card, marginBottom: 16 }}>
+                <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 14 }}>
+                  <Ionicons name="calendar" size={20} color={GREEN} />
+                  <Text style={{ fontWeight: "800", fontSize: 15, color: "#111827", marginLeft: 8 }}>Date & Time</Text>
+                </View>
+                <PressScale
+                  onPress={() => setShowDatePicker(true)}
+                  style={{
+                    borderWidth: 1.5,
+                    borderColor: "#E5E7EB",
+                    borderRadius: 14,
+                    paddingVertical: 14,
+                    paddingHorizontal: 16,
+                    backgroundColor: "#F9FAFB",
+                    marginBottom: 12,
+                  }}
+                >
+                  <Text style={{ fontSize: 11, color: "#6B7280", fontWeight: "700", marginBottom: 4 }}>SELECT DATE</Text>
+                  <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+                    <Text style={{ fontWeight: "700", fontSize: 16, color: "#111827" }}>{formatDate(selectedDate)}</Text>
+                    <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
+                  </View>
+                </PressScale>
+                <PressScale
+                  onPress={() => setShowTimePicker(true)}
+                  style={{
+                    borderWidth: 1.5,
+                    borderColor: "#E5E7EB",
+                    borderRadius: 14,
+                    paddingVertical: 14,
+                    paddingHorizontal: 16,
+                    backgroundColor: "#F9FAFB",
+                  }}
+                >
+                  <Text style={{ fontSize: 11, color: "#6B7280", fontWeight: "700", marginBottom: 4 }}>SELECT TIME</Text>
+                  <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+                    <Text style={{ fontWeight: "700", fontSize: 16, color: "#111827" }}>{formatTime(selectedDate)}</Text>
+                    <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
+                  </View>
+                </PressScale>
+              </View>
+
+              <View style={{ backgroundColor: "#fff", borderRadius: 20, padding: 18, ...shadow.card, marginBottom: 16 }}>
+                <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 14 }}>
+                  <Ionicons name="location" size={20} color={GREEN} />
+                  <Text style={{ fontWeight: "800", fontSize: 15, color: "#111827", marginLeft: 8 }}>Meeting Location</Text>
+                </View>
+                <View style={{ flexDirection: "row", gap: 10, marginBottom: 12 }}>
                   <PressScale
-                    key={`${hit.lat}-${hit.lng}`}
+                    onPress={() => void useCurrentLocation()}
+                    style={{
+                      flex: 1,
+                      borderWidth: 1.5,
+                      borderColor: locMode === "current" ? GREEN : "#E5E7EB",
+                      backgroundColor: locMode === "current" ? "#F0FDF4" : "#F9FAFB",
+                      borderRadius: 14,
+                      paddingVertical: 12,
+                      paddingHorizontal: 10,
+                      alignItems: "center",
+                      gap: 6,
+                    }}
+                  >
+                    {locBusy ? <ActivityIndicator size="small" color={GREEN} /> : <Ionicons name="navigate" size={20} color={GREEN} />}
+                    <Text style={{ fontWeight: "800", fontSize: 12, color: "#111827", textAlign: "center" }}>
+                      {locBusy ? "Finding…" : "Current"}
+                    </Text>
+                  </PressScale>
+                  <PressScale
                     onPress={() => {
-                      setWhere(hit.label);
-                      setLat(hit.lat);
-                      setLng(hit.lng);
+                      setLocMode("manual");
                       setHits([]);
                     }}
-                    style={{ paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: "#F3F4F6" }}
+                    style={{
+                      flex: 1,
+                      borderWidth: 1.5,
+                      borderColor: locMode === "manual" ? GREEN : "#E5E7EB",
+                      backgroundColor: locMode === "manual" ? "#F0FDF4" : "#F9FAFB",
+                      borderRadius: 14,
+                      paddingVertical: 12,
+                      paddingHorizontal: 10,
+                      alignItems: "center",
+                      gap: 6,
+                    }}
                   >
-                    <Text style={{ fontWeight: "700", fontSize: 13 }}>{hit.label}</Text>
+                    <Ionicons name="create-outline" size={20} color={GREEN} />
+                    <Text style={{ fontWeight: "800", fontSize: 12, color: "#111827", textAlign: "center" }}>Manual</Text>
                   </PressScale>
-                ))}
-                <Field label="What to book" value={item} onChange={setItem} placeholder="Visit / item" />
-                <Field label="Your name" value={name} onChange={setName} placeholder="Name" />
-                <Field label="Phone" value={phone} onChange={setPhone} placeholder="98xxxxxxxx" />
-                <Field label="Note" value={note} onChange={setNote} placeholder="Optional message" multiline />
-              </>
+                </View>
+                <TextInput
+                  value={where}
+                  onChangeText={(value) => {
+                    setWhere(value);
+                    setLocMode("manual");
+                  }}
+                  placeholder="Type a place in Nepal"
+                  placeholderTextColor="#9CA3AF"
+                  style={{
+                    borderWidth: 1.5,
+                    borderColor: "#E5E7EB",
+                    borderRadius: 14,
+                    paddingHorizontal: 16,
+                    minHeight: 50,
+                    backgroundColor: "#F9FAFB",
+                    fontSize: 15,
+                    color: "#111827",
+                  }}
+                />
+                {hits.length > 0 ? (
+                  <View
+                    style={{
+                      marginTop: 8,
+                      borderRadius: 14,
+                      backgroundColor: "#fff",
+                      borderWidth: 1,
+                      borderColor: "#E5E7EB",
+                      overflow: "hidden",
+                    }}
+                  >
+                    {hits.map((hit, index) => (
+                      <PressScale
+                        key={`${hit.lat}-${hit.lng}-${hit.label}-${index}`}
+                        onPress={() => {
+                          setWhere(hit.label);
+                          setLat(hit.lat);
+                          setLng(hit.lng);
+                          setHits([]);
+                          setLocMode("manual");
+                        }}
+                        style={{
+                          paddingVertical: 12,
+                          paddingHorizontal: 14,
+                          borderBottomWidth: index < hits.length - 1 ? 1 : 0,
+                          borderBottomColor: "#F3F4F6",
+                        }}
+                      >
+                        <Text style={{ fontWeight: "700", fontSize: 14, color: "#111827" }}>{hit.label}</Text>
+                        {hit.location ? (
+                          <Text style={{ color: "#6B7280", fontSize: 12, marginTop: 3 }} numberOfLines={2}>
+                            {hit.location}
+                          </Text>
+                        ) : null}
+                      </PressScale>
+                    ))}
+                  </View>
+                ) : null}
+              </View>
+
+              <View style={{ backgroundColor: "#fff", borderRadius: 20, padding: 18, ...shadow.card, marginBottom: 16 }}>
+                <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 14 }}>
+                  <Ionicons name="person" size={20} color={GREEN} />
+                  <Text style={{ fontWeight: "800", fontSize: 15, color: "#111827", marginLeft: 8 }}>Contact Details</Text>
+                </View>
+                <Field label="Your name" value={name} onChange={setName} placeholder="Full name" />
+                <Field label="Phone number" value={phone} onChange={setPhone} placeholder="98xxxxxxxx" />
+              </View>
+
+              <View style={{ backgroundColor: "#fff", borderRadius: 20, padding: 18, ...shadow.card, marginBottom: 16 }}>
+                <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 14 }}>
+                  <Ionicons name="chatbubbles" size={20} color={GREEN} />
+                  <Text style={{ fontWeight: "800", fontSize: 15, color: "#111827", marginLeft: 8 }}>Additional Info</Text>
+                </View>
+                <Field label="What to book (optional)" value={item} onChange={setItem} placeholder="e.g., Visit, Consultation" />
+                <Field label="Note (optional)" value={note} onChange={setNote} placeholder="Any special requests?" multiline />
+              </View>
+            </>
             ) : (
-              <View style={{ marginTop: 12, gap: 8 }}>
-                <Row k="When" v={`${date} · ${time}`} />
-                <Row k="Where" v={where} />
-                <Row k="Item" v={item} />
-                <Row k="Contact" v={`${name} · ${phone}`} />
-                {note ? <Row k="Note" v={note} /> : null}
-                <Text style={{ color: "#6B7280", fontSize: 12, marginTop: 8 }}>Send this request to the other party?</Text>
+              <View style={{ backgroundColor: "#fff", borderRadius: 20, padding: 18, ...shadow.card }}>
+                <View
+                  style={{
+                    backgroundColor: "#F0FDF4",
+                    borderRadius: 14,
+                    padding: 14,
+                    borderLeftWidth: 4,
+                    borderLeftColor: GREEN,
+                    marginBottom: 18,
+                  }}
+                >
+                  <Text style={{ fontWeight: "800", fontSize: 13, color: GREEN, marginBottom: 6 }}>REVIEW YOUR BOOKING</Text>
+                  <Text style={{ color: "#6B7280", fontSize: 13, lineHeight: 18 }}>
+                    Please review the details below. Once confirmed, the seller will receive your booking request.
+                  </Text>
+                </View>
+                <ConfirmRow icon="calendar-outline" label="Date & Time" value={`${formatDate(selectedDate)} at ${formatTime(selectedDate)}`} />
+                <ConfirmRow icon="location-outline" label="Meeting Place" value={where} />
+                <ConfirmRow icon="person-outline" label="Contact Name" value={name} />
+                <ConfirmRow icon="call-outline" label="Phone" value={phone} />
+                {item.trim() && item !== listingTitle ? <ConfirmRow icon="pricetag-outline" label="Item" value={item} /> : null}
+                {note.trim() ? <ConfirmRow icon="chatbubble-outline" label="Note" value={note} /> : null}
               </View>
             )}
-          </View>
+
           <PressScale
             onPress={step === "form" ? goConfirm : () => void send()}
             style={{
-              marginTop: 16,
               backgroundColor: GREEN,
-              height: 50,
+              paddingVertical: 16,
               borderRadius: 16,
               alignItems: "center",
               justifyContent: "center",
               opacity: busy ? 0.7 : 1,
+              ...shadow.card,
             }}
           >
-            <Text style={{ color: "#fff", fontWeight: "800" }}>
-              {busy ? "Sending…" : step === "form" ? "Review & send" : "Send booking"}
+            <Text style={{ color: "#fff", fontWeight: "800", fontSize: 16 }}>
+              {busy ? "Sending…" : step === "form" ? "Review Booking" : "Confirm & Send"}
             </Text>
           </PressScale>
         </ScrollView>
+        {toast ? <FormToast message={toast} variant={toastOk ? "success" : "error"} /> : null}
+        <DatePickerModal
+          visible={showDatePicker}
+          onClose={() => setShowDatePicker(false)}
+          onSelect={(date) => {
+            setSelectedDate(new Date(date.getFullYear(), date.getMonth(), date.getDate(), selectedDate.getHours(), selectedDate.getMinutes()));
+          }}
+          initialDate={selectedDate}
+        />
+        <TimePickerModal
+          visible={showTimePicker}
+          onClose={() => setShowTimePicker(false)}
+          onSelect={(hour, minute) => {
+            setSelectedDate(new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate(), hour, minute));
+          }}
+          initialHour={selectedDate.getHours()}
+          initialMinute={selectedDate.getMinutes()}
+        />
       </View>
     </Modal>
   );
@@ -201,33 +480,59 @@ function Field({
   multiline?: boolean;
 }) {
   return (
-    <View style={{ marginTop: 12 }}>
-      <Text style={{ fontWeight: "700", fontSize: 12, color: "#6B7280", marginBottom: 6 }}>{label}</Text>
+    <View style={{ marginTop: 14 }}>
+      <Text style={{ fontWeight: "700", fontSize: 12, color: "#6B7280", marginBottom: 8 }}>{label}</Text>
       <TextInput
         value={value}
         onChangeText={onChange}
         placeholder={placeholder}
-        placeholderTextColor="#9AA0A6"
+        placeholderTextColor="#9CA3AF"
         multiline={multiline}
         style={{
-          borderWidth: 1,
-          borderColor: "#E6E8EC",
-          borderRadius: 12,
-          paddingHorizontal: 12,
-          minHeight: multiline ? 70 : 44,
-          paddingVertical: multiline ? 10 : 0,
-          backgroundColor: "#FAFBFC",
+          borderWidth: 1.5,
+          borderColor: "#E5E7EB",
+          borderRadius: 14,
+          paddingHorizontal: 16,
+          minHeight: multiline ? 80 : 50,
+          paddingVertical: multiline ? 12 : 0,
+          backgroundColor: "#F9FAFB",
+          fontSize: 15,
+          color: "#111827",
+          textAlignVertical: multiline ? "top" : "center",
         }}
       />
     </View>
   );
 }
 
-function Row({ k, v }: { k: string; v: string }) {
+function ConfirmRow({ icon, label, value }: { icon: keyof typeof Ionicons.glyphMap; label: string; value: string }) {
   return (
-    <View>
-      <Text style={{ color: "#9AA0A6", fontSize: 11, fontWeight: "700" }}>{k}</Text>
-      <Text style={{ color: "#111827", fontWeight: "700", marginTop: 2 }}>{v}</Text>
+    <View
+      style={{
+        flexDirection: "row",
+        alignItems: "flex-start",
+        paddingVertical: 12,
+        borderBottomWidth: 1,
+        borderBottomColor: "#F3F4F6",
+        gap: 12,
+      }}
+    >
+      <View
+        style={{
+          width: 36,
+          height: 36,
+          borderRadius: 10,
+          backgroundColor: "#F0FDF4",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <Ionicons name={icon} size={18} color={GREEN} />
+      </View>
+      <View style={{ flex: 1 }}>
+        <Text style={{ color: "#9CA3AF", fontSize: 12, fontWeight: "700", marginBottom: 3 }}>{label}</Text>
+        <Text style={{ color: "#111827", fontWeight: "700", fontSize: 15, lineHeight: 20 }}>{value}</Text>
+      </View>
     </View>
   );
 }

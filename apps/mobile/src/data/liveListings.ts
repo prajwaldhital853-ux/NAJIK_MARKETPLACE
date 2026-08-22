@@ -25,6 +25,20 @@ const KEY_TO_CATEGORY: Partial<Record<CatalogKey, string>> = {
 
 const liveById = new Map<string, CatalogItem>();
 
+export function uniqueLabels(values: Array<string | number | null | undefined | false>) {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const value of values) {
+    const text = String(value ?? "").trim();
+    if (!text) continue;
+    const key = text.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(text);
+  }
+  return out;
+}
+
 export function catalogKeyForCategory(category: string, subcategory?: string): CatalogKey {
   if (category === "marketplace") {
     if (subcategory && MARKETPLACE_ELECTRONICS.includes(subcategory)) return "electronics";
@@ -81,8 +95,8 @@ export function listingToCatalog(row: ApiListing): CatalogItem {
     location: row.location,
     time: row.created_at ? new Date(row.created_at).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "Just now",
     badge: row.is_promoted ? "FEATURED" : row.status === "approved" ? "VERIFIED" : "PENDING",
-    extra: [row.subcategory, condition, ...features].filter(Boolean).slice(0, 3),
-    tags: [row.subcategory, condition, row.negotiable ? "Negotiable" : ""].filter(Boolean),
+    extra: uniqueLabels([row.subcategory, condition, ...features]).slice(0, 3),
+    tags: uniqueLabels([row.subcategory, condition, row.negotiable ? "Negotiable" : ""]),
     company: row.owner_name,
     lat: row.lat,
     lng: row.lng,
@@ -90,6 +104,7 @@ export function listingToCatalog(row: ApiListing): CatalogItem {
     reviewCount: row.review_count || 0,
     verified: Boolean(row.seller_verified),
     available: Boolean(extras.availability),
+    sold: extras.sold === true || String(extras.sold || "") === "true",
     apiCategory: row.category,
   };
   if (row.photos[0]?.url) item.photo = { uri: row.photos[0].url };

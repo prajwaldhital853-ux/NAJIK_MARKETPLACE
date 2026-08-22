@@ -5,12 +5,14 @@ import { Alert, ScrollView, Text, View } from "react-native";
 import { AppHeader } from "../components/AppHeader";
 import { AppNoticeHost } from "../components/AppNoticeHost";
 import { AuthImage } from "../components/AuthImage";
+import { SalePrice } from "../components/ClassifiedCard";
 import { useAppRefreshControl } from "../components/KeyboardScreen";
 import { PressScale } from "../components/PressScale";
 import { SellerHeroBanner } from "../components/SellerHeroBanner";
 import { AccountStatusCard, ListingAdminNotesCard, StaffWarningCard } from "../components/StaffWarningBanner";
 import { useAuth } from "../context/AuthContext";
 import { isPendingProvider, isProvider, isRejectedProvider, isVerifiedProvider } from "../demo";
+import { discountedAmount, listingDiscountPercent } from "../data/liveListings";
 import { fetchMyListings, deleteMyListing, type ApiListing } from "../listingsApi";
 import { subscribeListingsChanged } from "../listingsRefresh";
 import { openListing } from "../navigation/browse";
@@ -38,6 +40,7 @@ function SellerHomeScreen() {
   const rejected = isRejectedProvider(user);
   const photo = user?.photo_uri || "";
   const serviceLabel = user?.service_type || "Real Estate & Property Service";
+  const liveHomePosts = posts.filter((item) => item.extras?.sold !== true && String(item.extras?.sold || "") !== "true");
 
   const loadPosts = useCallback(() => {
     void fetchMyListings()
@@ -103,13 +106,15 @@ function SellerHomeScreen() {
           ) : null}
         </View>
 
-        {verified && posts.length ? (
-          posts.slice(0, 4).map((item) => <RecentPostCard key={item.id} item={item} />)
+        {verified && liveHomePosts.length ? (
+          liveHomePosts.slice(0, 4).map((item) => <RecentPostCard key={item.id} item={item} />)
         ) : (
           <View style={{ backgroundColor: colors.white, borderRadius: 16, padding: 18, ...shadow.card }}>
             <Text style={{ color: colors.muted, textAlign: "center" }}>
               {verified
-                ? "No listings yet. Use Add Listing to submit a post for admin review."
+                ? posts.length
+                  ? "Sold listings stay on My Listings. Active posts will show here."
+                  : "No listings yet. Use Add Listing to submit a post for admin review."
                 : "No listings yet. After admin verifies you, you can post your services here."}
             </Text>
           </View>
@@ -129,6 +134,9 @@ function RecentPostCard({ item }: { item: ApiListing }) {
   const priceDigits = String(item.price).replace(/\D/g, "");
   const price = Number(priceDigits);
   const photoUrl = item.photos[0]?.url;
+  const percent = listingDiscountPercent(item.extras);
+  const original = priceDigits ? `Rs. ${Number.isFinite(price) ? price.toLocaleString("en-IN") : item.price}` : item.negotiable ? "Negotiable" : "Price on request";
+  const saleAmount = percent ? discountedAmount(item.price, percent) : original;
 
   function openMenu() {
     Alert.alert(item.title, undefined, [
@@ -186,10 +194,8 @@ function RecentPostCard({ item }: { item: ApiListing }) {
           <Ionicons name="location-outline" size={12} color={colors.muted} />
           <Text style={{ color: colors.muted, fontSize: 11 }}>{item.location}</Text>
         </View>
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 6 }}>
-          <Text style={{ color: "#1B7D2C", fontWeight: "800" }}>
-            {priceDigits ? `Rs. ${Number.isFinite(price) ? price.toLocaleString("en-IN") : item.price}` : item.negotiable ? "Negotiable" : "Price on request"}
-          </Text>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 6, flexWrap: "wrap" }}>
+          <SalePrice amount={saleAmount} originalPrice={percent ? original : undefined} discountPercent={percent || undefined} compact />
           <View style={{ backgroundColor: deal === "For Rent" ? colors.blueSoft : "#E4F6EA", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8 }}>
             <Text style={{ color: deal === "For Rent" ? colors.blue : "#146B32", fontSize: 10, fontWeight: "800" }}>{deal}</Text>
           </View>

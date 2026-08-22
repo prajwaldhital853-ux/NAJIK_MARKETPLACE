@@ -1,5 +1,5 @@
 import { adsCount, sellerPhone, type CatalogItem, type CatalogKey } from "./catalog";
-import { liveSpecs } from "./liveListings";
+import { liveSpecs, uniqueLabels } from "./liveListings";
 import type { ApiListing } from "../listingsApi";
 
 const img = {
@@ -346,10 +346,10 @@ export function richFor(item: CatalogItem, live?: ApiListing | null): ListingRic
       views: live.view_count || 0,
       saved: live.save_count || 0,
       negotiable: Boolean(live.negotiable),
-      highlights: features,
+      highlights: uniqueLabels(features),
       description: (live.description || "").trim() || "No description added.",
       specs: liveSpecs(live),
-      amenities: features.map((label) => ({ icon: "checkmark-outline", label })),
+      amenities: uniqueLabels(features).map((label) => ({ icon: "checkmark-outline", label })),
       faqs: [],
       reviews,
       seller: {

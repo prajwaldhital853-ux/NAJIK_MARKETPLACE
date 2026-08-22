@@ -281,11 +281,16 @@ function ListingAdCard({
         <View>
           <Image source={item.photo} style={{ width: "100%", height: photoH, backgroundColor: "#E8EEF0" }} />
           {badge ? (
-            <View style={{ position: "absolute", top: 8, left: 8, backgroundColor: GREEN, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 }}>
+            <View style={{ position: "absolute", top: 8, left: 8, backgroundColor: GREEN, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, zIndex: 1 }}>
               <Text style={{ color: "#fff", fontSize: 9, fontWeight: "800", letterSpacing: 0.3 }}>{badge}</Text>
             </View>
           ) : null}
-          <View style={{ position: "absolute", top: 6, right: 6 }}>
+          {item.sold ? (
+            <View style={{ position: "absolute", top: badge ? 26 : 8, left: 8, backgroundColor: "#DC2626", paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, zIndex: 1 }}>
+              <Text style={{ color: "#fff", fontSize: 9, fontWeight: "800", letterSpacing: 0.3 }}>SOLD</Text>
+            </View>
+          ) : null}
+          <View style={{ position: "absolute", top: 6, right: 6, zIndex: 2 }}>
             <HeartSave id={item.id} />
           </View>
         </View>

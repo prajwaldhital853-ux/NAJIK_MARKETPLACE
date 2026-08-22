@@ -4,10 +4,12 @@ import { useCallback, useMemo, useState } from "react";
 import { Alert, Image, Modal, ScrollView, Text, TextInput, View } from "react-native";
 import { AppHeader } from "../components/AppHeader";
 import { AuthImage } from "../components/AuthImage";
+import { SalePrice } from "../components/ClassifiedCard";
 import { useAppRefreshControl } from "../components/KeyboardScreen";
 import { PressScale } from "../components/PressScale";
 import { useAuth } from "../context/AuthContext";
 import { canPostServices, isPendingProvider } from "../demo";
+import { discountedAmount, listingDiscountPercent, uniqueLabels } from "../data/liveListings";
 import { fetchMyListings, deleteMyListing, setListingSold, type ApiListing } from "../listingsApi";
 import { subscribeListingsChanged } from "../listingsRefresh";
 import { openListing, openSellerPage } from "../navigation/browse";
@@ -44,6 +46,14 @@ function rupees(value: string) {
   const n = Number(String(value).replace(/\D/g, ""));
   if (!String(value).replace(/\D/g, "")) return "Price on request";
   return `Rs. ${Number.isFinite(n) ? n.toLocaleString("en-IN") : value}`;
+}
+
+function listingSale(item: ApiListing) {
+  const percent = listingDiscountPercent(item.extras);
+  const original = rupees(item.price);
+  if (!percent) return { amount: original, original: undefined as string | undefined, percent: undefined as number | undefined };
+  const sale = discountedAmount(item.price, percent);
+  return { amount: sale || original, original, percent };
 }
 
 function postedOn(iso: string) {
@@ -540,9 +550,11 @@ function ListingManageCard({
 }) {
   const pending = item.status === "pending" || item.status === "draft";
   const rejected = item.status === "rejected";
+  const sold = isSold(item);
   const status = statusLabel(item);
-  const statusColor = pending ? "#F59E0B" : rejected ? colors.red : GREEN;
+  const statusColor = sold ? "#DC2626" : pending ? "#F59E0B" : rejected ? colors.red : GREEN;
   const deal = dealTypeOf(item);
+  const sale = listingSale(item);
   const badge = item.is_promoted ? "FEATURED" : item.status === "approved" ? "VERIFIED" : pending ? "PENDING" : undefined;
   const badgeColor = badge === "FEATURED" ? GREEN : badge === "VERIFIED" ? "#2563EB" : "#F59E0B";
   const beds = extraText(item, "beds");
@@ -555,19 +567,11 @@ function ListingManageCard({
   const km = extraText(item, "km");
   const fuel = extraText(item, "fuel");
   const rateType = extraText(item, "rateType");
-  const metaItems = features.length
-    ? features.slice(0, 3)
-    : [
-        beds ? `${beds} Beds` : "",
-        baths ? `${baths} Baths` : "",
-        area ? `${area} sqft` : "",
-        company,
-        experience,
-        year,
-        km ? `${km} km` : "",
-        fuel,
-        rateType,
-      ].filter(Boolean).slice(0, 3);
+  const metaItems = uniqueLabels(
+    features.length
+      ? features.slice(0, 3)
+      : [beds ? `${beds} Beds` : "", baths ? `${baths} Baths` : "", area ? `${area} sqft` : "", company, experience, year, km ? `${km} km` : "", fuel, rateType],
+  ).slice(0, 3);
 
   const photoUrl = item.photos[0]?.url;
   return (
@@ -579,8 +583,24 @@ function ListingManageCard({
       <View>
         <AuthImage uri={photoUrl} style={{ width: compact ? "100%" : 104, height: compact ? 96 : 112, borderRadius: 12 } as any} />
         {badge ? (
-          <View style={{ position: "absolute", top: 7, left: 7, backgroundColor: badgeColor, paddingHorizontal: 7, paddingVertical: 3, borderRadius: 6 }}>
+          <View style={{ position: "absolute", top: 7, left: 7, backgroundColor: badgeColor, paddingHorizontal: 7, paddingVertical: 3, borderRadius: 6, zIndex: 1 }}>
             <Text style={{ color: "#fff", fontSize: 8, fontWeight: "800", letterSpacing: 0.3 }}>{badge}</Text>
+          </View>
+        ) : null}
+        {sold ? (
+          <View
+            style={{
+              position: "absolute",
+              top: badge ? 26 : 7,
+              left: 7,
+              backgroundColor: "#DC2626",
+              paddingHorizontal: 7,
+              paddingVertical: 3,
+              borderRadius: 6,
+              zIndex: 1,
+            }}
+          >
+            <Text style={{ color: "#fff", fontSize: 8, fontWeight: "800", letterSpacing: 0.3 }}>SOLD</Text>
           </View>
         ) : null}
         <View
@@ -594,6 +614,7 @@ function ListingManageCard({
             backgroundColor: "#fff",
             alignItems: "center",
             justifyContent: "center",
+            zIndex: 2,
           }}
         >
           <Ionicons name="heart-outline" size={13} color="#374151" />
@@ -639,22 +660,24 @@ function ListingManageCard({
           </Text>
         </View>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 7, flexWrap: "wrap" }}>
-          <Text style={{ color: GREEN, fontWeight: "800", fontSize: 13.5 }}>{rupees(item.price)}</Text>
+          <SalePrice amount={sale.amount} originalPrice={sale.original} discountPercent={sale.percent} compact />
           <View
             style={{
-              backgroundColor: deal === "For Rent" ? "#E8F1FE" : "#E4F6EA",
+              backgroundColor: sold ? "#FEE2E2" : deal === "For Rent" ? "#E8F1FE" : "#E4F6EA",
               paddingHorizontal: 8,
               paddingVertical: 2,
               borderRadius: 8,
             }}
           >
-            <Text style={{ color: deal === "For Rent" ? "#2563EB" : "#146B32", fontSize: 10, fontWeight: "800" }}>{deal}</Text>
+            <Text style={{ color: sold ? "#DC2626" : deal === "For Rent" ? "#2563EB" : "#146B32", fontSize: 10, fontWeight: "800" }}>
+              {sold ? "Sold" : deal}
+            </Text>
           </View>
         </View>
         {metaItems.length ? (
           <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 7, flexWrap: "wrap" }}>
-            {metaItems.map((text) => (
-              <Meta key={text} icon={metaIcon(text)} text={text} />
+            {metaItems.map((text, index) => (
+              <Meta key={`${text}-${index}`} icon={metaIcon(text)} text={text} />
             ))}
           </View>
         ) : null}

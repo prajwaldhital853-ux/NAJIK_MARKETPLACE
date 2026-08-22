@@ -415,6 +415,83 @@ export async function listStaffReferrals(status?: "joined" | "earned") {
   return staffRequest<StaffReferralRow[]>(`/api/admin/app-control/referrals${q}`);
 }
 
+export type SellerPaymentConfig = {
+  is_active: boolean;
+  listing_fee_rupees: number;
+  listing_fee_label: string;
+  min_load_rupees: number;
+  max_load_rupees: number;
+  bank_name: string;
+  bank_account_name: string;
+  bank_account_number: string;
+  bank_branch: string;
+  payment_instructions: string;
+  qr_code_url: string;
+};
+
+export async function getSellerPaymentConfig() {
+  return staffRequest<SellerPaymentConfig>("/api/admin/app-control/seller-payments/");
+}
+
+export async function patchSellerPaymentConfig(payload: Record<string, unknown>) {
+  return staffRequest<SellerPaymentConfig>("/api/admin/app-control/seller-payments/", {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
+export type SellerLoadRequestRow = {
+  id: string;
+  amount_paisa: number;
+  amount_label: string;
+  payment_reference: string;
+  status: "pending" | "approved" | "rejected";
+  admin_note: string;
+  proof_url: string;
+  created_at: string;
+  reviewed_at?: string | null;
+  provider_id: string;
+  provider_name: string;
+  provider_phone: string;
+};
+
+export async function listStaffLoadRequests(status?: "pending" | "approved" | "rejected") {
+  const q = status ? `?status=${status}` : "";
+  return staffRequest<SellerLoadRequestRow[]>(`/api/admin/app-control/load-requests/${q}`);
+}
+
+export async function approveStaffLoadRequest(id: string) {
+  return staffRequest(`/api/admin/app-control/load-requests/${id}/approve/`, { method: "POST", body: "{}" });
+}
+
+export async function rejectStaffLoadRequest(id: string, admin_note: string) {
+  return staffRequest(`/api/admin/app-control/load-requests/${id}/reject/`, {
+    method: "POST",
+    body: JSON.stringify({ admin_note }),
+  });
+}
+
+export type SellerWalletRow = {
+  provider_id: string;
+  provider_name: string;
+  provider_phone: string;
+  balance_paisa: number;
+  balance_label: string;
+  updated_at: string;
+};
+
+export async function listStaffSellerWallets(providerId?: string) {
+  const q = providerId ? `?provider=${encodeURIComponent(providerId)}` : "";
+  return staffRequest<SellerWalletRow[]>(`/api/admin/app-control/seller-wallets/${q}`);
+}
+
+export async function staffAdjustSellerWallet(providerId: string, amount_rupees: number, note: string) {
+  return staffRequest(`/api/admin/app-control/seller-wallets/${providerId}/adjust/`, {
+    method: "POST",
+    body: JSON.stringify({ amount_rupees, note }),
+  });
+}
+
 export type ChatReportParty = {
   id: string;
   full_name: string;

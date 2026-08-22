@@ -37,6 +37,12 @@ def seller_can_post(user) -> bool:
     )
 
 
+def seller_publish_balance_message(user) -> str | None:
+    from apps.core.seller_wallet_service import seller_publish_blocked_message
+
+    return seller_publish_blocked_message(user)
+
+
 def listing_queryset():
     return (
         Listing.objects.select_related("owner", "owner__provider_application")
@@ -232,6 +238,11 @@ class ListingMineView(APIView):
                 {"detail": "Only verified service providers can post listings."},
                 status=status.HTTP_403_FORBIDDEN,
             )
+        publish = request.data.get("publish", True)
+        if publish in (True, "true", "1", 1):
+            blocked = seller_publish_balance_message(request.user)
+            if blocked:
+                return Response({"detail": blocked}, status=status.HTTP_403_FORBIDDEN)
         serializer = ListingWriteSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         listing = serializer.save(owner=request.user)
@@ -245,6 +256,11 @@ class ListingMineDetailView(APIView):
 
     def patch(self, request, pk):
         listing = get_object_or_404(Listing, pk=pk, owner=request.user)
+        publish = request.data.get("publish")
+        if publish in (True, "true", "1", 1) and listing.status != Listing.STATUS_APPROVED:
+            blocked = seller_publish_balance_message(request.user)
+            if blocked:
+                return Response({"detail": blocked}, status=status.HTTP_403_FORBIDDEN)
         serializer = ListingWriteSerializer(listing, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         listing = serializer.save()

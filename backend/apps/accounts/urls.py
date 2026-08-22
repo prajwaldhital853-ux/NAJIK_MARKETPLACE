@@ -9,7 +9,7 @@ from apps.accounts.views.password_reset import PasswordResetConfirmView, Passwor
 from apps.accounts.views.refresh import RefreshView
 from apps.accounts.views.register import RegisterView
 from apps.accounts.views.provider_register import GuestOtpRequestView, ProviderRegisterCompleteView
-from apps.accounts.views.referral import ReferEarnMeView
+from apps.accounts.views.seller_wallet import SellerLoadRequestCreateView, SellerPaymentsMeView
 
 urlpatterns = [
     path("register/", RegisterView.as_view(), name="app-register"),
@@ -24,7 +24,8 @@ urlpatterns = [
     path("logout/", LogoutView.as_view(), name="app-logout"),
     path("me/photo/", MePhotoView.as_view(), name="app-me-photo"),
     path("me/", MeView.as_view(), name="app-me"),
-    path("referrals/me/", ReferEarnMeView.as_view(), name="app-referrals-me"),
+    path("payments/me/", SellerPaymentsMeView.as_view(), name="app-payments-me"),
+    path("payments/load-requests/", SellerLoadRequestCreateView.as_view(), name="app-payments-load"),
     path("password-reset/", PasswordResetRequestView.as_view(), name="app-password-reset"),
     path("password-reset/confirm/", PasswordResetConfirmView.as_view(), name="app-password-reset-confirm"),
 ]

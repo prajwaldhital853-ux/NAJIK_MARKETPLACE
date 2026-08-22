@@ -10,7 +10,7 @@ export type SellerPage =
   | "messages"
   | "settings"
   | "help"
-  | "invite";
+  | "payments";
 
 export const sellerPageMeta: Record<
   SellerPage,
@@ -25,7 +25,7 @@ export const sellerPageMeta: Record<
 > = {
   bookings: { title: "Bookings", sub: "Visits and jobs on your calendar", icon: "calendar", color: "#2563EB", bg: "#E8F1FE", photo: require("../../assets/listings/office.jpg") },
   reviews: { title: "Reviews", sub: "What customers say about you", icon: "star", color: "#EA580C", bg: "#FFF1E0", photo: require("../../assets/listings/house.jpg") },
-  earnings: { title: "Earnings", sub: "Payouts, balance and this week", icon: "card", color: "#1B7D2C", bg: "#E4F6EA", photo: require("../../assets/listings/shop.jpg") },
+  earnings: { title: "Earnings", sub: "Listing balance and fees", icon: "card", color: "#1B7D2C", bg: "#E4F6EA", photo: require("../../assets/listings/shop.jpg") },
   promotions: { title: "Promotions", sub: "Boost listings to the top", icon: "megaphone", color: "#EA580C", bg: "#FFF1E0", photo: require("../../assets/listings/building.jpg") },
   services: { title: "My Services", sub: "What you offer on NAJIK", icon: "briefcase", color: "#7C3AED", bg: "#F1E9FF", photo: require("../../assets/listings/tools.jpg") },
   saved: { title: "Saved Listings", sub: "Market watch from other sellers", icon: "bookmark", color: "#16A34A", bg: "#E7F6EC", photo: require("../../assets/listings/modern.jpg") },
@@ -34,7 +34,7 @@ export const sellerPageMeta: Record<
   messages: { title: "Messages", sub: "Chats with buyers nearby", icon: "mail", color: "#7C3AED", bg: "#F1E9FF", photo: require("../../assets/listings/apartment.jpg") },
   settings: { title: "Settings", sub: "Account, alerts and privacy", icon: "settings", color: "#4B5563", bg: "#F3F4F6", photo: require("../../assets/listings/office.jpg") },
   help: { title: "Help & Support", sub: "Guides, FAQs and contact", icon: "headset", color: "#EA580C", bg: "#FFF1E0", photo: require("../../assets/listings/services.jpg") },
-  invite: { title: "Invite & Earn", sub: "Share NAJIK, earn credit", icon: "gift", color: "#1B7D2C", bg: "#E4F6EA", photo: require("../../assets/listings/land.jpg") },
+  payments: { title: "Payments", sub: "Balance, add funds, listing fees", icon: "wallet", color: "#1B7D2C", bg: "#E4F6EA", photo: require("../../assets/listings/land.jpg") },
 };
 
 export const sellerBookings: {

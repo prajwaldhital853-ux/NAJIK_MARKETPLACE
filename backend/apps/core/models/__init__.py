@@ -136,3 +136,11 @@ class ProviderLedgerEntry(models.Model):
 
     def __str__(self):
         return f"{self.title} ({self.provider_id})"
+
+
+from apps.core.models.seller_wallet import (
+    SellerLoadRequest,
+    SellerPaymentConfig,
+    SellerWallet,
+    SellerWalletTransaction,
+)

@@ -4,6 +4,7 @@ import uuid
 
 from django.core.exceptions import ObjectDoesNotExist
 from django.core.files.base import ContentFile
+from django.db import transaction
 from django.utils import timezone
 from rest_framework import serializers
 
@@ -246,6 +247,7 @@ class ListingWriteSerializer(serializers.Serializer):
     def validate(self, attrs):
         return attrs
 
+    @transaction.atomic
     def create(self, validated_data):
         photos = validated_data.pop("photos", None) or []
         promote = validated_data.pop("promote", False)
@@ -264,10 +266,17 @@ class ListingWriteSerializer(serializers.Serializer):
             ListingPhoto.objects.create(listing=listing, image=photo, sort_order=index)
         if publish and listing.status == Listing.STATUS_APPROVED:
             from apps.accounts.models.referral import qualify_referral_for_listing
+            from apps.core.seller_wallet_service import deduct_listing_fee, InsufficientBalanceError
 
+            try:
+                deduct_listing_fee(owner, listing)
+            except InsufficientBalanceError as exc:
+                msg = exc.messages[0] if getattr(exc, "messages", None) else str(exc)
+                raise serializers.ValidationError({"detail": msg}) from exc
             qualify_referral_for_listing(listing)
         return listing
 
+    @transaction.atomic
     def update(self, instance, validated_data):
         photos = validated_data.pop("photos", None)
         promote = validated_data.pop("promote", None)
@@ -309,7 +318,13 @@ class ListingWriteSerializer(serializers.Serializer):
                 ListingPhoto.objects.create(listing=instance, image=photo, sort_order=index)
         if instance.status == Listing.STATUS_APPROVED and not was_approved:
             from apps.accounts.models.referral import qualify_referral_for_listing
+            from apps.core.seller_wallet_service import deduct_listing_fee, InsufficientBalanceError
 
+            try:
+                deduct_listing_fee(instance.owner, instance)
+            except InsufficientBalanceError as exc:
+                msg = exc.messages[0] if getattr(exc, "messages", None) else str(exc)
+                raise serializers.ValidationError({"detail": msg}) from exc
             qualify_referral_for_listing(instance)
         return instance
 

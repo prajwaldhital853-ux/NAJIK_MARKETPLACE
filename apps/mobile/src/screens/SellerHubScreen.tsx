@@ -24,8 +24,9 @@ import {
   type SellerPage,
 } from "../data/sellerHub";
 import { ChatInboxList } from "./ChatInboxScreen";
+import { choosePhoto } from "../pickPhoto";
 import { openChatThread, openListing } from "../navigation/browse";
-import { fetchReferEarnMe } from "../referralsApi";
+import { createSellerLoadRequest, fetchSellerPaymentsMe } from "../paymentsApi";
 import { colors, shadow } from "../theme";
 
 const GREEN = "#1B7D2C";
@@ -41,7 +42,7 @@ const PAGES: SellerPage[] = [
   "messages",
   "settings",
   "help",
-  "invite",
+  "payments",
 ];
 
 export function SellerHubScreen() {
@@ -110,7 +111,7 @@ function PageBody({ page }: { page: SellerPage }) {
   if (page === "messages") return <MessagesBody />;
   if (page === "settings") return <SettingsBody />;
   if (page === "help") return <HelpBody />;
-  return <InviteBody />;
+  return <PaymentsBody />;
 }
 
 function SearchBox({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder: string }) {
@@ -234,48 +235,165 @@ function ReviewsBody() {
 }
 
 function EarningsBody() {
+  const navigation = useNavigation<any>();
+  const [balance, setBalance] = useState("—");
+  const [feeLabel, setFeeLabel] = useState("");
+
+  useEffect(() => {
+    void fetchSellerPaymentsMe()
+      .then((data) => {
+        setBalance(data.balance_label);
+        setFeeLabel(data.config.listing_fee_label);
+      })
+      .catch(() => setBalance("—"));
+  }, []);
+
   return (
     <>
-      <QuickRow
-        items={[
-          { icon: "download-outline", label: "Withdraw", onPress: () => Alert.alert("Withdraw", "Demo payout to eSewa · 9812••••78") },
-          { icon: "document-text-outline", label: "Invoice", onPress: () => Alert.alert("Statement", "August PDF is ready in demo.") },
-          { icon: "card-outline", label: "eSewa", onPress: () => Alert.alert("Payout method", "9812••••78") },
-          { icon: "pie-chart-outline", label: "Report", onPress: () => Alert.alert("Report", "Views vs visits this month.") },
-        ]}
-      />
       <StatStrip
         items={[
-          { n: "24.8k", l: "Balance" },
-          { n: "3.2k", l: "Pending" },
-          { n: "+18%", l: "Vs last wk" },
+          { n: balance, l: "Listing balance" },
+          { n: feeLabel || "—", l: "Per live listing" },
+          { n: "Offline", l: "Payout type" },
         ]}
       />
-      <Text style={{ fontWeight: "800", fontSize: 16, paddingHorizontal: 16 }}>This week</Text>
-      <View style={{ flexDirection: "row", alignItems: "flex-end", height: 120, marginHorizontal: 16, marginTop: 12, gap: 8 }}>
-        {weekBars.map((bar) => (
-          <View key={bar.d} style={{ flex: 1, alignItems: "center" }}>
-            <Text style={{ fontSize: 9, color: "#8A8F98", marginBottom: 4 }}>{bar.n}</Text>
-            <View style={{ width: "100%", height: 88, justifyContent: "flex-end" }}>
-              <View style={{ height: 88 * bar.v, backgroundColor: GREEN, borderRadius: 8, opacity: 0.85 }} />
-            </View>
-            <Text style={{ fontSize: 10, fontWeight: "700", marginTop: 6 }}>{bar.d}</Text>
-          </View>
-        ))}
+      <View style={{ marginHorizontal: 16, marginTop: 12, backgroundColor: "#fff", borderRadius: 16, padding: 14, ...shadow.card }}>
+        <Text style={{ fontWeight: "800", fontSize: 14 }}>Pay to post listings</Text>
+        <Text style={{ color: "#6B7280", marginTop: 6, fontSize: 12, lineHeight: 18 }}>
+          Your balance is used when you publish a live listing. Drafts are free. Add funds via bank transfer and wait for admin approval.
+        </Text>
+        <PressScale
+          onPress={() => navigation.navigate("SellerHub", { page: "payments" })}
+          style={{ marginTop: 12, backgroundColor: GREEN, paddingVertical: 10, borderRadius: 10, alignItems: "center" }}
+        >
+          <Text style={{ color: "#fff", fontWeight: "800" }}>Add funds & payments</Text>
+        </PressScale>
       </View>
-      <Text style={{ fontWeight: "800", fontSize: 16, paddingHorizontal: 16, marginTop: 22 }}>Recent activity</Text>
-      {payouts.map((row) => (
-        <View key={row.id} style={{ marginHorizontal: 16, marginTop: 10, backgroundColor: "#fff", borderRadius: 14, padding: 14, flexDirection: "row", alignItems: "center", ...shadow.card }}>
-          <View style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: row.ok ? "#E7F6EC" : "#FDECEC", alignItems: "center", justifyContent: "center" }}>
-            <Ionicons name={row.ok ? "arrow-down" : "arrow-up"} size={16} color={row.ok ? GREEN : colors.red} />
+    </>
+  );
+}
+
+function PaymentsBody() {
+  const { onInputFocus } = useKeyboardScroll();
+  const [data, setData] = useState<Awaited<ReturnType<typeof fetchSellerPaymentsMe>> | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [amount, setAmount] = useState("");
+  const [paymentRef, setPaymentRef] = useState("");
+  const [proofUri, setProofUri] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  const reload = () =>
+    fetchSellerPaymentsMe()
+      .then(setData)
+      .catch(() => setData(null));
+
+  useEffect(() => {
+    void reload().finally(() => setLoading(false));
+  }, []);
+
+  async function submitPaid() {
+    const rupees = Number(amount);
+    if (!rupees || rupees <= 0) {
+      Alert.alert("Amount required", "Enter how much you paid in rupees.");
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await createSellerLoadRequest({
+        amount_rupees: rupees,
+        payment_reference: paymentRef.trim(),
+        proof_uri: proofUri || undefined,
+      });
+      Alert.alert("Submitted", "Your load request is pending. Admin will credit your balance after verifying payment.");
+      setAmount("");
+      setPaymentRef("");
+      setProofUri(null);
+      await reload();
+    } catch (err) {
+      Alert.alert("Could not submit", err instanceof Error ? err.message : "Try again.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  const cfg = data?.config;
+  const pending = data?.pending_load;
+
+  return (
+    <>
+      <StatStrip
+        items={[
+          { n: loading ? "…" : data?.balance_label ?? "Rs. 0", l: "Balance" },
+          { n: cfg?.listing_fee_label ?? "—", l: "Per listing" },
+          { n: pending ? "Pending" : data?.can_request_load ? "Ready" : "Wait", l: "Add fund" },
+        ]}
+      />
+      {pending ? (
+        <View style={{ marginHorizontal: 16, marginTop: 12, backgroundColor: "#FFF7ED", borderRadius: 14, padding: 12, borderWidth: 1, borderColor: "#FDBA74" }}>
+          <Text style={{ fontWeight: "800", color: "#C2410C" }}>Load pending: {pending.amount_label}</Text>
+          <Text style={{ color: "#6B7280", fontSize: 12, marginTop: 4 }}>
+            Ref: {pending.payment_reference || "—"} · submitted {new Date(pending.created_at).toLocaleString()}
+          </Text>
+          <Text style={{ color: "#6B7280", fontSize: 11, marginTop: 4 }}>Wait for admin approval before requesting again.</Text>
+        </View>
+      ) : null}
+      <Text style={{ fontWeight: "800", marginHorizontal: 16, marginTop: 18 }}>Add funds (bank)</Text>
+      <View style={{ marginHorizontal: 16, marginTop: 10, backgroundColor: "#fff", borderRadius: 16, padding: 14, ...shadow.card }}>
+        {cfg?.bank_name ? <Text style={{ fontWeight: "700" }}>{cfg.bank_name}</Text> : null}
+        {cfg?.bank_account_name ? <Text style={{ marginTop: 4 }}>{cfg.bank_account_name}</Text> : null}
+        {cfg?.bank_account_number ? <Text style={{ marginTop: 4, fontWeight: "800" }}>{cfg.bank_account_number}</Text> : null}
+        {cfg?.bank_branch ? <Text style={{ color: "#6B7280", marginTop: 2 }}>{cfg.bank_branch}</Text> : null}
+        {cfg?.payment_instructions ? <Text style={{ color: "#6B7280", marginTop: 8, fontSize: 12, lineHeight: 18 }}>{cfg.payment_instructions}</Text> : null}
+        {cfg?.qr_code_url ? (
+          <Image source={{ uri: cfg.qr_code_url }} style={{ width: 160, height: 160, marginTop: 12, alignSelf: "center" }} resizeMode="contain" />
+        ) : null}
+      </View>
+      {data?.can_request_load ? (
+        <View style={{ marginHorizontal: 16, marginTop: 12, backgroundColor: "#fff", borderRadius: 16, padding: 14, ...shadow.card }}>
+          <Text style={{ fontWeight: "800", marginBottom: 8 }}>I have paid</Text>
+          <TextInput
+            placeholder={`Amount (Rs.) min ${cfg?.min_load_rupees ?? 100}`}
+            value={amount}
+            onChangeText={setAmount}
+            onFocus={onInputFocus}
+            keyboardType="number-pad"
+            style={{ borderWidth: 1, borderColor: "#E5E7EB", borderRadius: 10, padding: 10, marginBottom: 8 }}
+          />
+          <TextInput
+            placeholder="Payment ID / transaction ref (optional)"
+            value={paymentRef}
+            onChangeText={setPaymentRef}
+            onFocus={onInputFocus}
+            style={{ borderWidth: 1, borderColor: "#E5E7EB", borderRadius: 10, padding: 10, marginBottom: 8 }}
+          />
+          <PressScale
+            onPress={() => choosePhoto((uri) => setProofUri(uri), "Payment screenshot")}
+            style={{ borderWidth: 1, borderColor: "#E5E7EB", borderRadius: 10, padding: 10, marginBottom: 8 }}
+          >
+            <Text style={{ fontWeight: "700", color: GREEN }}>{proofUri ? "Screenshot attached" : "Attach payment screenshot (optional)"}</Text>
+          </PressScale>
+          <PressScale
+            onPress={() => void submitPaid()}
+            style={{ backgroundColor: GREEN, paddingVertical: 12, borderRadius: 10, alignItems: "center", opacity: submitting ? 0.7 : 1 }}
+          >
+            <Text style={{ color: "#fff", fontWeight: "800" }}>{submitting ? "Sending…" : "I have paid — send request"}</Text>
+          </PressScale>
+        </View>
+      ) : null}
+      <Text style={{ fontWeight: "800", marginHorizontal: 16, marginTop: 18 }}>Activity</Text>
+      {(data?.transactions ?? []).slice(0, 20).map((row) => (
+        <View key={row.id} style={{ marginHorizontal: 16, marginTop: 10, backgroundColor: "#fff", borderRadius: 14, padding: 12, ...shadow.card }}>
+          <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+            <Text style={{ fontWeight: "800", fontSize: 13 }}>{row.kind.replace(/_/g, " ")}</Text>
+            <Text style={{ fontWeight: "800", color: row.amount_paisa >= 0 ? GREEN : colors.red }}>{row.amount_label}</Text>
           </View>
-          <View style={{ flex: 1, marginLeft: 12 }}>
-            <Text style={{ fontWeight: "800", fontSize: 13 }}>{row.title}</Text>
-            <Text style={{ color: "#8A8F98", fontSize: 11, marginTop: 2 }}>{row.when}</Text>
-          </View>
-          <Text style={{ fontWeight: "800", color: row.ok ? GREEN : "#111827" }}>{row.amount}</Text>
+          {row.listing_title ? <Text style={{ color: "#6B7280", fontSize: 11, marginTop: 4 }}>{row.listing_title}</Text> : null}
+          <Text style={{ color: "#8A8F98", fontSize: 10, marginTop: 4 }}>Balance {row.balance_after_label}</Text>
         </View>
       ))}
+      {!loading && (data?.transactions?.length ?? 0) === 0 ? (
+        <Text style={{ color: "#6B7280", marginHorizontal: 16, marginTop: 10, fontSize: 13 }}>No payment activity yet.</Text>
+      ) : null}
     </>
   );
 }
@@ -698,90 +816,6 @@ function HelpBody() {
           </View>
           {open === i ? <Text style={{ color: "#4B5563", fontSize: 13, lineHeight: 20, marginTop: 8 }}>{faq.a}</Text> : null}
         </Pressable>
-      ))}
-    </>
-  );
-}
-
-function InviteBody() {
-  const [data, setData] = useState<Awaited<ReturnType<typeof fetchReferEarnMe>> | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    void fetchReferEarnMe()
-      .then(setData)
-      .catch(() => setData(null))
-      .finally(() => setLoading(false));
-  }, []);
-
-  const code = data?.invite_code || "—";
-  const description = data?.description || "Share your code. Earn when friends join and post their first live listing.";
-  const stats = data?.stats;
-  const friends = data?.recent || [];
-
-  return (
-    <>
-      <QuickRow
-        items={[
-          { icon: "copy-outline", label: "Copy", onPress: () => Alert.alert("Copied", code) },
-          {
-            icon: "logo-whatsapp",
-            label: "WhatsApp",
-            onPress: () => void Share.share({ message: `Join NAJIK as a service provider with my code ${code}` }),
-          },
-          { icon: "chatbubble-outline", label: "SMS", onPress: () => Alert.alert("SMS", "Demo share.") },
-          { icon: "qr-code-outline", label: "QR", onPress: () => Alert.alert("QR", "Show this code at your shop.") },
-        ]}
-      />
-      <View style={{ marginHorizontal: 16, marginTop: 12, backgroundColor: "#fff", borderRadius: 16, padding: 14, ...shadow.card }}>
-        <Text style={{ color: "#6B7280", fontWeight: "700", fontSize: 12 }}>Your invite code</Text>
-        <View style={{ flexDirection: "row", alignItems: "center", marginTop: 6 }}>
-          <Text style={{ flex: 1, fontSize: 22, fontWeight: "800", letterSpacing: 1 }}>{loading ? "…" : code}</Text>
-          <PressScale onPress={() => Alert.alert("Copied", code)} style={{ backgroundColor: GREEN, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10 }}>
-            <Text style={{ color: "#fff", fontWeight: "800", fontSize: 12 }}>Copy</Text>
-          </PressScale>
-        </View>
-        <Text style={{ color: "#6B7280", marginTop: 8, fontSize: 12, lineHeight: 18 }}>{description}</Text>
-      </View>
-      <StatStrip
-        items={[
-          { n: String(stats?.invites_sent ?? 0), l: "Invites sent" },
-          { n: String(stats?.joined ?? 0), l: "Joined" },
-          { n: stats?.earned_total_label ?? "Rs. 0", l: "Earned" },
-        ]}
-      />
-      <Text style={{ fontWeight: "800", marginHorizontal: 16, marginTop: 18 }}>How it works</Text>
-      <View style={{ flexDirection: "row", marginHorizontal: 16, marginTop: 10, gap: 8 }}>
-        {[
-          { n: "1", t: "Share code" },
-          { n: "2", t: "They join" },
-          { n: "3", t: "You earn" },
-        ].map((item) => (
-          <View key={item.n} style={{ flex: 1, backgroundColor: "#fff", borderRadius: 14, padding: 12, alignItems: "center", ...shadow.card }}>
-            <View style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: GREEN, alignItems: "center", justifyContent: "center" }}>
-              <Text style={{ color: "#fff", fontWeight: "800" }}>{item.n}</Text>
-            </View>
-            <Text style={{ fontWeight: "700", fontSize: 11, marginTop: 8 }}>{item.t}</Text>
-          </View>
-        ))}
-      </View>
-      <Text style={{ fontWeight: "800", marginHorizontal: 16, marginTop: 18 }}>Recent invites</Text>
-      {!loading && friends.length === 0 ? (
-        <Text style={{ color: "#6B7280", marginHorizontal: 16, marginTop: 10, fontSize: 13 }}>No invites yet — share your code to start earning.</Text>
-      ) : null}
-      {friends.map((row) => (
-        <View key={row.id} style={{ marginHorizontal: 16, marginTop: 10, backgroundColor: "#fff", borderRadius: 14, padding: 12, flexDirection: "row", alignItems: "center", ...shadow.card }}>
-          <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: "#E7F6EC", alignItems: "center", justifyContent: "center" }}>
-            <Text style={{ fontWeight: "800", color: GREEN }}>{row.name[0] || "?"}</Text>
-          </View>
-          <View style={{ flex: 1, marginLeft: 10 }}>
-            <Text style={{ fontWeight: "800", fontSize: 13 }}>{row.name}</Text>
-            <Text style={{ color: "#6B7280", fontSize: 11, marginTop: 2 }}>{row.status_label}</Text>
-          </View>
-          <Text style={{ color: GREEN, fontWeight: "800", fontSize: 12 }}>
-            {row.status === "earned" ? row.reward_label : "—"}
-          </Text>
-        </View>
       ))}
     </>
   );

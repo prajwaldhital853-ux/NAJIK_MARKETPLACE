@@ -7,8 +7,12 @@ import { useSession } from "@/lib/session";
 import { useAdmin } from "@/lib/store";
 import { UrgentSellAdminPanel } from "@/components/admin/urgent-sell-admin-panel";
 import { PromotionRequestsPanel } from "@/components/admin/promotion-requests-panel";
-import { ProviderLedgerPanel, ProviderPlansPanel } from "@/components/admin/provider-plans-panel";
-import { ReferEarnAdminPanel } from "@/components/admin/refer-earn-admin-panel";
+import { ProviderPlansPanel } from "@/components/admin/provider-plans-panel";
+import {
+  SellerLoadRequestsPanel,
+  SellerPaymentsConfigPanel,
+  SellerWalletsPanel,
+} from "@/components/admin/seller-payments-admin-panel";
 import {
   createHomeBannerSlide,
   deleteHomeBannerSlide,
@@ -201,8 +205,9 @@ export default function GeneralAppControlPage() {
       <UrgentSellAdminPanel />
       <PromotionRequestsPanel />
       <ProviderPlansPanel />
-      <ProviderLedgerPanel />
-      <ReferEarnAdminPanel />
+      <SellerPaymentsConfigPanel />
+      <SellerLoadRequestsPanel />
+      <SellerWalletsPanel />
     </div>
   );
 }

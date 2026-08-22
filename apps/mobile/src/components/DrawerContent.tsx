@@ -53,7 +53,7 @@ const sellerMenu: Item[] = [
   { icon: "mail-outline", title: "Messages", tab: "ChatInbox" },
   { icon: "settings-outline", title: "Settings", page: "settings" },
   { icon: "headset-outline", title: "Help & Support", page: "help" },
-  { icon: "gift-outline", title: "Invite & Earn", page: "invite" },
+  { icon: "wallet-outline", title: "Payments", page: "payments" },
 ];
 
 type BuyerItem = {

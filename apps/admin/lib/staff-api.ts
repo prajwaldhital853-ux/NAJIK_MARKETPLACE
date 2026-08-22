@@ -457,7 +457,7 @@ export type SellerLoadRequestRow = {
 
 export async function listStaffLoadRequests(status?: "pending" | "approved" | "rejected") {
   const q = status ? `?status=${status}` : "";
-  return staffRequest<SellerLoadRequestRow[]>(`/api/admin/app-control/load-requests/${q}`);
+  return staffRequest<SellerLoadRequestRow[]>(`/api/admin/app-control/load-requests${q}`);
 }
 
 export async function approveStaffLoadRequest(id: string) {

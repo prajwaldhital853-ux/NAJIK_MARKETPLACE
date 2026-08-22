@@ -39,16 +39,18 @@ async function fileToDataUri(file: File) {
 }
 
 export default function GeneralAppControlPage() {
-  const { apiSession } = useSession();
+  const { apiSession, ready } = useSession();
   const { toast } = useAdmin();
   const [slides, setSlides] = useState<HomeBannerSlide[]>([]);
   const [previews, setPreviews] = useState<Record<string, string>>({});
   const [audience, setAudience] = useState<(typeof AUDIENCES)[number]["value"]>("all");
   const [busy, setBusy] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   const load = useCallback(async () => {
     if (!apiSession) return;
+    setLoading(true);
     try {
       const rows = await listHomeBannerSlides();
       setSlides(rows);
@@ -62,16 +64,20 @@ export default function GeneralAppControlPage() {
       setSlides([]);
       setPreviews({});
       setError(err instanceof Error ? err.message : "Could not load banners.");
+    } finally {
+      setLoading(false);
     }
   }, [apiSession]);
 
   useEffect(() => {
+    if (!ready) return;
     if (!apiSession) {
+      setLoading(false);
       setError("Sign in with a staff account to manage app controls.");
       return;
     }
     void load();
-  }, [apiSession, load]);
+  }, [apiSession, ready, load]);
 
   const activeCount = slides.filter((s) => s.is_active).length;
 
@@ -133,6 +139,7 @@ export default function GeneralAppControlPage() {
         summary="Up to 3 home banners auto-scroll on buyer or seller Home. Pick who sees each banner. Changes appear in the app within about a minute without refresh."
       />
       {error ? <p className="mb-4 text-sm text-red">{error}</p> : null}
+      {loading && !error ? <p className="mb-4 text-sm text-muted">Loading app controls…</p> : null}
 
       <section className="rounded border border-line bg-card p-4">
         <div className="flex flex-wrap items-center justify-between gap-2">

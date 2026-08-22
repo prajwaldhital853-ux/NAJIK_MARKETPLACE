@@ -20,14 +20,23 @@ export async function api<T>(
   const { token, headers, ...rest } = options;
   // Django APPEND_SLASH requires a trailing slash on POST routes.
   const normalizedPath = path.endsWith("/") || path.includes("?") ? path : `${path}/`;
-  const response = await fetch(`${API_URL}${normalizedPath}`, {
-    ...rest,
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...headers,
-    },
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${API_URL}${normalizedPath}`, {
+      ...rest,
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...headers,
+      },
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Network error";
+    throw new ApiError(
+      `${msg}. Check NEXT_PUBLIC_API_URL (${API_URL}) and that the backend is running.`,
+      0,
+    );
+  }
   if (response.status === 204) {
     return undefined as T;
   }
@@ -44,9 +53,16 @@ export async function api<T>(
           data.identifier?.[0] ||
           (typeof data.detail === "object" && data.detail
             ? String(Object.values(data.detail as object).flat?.()[0] || "")
-            : "") ||
-          "Something went wrong. Please try again.";
-    throw new ApiError(String(detail), response.status);
+            : "");
+    const fallback =
+      response.status === 401
+        ? "Session expired. Sign in again."
+        : response.status === 404
+          ? "API not found (404). Deploy the latest backend and run migrations."
+          : response.status >= 500
+            ? `Backend error (${response.status}). Try again shortly.`
+            : `Request failed (${response.status}).`;
+    throw new ApiError(String(detail || fallback), response.status);
   }
   return data as T;
 }

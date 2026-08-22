@@ -1,6 +1,6 @@
 import { relativeTime } from "./format";
 import type { User } from "./demo-data";
-import type { ProviderApplication, StaffListing, ComplaintTicket } from "./staff-api";
+import type { ProviderApplication, StaffListing, ComplaintTicket, SellerLoadRequestRow } from "./staff-api";
 
 export const ADMIN_POLL_MS = 5000;
 export const OPEN_INBOX_KEY = "najik_admin_open_inbox";
@@ -95,6 +95,7 @@ export function buildInbox(
   applications: ProviderApplication[],
   seen: Iterable<string> = [],
   reports: ComplaintTicket[] = [],
+  loadRequests: SellerLoadRequestRow[] = [],
 ): InboxItem[] {
   const seenSet = seen instanceof Set ? seen : new Set(seen);
   const appOwnerIds = new Set(applications.filter(isPendingApplication).map((row) => row.owner_id).filter(Boolean));
@@ -154,6 +155,20 @@ export function buildInbox(
     });
   });
 
+  loadRequests
+    .filter((row) => row.status === "pending")
+    .forEach((row) => {
+      items.push({
+        id: `load-${row.id}`,
+        kind: "seller",
+        title: `${row.provider_name || "Seller"} requested ${row.amount_label}`,
+        detail: `Bank top-up · ${row.provider_phone || "—"} · ref ${row.payment_reference || "—"}`,
+        href: "/admin/payments?tab=requests",
+        time: relativeTime(row.created_at),
+        at: Date.parse(row.created_at) || 0,
+      });
+    });
+
   return items
     .filter((item) => !seenSet.has(item.id))
     .sort((a, b) => b.at - a.at);
@@ -165,6 +180,7 @@ export function navBadges(
   applications: ProviderApplication[],
   seen: Iterable<string> = [],
   reports: ComplaintTicket[] = [],
+  loadRequests: SellerLoadRequestRow[] = [],
 ) {
   const seenSet = seen instanceof Set ? seen : new Set(seen);
   const pendingListings = listings.filter(isPendingListing);
@@ -181,7 +197,8 @@ export function navBadges(
   const openBuyer = reports.filter((row) => isOpenComplaint(row) && row.kind !== "chat" && row.reporter?.account_type !== "provider").length;
   const openSeller = reports.filter((row) => isOpenComplaint(row) && row.kind !== "chat" && row.reporter?.account_type === "provider").length;
   const openChat = reports.filter((row) => isOpenComplaint(row) && row.kind === "chat").length;
-  const inboxCount = buildInbox(users, listings, applications, seenSet, reports).length;
+  const inboxCount = buildInbox(users, listings, applications, seenSet, reports, loadRequests).length;
+  const pendingLoads = loadRequests.filter((row) => row.status === "pending" && !seenSet.has(`load-${row.id}`)).length;
 
   return {
     "/admin/users": pendingUsers.length + pendingApps,
@@ -204,6 +221,8 @@ export function navBadges(
     "/admin/providers": pendingApps,
     "/admin/providers?status=pending": pendingApps,
     "/admin/notifications": inboxCount,
+    "/admin/payments": pendingLoads,
+    "/admin/payments?tab=requests": pendingLoads,
     "/admin/reports": openReports,
     "/admin/reports?status=open": openReports,
     "/admin/reports?severity=high": highReports,

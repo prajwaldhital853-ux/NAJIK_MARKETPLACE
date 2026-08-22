@@ -16,6 +16,7 @@ import {
   listStaffReferrals,
   listStaffSellerWallets,
 } from "@/lib/staff-api";
+import { ADMIN_POLL_MS } from "@/lib/live-inbox";
 
 const TABS = [
   { id: "requests", label: "Add-fund requests", hint: "Approve offline bank payments" },
@@ -60,6 +61,8 @@ export function PaymentsHub() {
 
   useEffect(() => {
     void loadStats();
+    const id = window.setInterval(() => void loadStats(), ADMIN_POLL_MS);
+    return () => window.clearInterval(id);
   }, [loadStats]);
 
   const activeMeta = useMemo(() => TABS.find((t) => t.id === active)!, [active]);

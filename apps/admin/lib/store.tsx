@@ -43,11 +43,13 @@ import {
   listAppUsers,
   listProviderApplications,
   listStaffListings,
+  listStaffLoadRequests,
   listComplaints,
   patchAppUser,
   type ProviderApplication,
   type StaffListing,
   type ComplaintTicket,
+  type SellerLoadRequestRow,
 } from "./staff-api";
 import { ADMIN_POLL_MS, buildInbox, navBadges, readSeenInbox, writeSeenInbox, type InboxItem } from "./live-inbox";
 import { useSession } from "./session";
@@ -134,6 +136,7 @@ export function AdminStoreProvider({ children }: { children: React.ReactNode }) 
   const [liveListings, setLiveListings] = useState<StaffListing[]>([]);
   const [liveApplications, setLiveApplications] = useState<ProviderApplication[]>([]);
   const [liveReports, setLiveReports] = useState<ComplaintTicket[]>([]);
+  const [liveLoadRequests, setLiveLoadRequests] = useState<SellerLoadRequestRow[]>([]);
   const [inboxReady, setInboxReady] = useState(false);
   const [properties, setProperties] = useState(PROPERTIES);
   const [jobs, setJobs] = useState(JOBS);
@@ -169,15 +172,17 @@ export function AdminStoreProvider({ children }: { children: React.ReactNode }) 
         setLiveListings([]);
         setLiveApplications([]);
         setLiveReports([]);
+        setLiveLoadRequests([]);
         setInboxReady(false);
         return;
       }
       try {
-        const [rows, listings, applications, complaints] = await Promise.all([
+        const [rows, listings, applications, complaints, loads] = await Promise.all([
           listAppUsers(),
           listStaffListings(),
           listProviderApplications(),
           listComplaints().catch(() => [] as ComplaintTicket[]),
+          listStaffLoadRequests().catch(() => [] as SellerLoadRequestRow[]),
         ]);
         if (!alive) return;
         setLiveUsers(rows.map(mapDirectoryUser));
@@ -185,6 +190,7 @@ export function AdminStoreProvider({ children }: { children: React.ReactNode }) 
         setLiveListings(listings);
         setLiveApplications(applications);
         setLiveReports(complaints);
+        setLiveLoadRequests(loads);
       } catch {
         // Keep the last successful snapshot so a blip does not empty the inbox.
       } finally {
@@ -423,12 +429,12 @@ export function AdminStoreProvider({ children }: { children: React.ReactNode }) 
   );
 
   const inbox = useMemo(
-    () => buildInbox(mergedUsers, liveListings, liveApplications, seenInbox, liveReports),
-    [mergedUsers, liveListings, liveApplications, seenInbox, liveReports],
+    () => buildInbox(mergedUsers, liveListings, liveApplications, seenInbox, liveReports, liveLoadRequests),
+    [mergedUsers, liveListings, liveApplications, seenInbox, liveReports, liveLoadRequests],
   );
   const badges = useMemo(
-    () => navBadges(mergedUsers, liveListings, liveApplications, seenInbox, liveReports),
-    [mergedUsers, liveListings, liveApplications, seenInbox, liveReports],
+    () => navBadges(mergedUsers, liveListings, liveApplications, seenInbox, liveReports, liveLoadRequests),
+    [mergedUsers, liveListings, liveApplications, seenInbox, liveReports, liveLoadRequests],
   );
 
   const value = useMemo(

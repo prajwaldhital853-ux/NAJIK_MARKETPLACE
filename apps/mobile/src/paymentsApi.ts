@@ -1,5 +1,6 @@
 import { api } from "./api";
 import { withAppAuth } from "./authApi";
+import { API_URL } from "./config";
 
 export type SellerPaymentConfig = {
   is_active: boolean;
@@ -66,4 +67,13 @@ export async function createSellerLoadRequest(payload: {
       body: JSON.stringify(payload),
     }),
   );
+}
+
+/** Resolve payment QR / public asset URLs (handles relative API paths). */
+export function resolvePaymentAssetUrl(url: string) {
+  if (!url) return "";
+  if (/^https?:\/\//i.test(url) || url.startsWith("blob:") || url.startsWith("data:")) return url;
+  const base = API_URL.replace(/\/$/, "");
+  const path = url.startsWith("/") ? url : `/${url}`;
+  return `${base}${path}`;
 }

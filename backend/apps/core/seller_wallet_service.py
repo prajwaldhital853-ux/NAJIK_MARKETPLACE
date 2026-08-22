@@ -103,6 +103,18 @@ def create_load_request(provider, amount_rupees: int, payment_reference: str = "
     )
     if proof_file:
         load.proof_image.save(proof_file.name, proof_file, save=True)
+    from apps.notifications.models.inbox import InboxNotice
+    from apps.notifications.services import notify_user
+
+    notify_user(
+        load.provider,
+        "Add-fund request submitted",
+        f"You requested {paisa_to_label(load.amount_paisa)}. Admin will verify your bank payment.",
+        kind=InboxNotice.KIND_OTHER,
+        target="payments",
+        target_id=str(load.id),
+        sender_name="NAJIK Payments",
+    )
     return load
 
 
@@ -129,6 +141,18 @@ def approve_load_request(load_id, staff_user):
         note=f"Load approved · ref {load.payment_reference or '—'}",
         created_by=staff_user,
     )
+    from apps.notifications.models.inbox import InboxNotice
+    from apps.notifications.services import notify_user
+
+    notify_user(
+        load.provider,
+        "Payment approved",
+        f"{paisa_to_label(load.amount_paisa)} was credited. New balance: {paisa_to_label(wallet.balance_paisa)}.",
+        kind=InboxNotice.KIND_OTHER,
+        target="payments",
+        target_id=str(load.id),
+        sender_name="NAJIK Admin",
+    )
     return load
 
 
@@ -144,6 +168,22 @@ def reject_load_request(load_id, staff_user, admin_note: str):
     load.reviewed_by = staff_user
     load.reviewed_at = timezone.now()
     load.save(update_fields=["status", "admin_note", "reviewed_by", "reviewed_at"])
+    from apps.notifications.models.inbox import InboxNotice
+    from apps.notifications.services import notify_user
+
+    note_text = (admin_note or "").strip()
+    body = f"Your {paisa_to_label(load.amount_paisa)} top-up was not approved."
+    if note_text:
+        body = f"{body} Reason: {note_text}"
+    notify_user(
+        load.provider,
+        "Payment request rejected",
+        body,
+        kind=InboxNotice.KIND_OTHER,
+        target="payments",
+        target_id=str(load.id),
+        sender_name="NAJIK Admin",
+    )
     return load
 
 

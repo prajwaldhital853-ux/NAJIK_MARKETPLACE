@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useNavigation, useRoute } from "@react-navigation/native";
-import { useEffect, useState } from "react";
-import { Alert, Image, Linking, Pressable, ScrollView, Share, Switch, Text, TextInput, View } from "react-native";
+import { useNavigation, useRoute, useFocusEffect } from "@react-navigation/native";
+import { useCallback, useEffect, useState } from "react";
+import { Alert, AppState, Image, Linking, Pressable, ScrollView, Share, Switch, Text, TextInput, View } from "react-native";
 import { AppHeader } from "../components/AppHeader";
 import { KeyboardScreen, useKeyboardScroll } from "../components/KeyboardScreen";
 import { PressScale } from "../components/PressScale";
@@ -27,7 +27,7 @@ import { ChatInboxList } from "./ChatInboxScreen";
 import { choosePhoto } from "../pickPhoto";
 import { openChatThread, openListing } from "../navigation/browse";
 import { fetchSellerEarningsSummary } from "../earningsApi";
-import { createSellerLoadRequest, fetchSellerPaymentsMe } from "../paymentsApi";
+import { createSellerLoadRequest, fetchSellerPaymentsMe, resolvePaymentAssetUrl } from "../paymentsApi";
 import { fetchReferEarnMe } from "../referralsApi";
 import { colors, shadow } from "../theme";
 
@@ -351,6 +351,7 @@ function InviteBody() {
 
 function PaymentsBody() {
   const { onInputFocus } = useKeyboardScroll();
+  const { refresh: refreshInbox } = useInbox();
   const [data, setData] = useState<Awaited<ReturnType<typeof fetchSellerPaymentsMe>> | null>(null);
   const [loading, setLoading] = useState(true);
   const [amount, setAmount] = useState("");
@@ -358,17 +359,33 @@ function PaymentsBody() {
   const [proofUri, setProofUri] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  const reload = () =>
+  const reload = useCallback(() =>
     fetchSellerPaymentsMe()
       .then(setData)
-      .catch(() => setData(null));
+      .catch(() => setData(null)),
+  []);
 
-  useEffect(() => {
-    void reload().finally(() => setLoading(false));
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      void reload().finally(() => setLoading(false));
+      const poll = setInterval(() => void reload(), 8000);
+      const sub = AppState.addEventListener("change", (state) => {
+        if (state === "active") void reload();
+      });
+      return () => {
+        clearInterval(poll);
+        sub.remove();
+      };
+    }, [reload]),
+  );
+
+  const fee = data?.config?.listing_fee_rupees ?? 0;
+  const amountNum = Number(amount.replace(/\D/g, "")) || 0;
+  const listingsYouGet = fee > 0 && amountNum > 0 ? Math.floor(amountNum / fee) : 0;
+  const balanceListings = fee > 0 ? Math.floor((data?.balance_paisa ?? 0) / (fee * 100)) : 0;
 
   async function submitPaid() {
-    const rupees = Number(amount);
+    const rupees = amountNum;
     if (!rupees || rupees <= 0) {
       Alert.alert("Amount required", "Enter how much you paid in rupees.");
       return;
@@ -385,6 +402,7 @@ function PaymentsBody() {
       setPaymentRef("");
       setProofUri(null);
       await reload();
+      await refreshInbox();
     } catch (err) {
       Alert.alert("Could not submit", err instanceof Error ? err.message : "Try again.");
     } finally {
@@ -394,47 +412,86 @@ function PaymentsBody() {
 
   const cfg = data?.config;
   const pending = data?.pending_load;
+  const qrUrl = cfg?.qr_code_url ? resolvePaymentAssetUrl(cfg.qr_code_url) : "";
 
   return (
     <>
-      <StatStrip
-        items={[
-          { n: loading ? "…" : data?.balance_label ?? "Rs. 0", l: "Balance" },
-          { n: cfg?.listing_fee_label ?? "—", l: "Per listing" },
-          { n: pending ? "Pending" : data?.can_request_load ? "Ready" : "Wait", l: "Add fund" },
-        ]}
-      />
+      <View style={{ marginHorizontal: 16, marginTop: 12, borderRadius: 18, overflow: "hidden", backgroundColor: GREEN, ...shadow.card }}>
+        <View style={{ padding: 16 }}>
+          <Text style={{ color: "rgba(255,255,255,0.85)", fontSize: 12, fontWeight: "700" }}>Listing balance</Text>
+          <Text style={{ color: "#fff", fontSize: 28, fontWeight: "900", marginTop: 4 }}>{loading ? "…" : data?.balance_label ?? "Rs. 0"}</Text>
+          <Text style={{ color: "rgba(255,255,255,0.9)", fontSize: 12, marginTop: 6 }}>
+            {cfg?.listing_fee_label ?? "Per listing"} · ≈ {balanceListings} live post{balanceListings === 1 ? "" : "s"} left
+          </Text>
+        </View>
+      </View>
+
       {pending ? (
         <View style={{ marginHorizontal: 16, marginTop: 12, backgroundColor: "#FFF7ED", borderRadius: 14, padding: 12, borderWidth: 1, borderColor: "#FDBA74" }}>
-          <Text style={{ fontWeight: "800", color: "#C2410C" }}>Load pending: {pending.amount_label}</Text>
+          <Text style={{ fontWeight: "800", color: "#C2410C" }}>Pending: {pending.amount_label}</Text>
           <Text style={{ color: "#6B7280", fontSize: 12, marginTop: 4 }}>
-            Ref: {pending.payment_reference || "—"} · submitted {new Date(pending.created_at).toLocaleString()}
+            Ref: {pending.payment_reference || "—"} · {new Date(pending.created_at).toLocaleString()}
           </Text>
-          <Text style={{ color: "#6B7280", fontSize: 11, marginTop: 4 }}>Wait for admin approval before requesting again.</Text>
+          <Text style={{ color: "#6B7280", fontSize: 11, marginTop: 4 }}>Status updates automatically when admin acts.</Text>
         </View>
       ) : null}
-      <Text style={{ fontWeight: "800", marginHorizontal: 16, marginTop: 18 }}>Add funds (bank)</Text>
+
+      {(data?.recent_load_requests ?? []).filter((r) => r.status !== "pending").slice(0, 3).map((row) => (
+        <View
+          key={row.id}
+          style={{
+            marginHorizontal: 16,
+            marginTop: 8,
+            backgroundColor: row.status === "approved" ? "#ECFDF5" : "#FEF2F2",
+            borderRadius: 12,
+            padding: 10,
+            borderWidth: 1,
+            borderColor: row.status === "approved" ? "#A7F3D0" : "#FECACA",
+          }}
+        >
+          <Text style={{ fontWeight: "800", fontSize: 12, color: row.status === "approved" ? "#065F46" : "#B91C1C" }}>
+            {row.status === "approved" ? "Approved" : "Rejected"} · {row.amount_label}
+          </Text>
+          {row.admin_note ? <Text style={{ fontSize: 11, color: "#6B7280", marginTop: 2 }}>{row.admin_note}</Text> : null}
+        </View>
+      ))}
+
+      <Text style={{ fontWeight: "800", marginHorizontal: 16, marginTop: 18 }}>Bank details & QR</Text>
       <View style={{ marginHorizontal: 16, marginTop: 10, backgroundColor: "#fff", borderRadius: 16, padding: 14, ...shadow.card }}>
         {cfg?.bank_name ? <Text style={{ fontWeight: "700" }}>{cfg.bank_name}</Text> : null}
         {cfg?.bank_account_name ? <Text style={{ marginTop: 4 }}>{cfg.bank_account_name}</Text> : null}
-        {cfg?.bank_account_number ? <Text style={{ marginTop: 4, fontWeight: "800" }}>{cfg.bank_account_number}</Text> : null}
+        {cfg?.bank_account_number ? <Text style={{ marginTop: 4, fontWeight: "800", fontSize: 16 }}>{cfg.bank_account_number}</Text> : null}
         {cfg?.bank_branch ? <Text style={{ color: "#6B7280", marginTop: 2 }}>{cfg.bank_branch}</Text> : null}
         {cfg?.payment_instructions ? <Text style={{ color: "#6B7280", marginTop: 8, fontSize: 12, lineHeight: 18 }}>{cfg.payment_instructions}</Text> : null}
-        {cfg?.qr_code_url ? (
-          <Image source={{ uri: cfg.qr_code_url }} style={{ width: 160, height: 160, marginTop: 12, alignSelf: "center" }} resizeMode="contain" />
-        ) : null}
+        {qrUrl ? (
+          <Image source={{ uri: qrUrl }} style={{ width: 180, height: 180, marginTop: 12, alignSelf: "center", borderRadius: 12 }} resizeMode="contain" />
+        ) : (
+          <Text style={{ marginTop: 8, textAlign: "center", color: "#9CA3AF", fontSize: 12 }}>QR not set — ask admin to upload in Payments settings.</Text>
+        )}
       </View>
+
       {data?.can_request_load ? (
         <View style={{ marginHorizontal: 16, marginTop: 12, backgroundColor: "#fff", borderRadius: 16, padding: 14, ...shadow.card }}>
-          <Text style={{ fontWeight: "800", marginBottom: 8 }}>I have paid</Text>
+          <Text style={{ fontWeight: "800", marginBottom: 4 }}>I have paid</Text>
+          <Text style={{ color: "#6B7280", fontSize: 12, marginBottom: 10 }}>
+            Min Rs. {cfg?.min_load_rupees ?? 100} · max Rs. {cfg?.max_load_rupees ?? 50000}
+          </Text>
           <TextInput
-            placeholder={`Amount (Rs.) min ${cfg?.min_load_rupees ?? 100}`}
+            placeholder={`Amount (Rs.)`}
             value={amount}
             onChangeText={setAmount}
             onFocus={onInputFocus}
             keyboardType="number-pad"
-            style={{ borderWidth: 1, borderColor: "#E5E7EB", borderRadius: 10, padding: 10, marginBottom: 8 }}
+            style={{ borderWidth: 1, borderColor: "#E5E7EB", borderRadius: 10, padding: 12, marginBottom: 8, fontSize: 16, fontWeight: "700" }}
           />
+          {listingsYouGet > 0 ? (
+            <View style={{ backgroundColor: "#E7F6EC", borderRadius: 10, padding: 10, marginBottom: 8 }}>
+              <Text style={{ fontWeight: "800", color: GREEN, fontSize: 13 }}>
+                This amount covers ≈ {listingsYouGet} live listing{listingsYouGet === 1 ? "" : "s"}
+              </Text>
+              <Text style={{ color: "#6B7280", fontSize: 11, marginTop: 2 }}>At {cfg?.listing_fee_label} each</Text>
+            </View>
+          ) : null}
           <TextInput
             placeholder="Payment ID / transaction ref (optional)"
             value={paymentRef}
@@ -444,18 +501,20 @@ function PaymentsBody() {
           />
           <PressScale
             onPress={() => choosePhoto((uri) => setProofUri(uri), "Payment screenshot")}
-            style={{ borderWidth: 1, borderColor: "#E5E7EB", borderRadius: 10, padding: 10, marginBottom: 8 }}
+            style={{ borderWidth: 1, borderColor: "#E5E7EB", borderRadius: 10, padding: 10, marginBottom: 8, flexDirection: "row", alignItems: "center", gap: 10 }}
           >
-            <Text style={{ fontWeight: "700", color: GREEN }}>{proofUri ? "Screenshot attached" : "Attach payment screenshot (optional)"}</Text>
+            {proofUri ? <Image source={{ uri: proofUri }} style={{ width: 48, height: 48, borderRadius: 8 }} /> : null}
+            <Text style={{ fontWeight: "700", color: GREEN, flex: 1 }}>{proofUri ? "Screenshot attached — tap to change" : "Attach payment screenshot"}</Text>
           </PressScale>
           <PressScale
             onPress={() => void submitPaid()}
-            style={{ backgroundColor: GREEN, paddingVertical: 12, borderRadius: 10, alignItems: "center", opacity: submitting ? 0.7 : 1 }}
+            style={{ backgroundColor: GREEN, paddingVertical: 14, borderRadius: 12, alignItems: "center", opacity: submitting ? 0.7 : 1 }}
           >
-            <Text style={{ color: "#fff", fontWeight: "800" }}>{submitting ? "Sending…" : "I have paid — send request"}</Text>
+            <Text style={{ color: "#fff", fontWeight: "800", fontSize: 15 }}>{submitting ? "Sending…" : "I have paid — send request"}</Text>
           </PressScale>
         </View>
       ) : null}
+
       <Text style={{ fontWeight: "800", marginHorizontal: 16, marginTop: 18 }}>Activity</Text>
       {(data?.transactions ?? []).slice(0, 20).map((row) => (
         <View key={row.id} style={{ marginHorizontal: 16, marginTop: 10, backgroundColor: "#fff", borderRadius: 14, padding: 12, ...shadow.card }}>

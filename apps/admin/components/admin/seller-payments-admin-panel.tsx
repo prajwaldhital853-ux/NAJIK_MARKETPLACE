@@ -2,8 +2,10 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Btn, Field, inputClass } from "./ui";
+import { ADMIN_POLL_MS } from "@/lib/live-inbox";
 import {
   approveStaffLoadRequest,
+  fetchStaffImage,
   getSellerPaymentConfig,
   listStaffLoadRequests,
   listStaffSellerWallets,
@@ -23,6 +25,36 @@ async function fileToDataUri(file: File) {
   let binary = "";
   for (let i = 0; i < bytes.length; i += 1) binary += String.fromCharCode(bytes[i]);
   return `data:${file.type || "image/png"};base64,${btoa(binary)}`;
+}
+
+function listingsFromAmount(amountRupees: number, feeRupees: number) {
+  if (!feeRupees || feeRupees <= 0) return null;
+  return Math.floor(amountRupees / feeRupees);
+}
+
+function ProofLightbox({
+  src,
+  onClose,
+}: {
+  src: string;
+  onClose: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 p-4" onClick={onClose}>
+      <div className="max-h-[90vh] max-w-3xl rounded-xl border border-line bg-card p-2 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-2 pb-2">
+          <p className="text-[13px] font-semibold text-ink">Payment screenshot</p>
+          <Btn kind="ghost" onClick={onClose}>Close</Btn>
+        </div>
+        {src ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={src} alt="Payment proof" className="max-h-[75vh] w-full rounded-lg object-contain" />
+        ) : (
+          <p className="p-8 text-center text-sm text-muted">Could not load image.</p>
+        )}
+      </div>
+    </div>
+  );
 }
 
 export function SellerPaymentsConfigPanel({ embedded, onChanged }: { embedded?: boolean; onChanged?: () => void }) {
@@ -148,12 +180,17 @@ export function SellerPaymentsConfigPanel({ embedded, onChanged }: { embedded?: 
 export function SellerLoadRequestsPanel({ embedded, onChanged }: { embedded?: boolean; onChanged?: () => void }) {
   const { toast } = useAdmin();
   const [rows, setRows] = useState<SellerLoadRequestRow[]>([]);
+  const [feeRupees, setFeeRupees] = useState(10);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [rejectNote, setRejectNote] = useState<Record<string, string>>({});
+  const [proofSrc, setProofSrc] = useState<string | null>(null);
+  const [proofLoading, setProofLoading] = useState(false);
 
   const load = useCallback(async () => {
     try {
-      setRows(await listStaffLoadRequests("pending"));
+      const [pending, cfg] = await Promise.all([listStaffLoadRequests("pending"), getSellerPaymentConfig()]);
+      setRows(pending);
+      setFeeRupees(cfg.listing_fee_rupees || 0);
     } catch (err) {
       toast(err instanceof Error ? err.message : "Could not load requests.");
     }
@@ -161,7 +198,20 @@ export function SellerLoadRequestsPanel({ embedded, onChanged }: { embedded?: bo
 
   useEffect(() => {
     void load();
+    const id = window.setInterval(() => void load(), ADMIN_POLL_MS);
+    return () => window.clearInterval(id);
   }, [load]);
+
+  async function openProof(row: SellerLoadRequestRow) {
+    if (!row.proof_url) return;
+    setProofLoading(true);
+    try {
+      const src = await fetchStaffImage(row.proof_url);
+      setProofSrc(src || "");
+    } finally {
+      setProofLoading(false);
+    }
+  }
 
   async function approve(id: string) {
     setBusyId(id);
@@ -192,46 +242,79 @@ export function SellerLoadRequestsPanel({ embedded, onChanged }: { embedded?: bo
   }
 
   return (
-    <section className={`${embedded ? "mt-0" : "mt-4"} rounded border border-line bg-card p-4`}>
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <h2 className="text-[13px] font-semibold text-ink">Add-fund requests</h2>
-          <p className="mt-1 text-[12px] text-muted">Sellers who paid offline and clicked “I have paid”.</p>
-        </div>
-        <Btn kind="ghost" onClick={() => void load()}>Refresh</Btn>
-      </div>
-      <div className="mt-3 space-y-3">
-        {rows.length === 0 ? <p className="text-sm text-muted">No pending load requests.</p> : null}
-        {rows.map((row) => (
-          <div key={row.id} className="rounded-xl border border-line bg-elevated p-3">
-            <p className="font-medium text-ink">{row.provider_name} · {row.amount_label}</p>
-            <p className="text-[11px] text-muted">
-              {row.provider_phone} · ref {row.payment_reference || "—"} · {formatNptDateTime(row.created_at)}
+    <section className={`${embedded ? "mt-0" : "mt-4"} rounded-xl border border-line bg-card p-0 overflow-hidden`}>
+      <div className="bg-gradient-to-r from-brand/15 via-brand-soft to-card px-4 py-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 className="text-[15px] font-bold text-ink">Add-fund queue</h2>
+            <p className="mt-1 text-[12px] text-muted">
+              Sellers paid offline and tapped “I have paid”. Approve to credit wallet · fee Rs. {feeRupees}/listing
             </p>
-            {row.proof_url ? (
-              <a href={row.proof_url} target="_blank" rel="noreferrer" className="mt-2 text-[12px] text-brand underline">
-                View payment screenshot
-              </a>
-            ) : null}
-            <Field label="Rejection note (if rejecting)">
-              <input
-                className={inputClass}
-                value={rejectNote[row.id] || ""}
-                onChange={(e) => setRejectNote((prev) => ({ ...prev, [row.id]: e.target.value }))}
-                placeholder="e.g. Amount not received, fake screenshot"
-              />
-            </Field>
-            <div className="mt-2 flex flex-wrap gap-2">
-              <Btn onClick={() => void approve(row.id)} loading={busyId === row.id} loadingLabel="Approving…">
-                Approve & credit
-              </Btn>
-              <Btn kind="danger" onClick={() => void reject(row.id)} loading={busyId === row.id} loadingLabel="Rejecting…">
-                Reject
-              </Btn>
-            </div>
           </div>
-        ))}
+          <div className="flex items-center gap-2">
+            <span className="rounded-full bg-amber/20 px-3 py-1 text-[11px] font-bold text-ink">{rows.length} pending</span>
+            <Btn kind="ghost" onClick={() => void load()}>Refresh</Btn>
+          </div>
+        </div>
       </div>
+
+      <div className="space-y-3 p-4">
+        {rows.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-line bg-elevated px-4 py-10 text-center">
+            <p className="text-sm font-semibold text-ink">No pending requests</p>
+            <p className="mt-1 text-[12px] text-muted">New bank top-ups appear here automatically.</p>
+          </div>
+        ) : null}
+
+        {rows.map((row) => {
+          const rupees = row.amount_paisa / 100;
+          const listings = listingsFromAmount(rupees, feeRupees);
+          return (
+            <div key={row.id} className="rounded-xl border border-line bg-elevated p-4 shadow-sm">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-[16px] font-bold text-ink">{row.amount_label}</p>
+                  <p className="mt-1 text-[13px] font-semibold text-ink">{row.provider_name}</p>
+                  <p className="text-[11px] text-muted">
+                    {row.provider_phone} · ref {row.payment_reference || "—"} · {formatNptDateTime(row.created_at)}
+                  </p>
+                  {listings != null ? (
+                    <p className="mt-2 inline-block rounded-lg bg-brand-soft px-2.5 py-1 text-[11px] font-bold text-brand">
+                      ≈ {listings} live listing{listings === 1 ? "" : "s"} at Rs. {feeRupees} each
+                    </p>
+                  ) : null}
+                </div>
+                {row.proof_url ? (
+                  <Btn kind="ghost" onClick={() => void openProof(row)} loading={proofLoading} loadingLabel="Loading…">
+                    View screenshot
+                  </Btn>
+                ) : (
+                  <span className="text-[11px] text-muted">No screenshot</span>
+                )}
+              </div>
+
+              <Field label="Rejection note (if rejecting)">
+                <input
+                  className={inputClass}
+                  value={rejectNote[row.id] || ""}
+                  onChange={(e) => setRejectNote((prev) => ({ ...prev, [row.id]: e.target.value }))}
+                  placeholder="e.g. Amount not received"
+                />
+              </Field>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Btn onClick={() => void approve(row.id)} loading={busyId === row.id} loadingLabel="Approving…">
+                  Approve & credit
+                </Btn>
+                <Btn kind="danger" onClick={() => void reject(row.id)} loading={busyId === row.id} loadingLabel="Rejecting…">
+                  Reject
+                </Btn>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {proofSrc !== null ? <ProofLightbox src={proofSrc} onClose={() => setProofSrc(null)} /> : null}
     </section>
   );
 }

@@ -225,7 +225,7 @@ export function yearRange(mode: CalendarMode) {
     const now = new Date().getFullYear();
     return { min: 1940, max: now };
   }
-  return { min: 2000, max: 2090 };
+  return { min: 1970, max: 2078 };
 }
 
 export function daysFor(mode: CalendarMode, year: number, month: number) {

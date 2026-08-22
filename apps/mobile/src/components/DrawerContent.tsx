@@ -56,6 +56,7 @@ const sellerMenu: Item[] = [
   { icon: "settings-outline", title: "Settings", page: "settings" },
   { icon: "headset-outline", title: "Help & Support", page: "help" },
   { icon: "wallet-outline", title: "Payments", page: "payments" },
+  { icon: "add-circle-outline", title: "Add funds", page: "add-fund" },
   { icon: "gift-outline", title: "Invite & Earn", page: "invite" },
 ];
 

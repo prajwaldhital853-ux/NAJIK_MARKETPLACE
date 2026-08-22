@@ -26,6 +26,10 @@ export function openListing(
   navigation.navigate("ListingDetail", { id, manage });
 }
 
+export function openUrgentSellList(navigation: { navigate: (...args: any[]) => void }) {
+  navigation.navigate("UrgentSellList");
+}
+
 export function openSellerPage(navigation: { navigate: (...args: any[]) => void }, page: SellerPage, extra?: object) {
   navigation.navigate("SellerHub", { page, ...extra });
 }

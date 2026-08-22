@@ -7,11 +7,14 @@ import {
   approveStaffLoadRequest,
   fetchStaffImage,
   getSellerPaymentConfig,
+  getStaffSellerWalletDetail,
+  listAppUsers,
   listStaffLoadRequests,
   listStaffSellerWallets,
   patchSellerPaymentConfig,
   rejectStaffLoadRequest,
   staffAdjustSellerWallet,
+  type AppDirectoryUser,
   type SellerLoadRequestRow,
   type SellerPaymentConfig,
   type SellerWalletRow,
@@ -322,20 +325,71 @@ export function SellerLoadRequestsPanel({ embedded, onChanged }: { embedded?: bo
 export function SellerWalletsPanel({ embedded, onChanged }: { embedded?: boolean; onChanged?: () => void }) {
   const { toast } = useAdmin();
   const [rows, setRows] = useState<SellerWalletRow[]>([]);
+  const [providers, setProviders] = useState<AppDirectoryUser[]>([]);
+  const [sellerSearch, setSellerSearch] = useState("");
   const [providerId, setProviderId] = useState("");
   const [adjustAmount, setAdjustAmount] = useState("");
   const [adjustNote, setAdjustNote] = useState("");
   const [busy, setBusy] = useState(false);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [addedLabel, setAddedLabel] = useState("Rs. 0");
+  const [deductedLabel, setDeductedLabel] = useState("Rs. 0");
 
   useEffect(() => {
     void listStaffSellerWallets()
       .then(setRows)
       .catch((err) => toast(err instanceof Error ? err.message : "Could not load wallets."));
+    void listAppUsers()
+      .then((users) => setProviders(users.filter((u) => u.account_type === "provider")))
+      .catch(() => setProviders([]));
   }, [toast]);
+
+  const filteredProviders = providers.filter((p) => {
+    const q = sellerSearch.trim().toLowerCase();
+    if (!q) return true;
+    return (
+      p.full_name.toLowerCase().includes(q) ||
+      (p.phone || "").includes(q) ||
+      (p.email || "").toLowerCase().includes(q) ||
+      p.id.toLowerCase().includes(q)
+    );
+  });
+
+  async function loadDetail(id: string) {
+    if (!id) {
+      setAddedLabel("Rs. 0");
+      setDeductedLabel("Rs. 0");
+      return;
+    }
+    setDetailLoading(true);
+    try {
+      const detail = await getStaffSellerWalletDetail(id);
+      let added = 0;
+      let deducted = 0;
+      for (const tx of detail.transactions) {
+        if (tx.amount_paisa > 0) added += tx.amount_paisa;
+        else deducted += Math.abs(tx.amount_paisa);
+      }
+      const fmt = (paisa: number) => `Rs. ${Math.round(paisa / 100).toLocaleString("en-IN")}`;
+      setAddedLabel(fmt(added));
+      setDeductedLabel(fmt(deducted));
+    } catch {
+      setAddedLabel("—");
+      setDeductedLabel("—");
+    } finally {
+      setDetailLoading(false);
+    }
+  }
+
+  function pickSeller(user: AppDirectoryUser) {
+    setProviderId(user.id);
+    setSellerSearch(`${user.full_name} · ${user.phone || user.email || user.id}`);
+    void loadDetail(user.id);
+  }
 
   async function adjust() {
     if (!providerId.trim()) {
-      toast("Enter provider user ID.");
+      toast("Choose a seller first.");
       return;
     }
     setBusy(true);
@@ -345,6 +399,7 @@ export function SellerWalletsPanel({ embedded, onChanged }: { embedded?: boolean
       setAdjustAmount("");
       setAdjustNote("");
       setRows(await listStaffSellerWallets());
+      await loadDetail(providerId.trim());
       onChanged?.();
     } catch (err) {
       toast(err instanceof Error ? err.message : "Adjust failed.");
@@ -354,13 +409,63 @@ export function SellerWalletsPanel({ embedded, onChanged }: { embedded?: boolean
   }
 
   return (
-    <section className={`${embedded ? "mt-0" : "mt-4"} rounded border border-line bg-card p-4`}>
-      <h2 className="text-[13px] font-semibold text-ink">User payments (seller wallets)</h2>
-      <p className="mt-1 text-[12px] text-muted">Balances, listing fee deductions, refunds, and manual fixes.</p>
-      <div className="mt-3 grid gap-3 md:grid-cols-3">
-        <Field label="Provider user ID">
-          <input className={inputClass} value={providerId} onChange={(e) => setProviderId(e.target.value)} placeholder="UUID" />
+    <section className={`${embedded ? "mt-0" : "mt-4"} rounded-xl border border-line bg-card p-4`}>
+      <h2 className="text-[15px] font-bold text-ink">Seller wallets</h2>
+      <p className="mt-1 text-[12px] text-muted">Search seller, view totals credited vs deducted, manual balance fixes.</p>
+
+      <div className="mt-4 grid gap-3 md:grid-cols-2">
+        <Field label="Find seller (name, phone, email)">
+          <input
+            className={inputClass}
+            value={sellerSearch}
+            onChange={(e) => {
+              setSellerSearch(e.target.value);
+              if (!e.target.value.trim()) setProviderId("");
+            }}
+            placeholder="Type to search…"
+          />
         </Field>
+        <Field label="Provider user ID">
+          <input className={inputClass} value={providerId} onChange={(e) => setProviderId(e.target.value)} placeholder="Auto-filled when you pick below" />
+        </Field>
+      </div>
+
+      {sellerSearch.trim() && filteredProviders.length ? (
+        <div className="mt-2 max-h-40 overflow-y-auto rounded-lg border border-line bg-elevated">
+          {filteredProviders.slice(0, 12).map((user) => (
+            <button
+              key={user.id}
+              type="button"
+              className="block w-full border-b border-line px-3 py-2 text-left text-[12px] hover:bg-card last:border-0"
+              onClick={() => pickSeller(user)}
+            >
+              <span className="font-semibold text-ink">{user.full_name}</span>
+              <span className="text-muted"> · {user.phone || "—"} · {user.email || "—"}</span>
+            </button>
+          ))}
+        </div>
+      ) : null}
+
+      {providerId ? (
+        <div className="mt-3 grid gap-2 sm:grid-cols-3">
+          <div className="rounded-lg border border-line bg-elevated px-3 py-2">
+            <p className="text-[10px] font-bold uppercase text-muted">Total added</p>
+            <p className="text-[15px] font-bold text-brand">{detailLoading ? "…" : addedLabel}</p>
+          </div>
+          <div className="rounded-lg border border-line bg-elevated px-3 py-2">
+            <p className="text-[10px] font-bold uppercase text-muted">Total deducted</p>
+            <p className="text-[15px] font-bold text-red">{detailLoading ? "…" : deductedLabel}</p>
+          </div>
+          <div className="rounded-lg border border-line bg-elevated px-3 py-2">
+            <p className="text-[10px] font-bold uppercase text-muted">Current balance</p>
+            <p className="text-[15px] font-bold text-ink">
+              {rows.find((r) => r.provider_id === providerId)?.balance_label ?? "—"}
+            </p>
+          </div>
+        </div>
+      ) : null}
+
+      <div className="mt-4 grid gap-3 md:grid-cols-2">
         <Field label="Adjust (+/- Rs.)">
           <input className={inputClass} value={adjustAmount} onChange={(e) => setAdjustAmount(e.target.value)} placeholder="500 or -100" />
         </Field>
@@ -373,10 +478,15 @@ export function SellerWalletsPanel({ embedded, onChanged }: { embedded?: boolean
       </div>
       <div className="mt-4 max-h-64 space-y-2 overflow-y-auto">
         {rows.map((row) => (
-          <div key={row.provider_id} className="rounded-lg border border-line bg-elevated px-3 py-2 text-[12px]">
+          <button
+            key={row.provider_id}
+            type="button"
+            className="w-full rounded-lg border border-line bg-elevated px-3 py-2 text-left text-[12px] hover:border-brand"
+            onClick={() => pickSeller({ id: row.provider_id, full_name: row.provider_name, phone: row.provider_phone, email: null, account_type: "provider", phone_verified: false, email_verified: false, verification_status: "none", date_joined: "", is_active: true })}
+          >
             <p className="font-medium text-ink">{row.provider_name} · {row.balance_label}</p>
             <p className="text-muted">{row.provider_phone} · {row.provider_id}</p>
-          </div>
+          </button>
         ))}
       </div>
     </section>

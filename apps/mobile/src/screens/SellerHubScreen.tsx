@@ -25,7 +25,7 @@ import {
 } from "../data/sellerHub";
 import { ChatInboxList } from "./ChatInboxScreen";
 import { choosePhoto } from "../pickPhoto";
-import { openChatThread, openListing } from "../navigation/browse";
+import { openChatThread, openListing, openSellerPage } from "../navigation/browse";
 import { fetchSellerEarningsSummary } from "../earningsApi";
 import { createSellerLoadRequest, fetchSellerPaymentsMe, resolvePaymentAssetUrl } from "../paymentsApi";
 import { fetchReferEarnMe } from "../referralsApi";
@@ -45,6 +45,7 @@ const PAGES: SellerPage[] = [
   "settings",
   "help",
   "payments",
+  "add-fund",
   "invite",
 ];
 
@@ -115,6 +116,7 @@ function PageBody({ page }: { page: SellerPage }) {
   if (page === "settings") return <SettingsBody />;
   if (page === "help") return <HelpBody />;
   if (page === "invite") return <InviteBody />;
+  if (page === "add-fund") return <AddFundBody />;
   return <PaymentsBody />;
 }
 
@@ -349,15 +351,9 @@ function InviteBody() {
   );
 }
 
-function PaymentsBody() {
-  const { onInputFocus } = useKeyboardScroll();
-  const { refresh: refreshInbox } = useInbox();
+function usePaymentsData() {
   const [data, setData] = useState<Awaited<ReturnType<typeof fetchSellerPaymentsMe>> | null>(null);
   const [loading, setLoading] = useState(true);
-  const [amount, setAmount] = useState("");
-  const [paymentRef, setPaymentRef] = useState("");
-  const [proofUri, setProofUri] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
 
   const reload = useCallback(() =>
     fetchSellerPaymentsMe()
@@ -379,10 +375,129 @@ function PaymentsBody() {
     }, [reload]),
   );
 
+  return { data, loading, reload };
+}
+
+function PaymentsBody() {
+  const navigation = useNavigation<any>();
+  const { data, loading } = usePaymentsData();
+  const fee = data?.config?.listing_fee_rupees ?? 0;
+  const balanceListings = fee > 0 ? Math.floor((data?.balance_paisa ?? 0) / (fee * 100)) : 0;
+  const cfg = data?.config;
+  const pending = data?.pending_load;
+  const approvedHistory = (data?.recent_load_requests ?? []).filter((r) => r.status !== "pending");
+  const transactions = data?.transactions ?? [];
+
+  return (
+    <>
+      <View style={{ marginHorizontal: 16, marginTop: 12, borderRadius: 18, overflow: "hidden", backgroundColor: GREEN, ...shadow.card }}>
+        <View style={{ padding: 16 }}>
+          <Text style={{ color: "rgba(255,255,255,0.85)", fontSize: 12, fontWeight: "700" }}>Listing balance</Text>
+          <Text style={{ color: "#fff", fontSize: 28, fontWeight: "900", marginTop: 4 }}>{loading ? "…" : data?.balance_label ?? "Rs. 0"}</Text>
+          <Text style={{ color: "rgba(255,255,255,0.9)", fontSize: 12, marginTop: 6 }}>
+            {cfg?.listing_fee_label ?? "Per listing"} · ≈ {balanceListings} live post{balanceListings === 1 ? "" : "s"} left
+          </Text>
+        </View>
+      </View>
+
+      <PressScale
+        onPress={() => openSellerPage(navigation, "add-fund")}
+        style={{
+          marginHorizontal: 16,
+          marginTop: 12,
+          backgroundColor: "#2563EB",
+          borderRadius: 14,
+          paddingVertical: 14,
+          alignItems: "center",
+          flexDirection: "row",
+          justifyContent: "center",
+          gap: 8,
+          ...shadow.card,
+        }}
+      >
+        <Ionicons name="add-circle" size={20} color="#fff" />
+        <Text style={{ color: "#fff", fontWeight: "800", fontSize: 15 }}>Add funds via bank</Text>
+      </PressScale>
+
+      {pending ? (
+        <View style={{ marginHorizontal: 16, marginTop: 12, backgroundColor: "#FFF7ED", borderRadius: 14, padding: 12, borderWidth: 1, borderColor: "#FDBA74" }}>
+          <Text style={{ fontWeight: "800", color: "#C2410C" }}>Pending top-up: {pending.amount_label}</Text>
+          <Text style={{ color: "#6B7280", fontSize: 12, marginTop: 4 }}>
+            Ref: {pending.payment_reference || "—"} · {new Date(pending.created_at).toLocaleString()}
+          </Text>
+        </View>
+      ) : null}
+
+      {approvedHistory.length ? (
+        <>
+          <Text style={{ fontWeight: "800", marginHorizontal: 16, marginTop: 18 }}>Top-up history</Text>
+          <ScrollView
+            style={{ maxHeight: approvedHistory.length > 5 ? 220 : undefined, marginTop: 8 }}
+            nestedScrollEnabled
+            showsVerticalScrollIndicator={approvedHistory.length > 5}
+          >
+            {approvedHistory.map((row) => (
+              <View
+                key={row.id}
+                style={{
+                  marginHorizontal: 16,
+                  marginTop: 8,
+                  backgroundColor: row.status === "approved" ? "#ECFDF5" : "#FEF2F2",
+                  borderRadius: 12,
+                  padding: 10,
+                  borderWidth: 1,
+                  borderColor: row.status === "approved" ? "#A7F3D0" : "#FECACA",
+                }}
+              >
+                <Text style={{ fontWeight: "800", fontSize: 12, color: row.status === "approved" ? "#065F46" : "#B91C1C" }}>
+                  {row.status === "approved" ? "Approved" : "Rejected"} · {row.amount_label}
+                </Text>
+                {row.admin_note ? <Text style={{ fontSize: 11, color: "#6B7280", marginTop: 2 }}>{row.admin_note}</Text> : null}
+              </View>
+            ))}
+          </ScrollView>
+        </>
+      ) : null}
+
+      <Text style={{ fontWeight: "800", marginHorizontal: 16, marginTop: 18 }}>Activity</Text>
+      {transactions.length === 0 && !loading ? (
+        <Text style={{ color: "#6B7280", marginHorizontal: 16, marginTop: 10, fontSize: 13 }}>No payment activity yet.</Text>
+      ) : (
+        <ScrollView
+          style={{ maxHeight: transactions.length > 3 ? 280 : undefined, marginTop: 8 }}
+          nestedScrollEnabled
+          showsVerticalScrollIndicator={transactions.length > 3}
+        >
+          {transactions.map((row) => (
+            <View key={row.id} style={{ marginHorizontal: 16, marginTop: 10, backgroundColor: "#fff", borderRadius: 14, padding: 12, ...shadow.card }}>
+              <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+                <Text style={{ fontWeight: "800", fontSize: 13 }}>{row.kind.replace(/_/g, " ")}</Text>
+                <Text style={{ fontWeight: "800", color: row.amount_paisa >= 0 ? GREEN : colors.red }}>{row.amount_label}</Text>
+              </View>
+              {row.listing_title ? <Text style={{ color: "#6B7280", fontSize: 11, marginTop: 4 }}>{row.listing_title}</Text> : null}
+              <Text style={{ color: "#8A8F98", fontSize: 10, marginTop: 4 }}>Balance {row.balance_after_label}</Text>
+            </View>
+          ))}
+        </ScrollView>
+      )}
+    </>
+  );
+}
+
+function AddFundBody() {
+  const { onInputFocus } = useKeyboardScroll();
+  const { refresh: refreshInbox } = useInbox();
+  const { data, loading, reload } = usePaymentsData();
+  const [amount, setAmount] = useState("");
+  const [paymentRef, setPaymentRef] = useState("");
+  const [proofUri, setProofUri] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
   const fee = data?.config?.listing_fee_rupees ?? 0;
   const amountNum = Number(amount.replace(/\D/g, "")) || 0;
   const listingsYouGet = fee > 0 && amountNum > 0 ? Math.floor(amountNum / fee) : 0;
-  const balanceListings = fee > 0 ? Math.floor((data?.balance_paisa ?? 0) / (fee * 100)) : 0;
+  const cfg = data?.config;
+  const qrUrl = cfg?.qr_code_url ? resolvePaymentAssetUrl(cfg.qr_code_url) : "";
 
   async function submitPaid() {
     const rupees = amountNum;
@@ -410,54 +525,18 @@ function PaymentsBody() {
     }
   }
 
-  const cfg = data?.config;
-  const pending = data?.pending_load;
-  const qrUrl = cfg?.qr_code_url ? resolvePaymentAssetUrl(cfg.qr_code_url) : "";
-
   return (
     <>
-      <View style={{ marginHorizontal: 16, marginTop: 12, borderRadius: 18, overflow: "hidden", backgroundColor: GREEN, ...shadow.card }}>
-        <View style={{ padding: 16 }}>
-          <Text style={{ color: "rgba(255,255,255,0.85)", fontSize: 12, fontWeight: "700" }}>Listing balance</Text>
-          <Text style={{ color: "#fff", fontSize: 28, fontWeight: "900", marginTop: 4 }}>{loading ? "…" : data?.balance_label ?? "Rs. 0"}</Text>
-          <Text style={{ color: "rgba(255,255,255,0.9)", fontSize: 12, marginTop: 6 }}>
-            {cfg?.listing_fee_label ?? "Per listing"} · ≈ {balanceListings} live post{balanceListings === 1 ? "" : "s"} left
-          </Text>
-        </View>
+      <View style={{ marginHorizontal: 16, marginTop: 8, backgroundColor: "#E8F1FE", borderRadius: 14, padding: 12 }}>
+        <Text style={{ fontWeight: "800", color: "#1D4ED8" }}>Pay offline, then submit proof</Text>
+        <Text style={{ color: "#6B7280", fontSize: 12, marginTop: 4, lineHeight: 18 }}>
+          Transfer to the bank below or scan QR. After paying, fill the form and attach a screenshot if you have one.
+        </Text>
       </View>
-
-      {pending ? (
-        <View style={{ marginHorizontal: 16, marginTop: 12, backgroundColor: "#FFF7ED", borderRadius: 14, padding: 12, borderWidth: 1, borderColor: "#FDBA74" }}>
-          <Text style={{ fontWeight: "800", color: "#C2410C" }}>Pending: {pending.amount_label}</Text>
-          <Text style={{ color: "#6B7280", fontSize: 12, marginTop: 4 }}>
-            Ref: {pending.payment_reference || "—"} · {new Date(pending.created_at).toLocaleString()}
-          </Text>
-          <Text style={{ color: "#6B7280", fontSize: 11, marginTop: 4 }}>Status updates automatically when admin acts.</Text>
-        </View>
-      ) : null}
-
-      {(data?.recent_load_requests ?? []).filter((r) => r.status !== "pending").slice(0, 3).map((row) => (
-        <View
-          key={row.id}
-          style={{
-            marginHorizontal: 16,
-            marginTop: 8,
-            backgroundColor: row.status === "approved" ? "#ECFDF5" : "#FEF2F2",
-            borderRadius: 12,
-            padding: 10,
-            borderWidth: 1,
-            borderColor: row.status === "approved" ? "#A7F3D0" : "#FECACA",
-          }}
-        >
-          <Text style={{ fontWeight: "800", fontSize: 12, color: row.status === "approved" ? "#065F46" : "#B91C1C" }}>
-            {row.status === "approved" ? "Approved" : "Rejected"} · {row.amount_label}
-          </Text>
-          {row.admin_note ? <Text style={{ fontSize: 11, color: "#6B7280", marginTop: 2 }}>{row.admin_note}</Text> : null}
-        </View>
-      ))}
 
       <Text style={{ fontWeight: "800", marginHorizontal: 16, marginTop: 18 }}>Bank details & QR</Text>
       <View style={{ marginHorizontal: 16, marginTop: 10, backgroundColor: "#fff", borderRadius: 16, padding: 14, ...shadow.card }}>
+        {loading && !cfg ? <Text style={{ color: "#6B7280" }}>Loading bank details…</Text> : null}
         {cfg?.bank_name ? <Text style={{ fontWeight: "700" }}>{cfg.bank_name}</Text> : null}
         {cfg?.bank_account_name ? <Text style={{ marginTop: 4 }}>{cfg.bank_account_name}</Text> : null}
         {cfg?.bank_account_number ? <Text style={{ marginTop: 4, fontWeight: "800", fontSize: 16 }}>{cfg.bank_account_number}</Text> : null}
@@ -477,7 +556,7 @@ function PaymentsBody() {
             Min Rs. {cfg?.min_load_rupees ?? 100} · max Rs. {cfg?.max_load_rupees ?? 50000}
           </Text>
           <TextInput
-            placeholder={`Amount (Rs.)`}
+            placeholder="Amount (Rs.)"
             value={amount}
             onChangeText={setAmount}
             onFocus={onInputFocus}
@@ -487,9 +566,8 @@ function PaymentsBody() {
           {listingsYouGet > 0 ? (
             <View style={{ backgroundColor: "#E7F6EC", borderRadius: 10, padding: 10, marginBottom: 8 }}>
               <Text style={{ fontWeight: "800", color: GREEN, fontSize: 13 }}>
-                This amount covers ≈ {listingsYouGet} live listing{listingsYouGet === 1 ? "" : "s"}
+                ≈ {listingsYouGet} live listing{listingsYouGet === 1 ? "" : "s"} at {cfg?.listing_fee_label} each
               </Text>
-              <Text style={{ color: "#6B7280", fontSize: 11, marginTop: 2 }}>At {cfg?.listing_fee_label} each</Text>
             </View>
           ) : null}
           <TextInput
@@ -513,22 +591,11 @@ function PaymentsBody() {
             <Text style={{ color: "#fff", fontWeight: "800", fontSize: 15 }}>{submitting ? "Sending…" : "I have paid — send request"}</Text>
           </PressScale>
         </View>
-      ) : null}
-
-      <Text style={{ fontWeight: "800", marginHorizontal: 16, marginTop: 18 }}>Activity</Text>
-      {(data?.transactions ?? []).slice(0, 20).map((row) => (
-        <View key={row.id} style={{ marginHorizontal: 16, marginTop: 10, backgroundColor: "#fff", borderRadius: 14, padding: 12, ...shadow.card }}>
-          <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
-            <Text style={{ fontWeight: "800", fontSize: 13 }}>{row.kind.replace(/_/g, " ")}</Text>
-            <Text style={{ fontWeight: "800", color: row.amount_paisa >= 0 ? GREEN : colors.red }}>{row.amount_label}</Text>
-          </View>
-          {row.listing_title ? <Text style={{ color: "#6B7280", fontSize: 11, marginTop: 4 }}>{row.listing_title}</Text> : null}
-          <Text style={{ color: "#8A8F98", fontSize: 10, marginTop: 4 }}>Balance {row.balance_after_label}</Text>
+      ) : (
+        <View style={{ marginHorizontal: 16, marginTop: 12, backgroundColor: "#FFF7ED", borderRadius: 12, padding: 12 }}>
+          <Text style={{ fontWeight: "700", color: "#C2410C" }}>You already have a pending request. Wait for admin approval.</Text>
         </View>
-      ))}
-      {!loading && (data?.transactions?.length ?? 0) === 0 ? (
-        <Text style={{ color: "#6B7280", marginHorizontal: 16, marginTop: 10, fontSize: 13 }}>No payment activity yet.</Text>
-      ) : null}
+      )}
     </>
   );
 }

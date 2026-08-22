@@ -6,7 +6,7 @@ import { useBuyerLocation } from "../context/BuyerLocationContext";
 import { listingsToCatalog } from "../data/liveListings";
 import { fetchListingFeed } from "../listingsApi";
 import { subscribeListingsChanged } from "../listingsRefresh";
-import { openCategory } from "../navigation/browse";
+import { openUrgentSellList } from "../navigation/browse";
 import { UrgentListingCard } from "./ClassifiedCard";
 import { PressScale } from "./PressScale";
 
@@ -55,7 +55,7 @@ export function UrgentSellSection() {
   if (!items.length) return null;
 
   return (
-    <View style={{ marginTop: 14, marginBottom: 4 }}>
+    <View style={{ marginTop: 14, marginBottom: 18 }}>
       <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 10 }}>
         <View style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: RED, alignItems: "center", justifyContent: "center" }}>
           <Ionicons name="flame" size={16} color="#fff" />
@@ -64,7 +64,7 @@ export function UrgentSellSection() {
           <Text style={{ fontSize: 20, fontWeight: "900", color: "#111827" }}>Urgent Sell</Text>
           <Text style={{ fontSize: 12, color: "#6B7280", marginTop: 2 }}>Limited time deals</Text>
         </View>
-        <PressScale onPress={() => openCategory(navigation, "vehicles")}>
+        <PressScale onPress={() => openUrgentSellList(navigation)}>
           <Text style={{ color: RED, fontWeight: "800", fontSize: 13 }}>View All ›</Text>
         </PressScale>
       </View>
@@ -82,8 +82,8 @@ export function CountdownLabel({ endsAt }: { endsAt?: string }) {
   if (!endsAt || ms <= 0) return null;
   return (
     <View style={{ flexDirection: "row", alignItems: "center", gap: 4, marginTop: 6 }}>
-      <Ionicons name="time-outline" size={12} color="#6B7280" />
-      <Text style={{ color: "#6B7280", fontSize: 11, fontWeight: "700" }}>{formatUrgentCountdown(ms)}</Text>
+      <Ionicons name="time-outline" size={12} color={RED} />
+      <Text style={{ color: RED, fontSize: 11, fontWeight: "700" }}>{formatUrgentCountdown(ms)}</Text>
     </View>
   );
 }

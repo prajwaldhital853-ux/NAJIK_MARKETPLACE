@@ -147,7 +147,12 @@ export function BuyerHomeScreen() {
 
         {!submitted ? <UrgentSellSection /> : null}
 
-        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: GAP, marginTop: !submitted ? 0 : 0 }}>
+        <View style={{ marginTop: 4 }}>
+          <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 12 }}>
+            <Ionicons name="grid-outline" size={22} color="#2563EB" />
+            <Text style={{ marginLeft: 8, fontSize: 20, fontWeight: "900", color: "#111827" }}>Browse categories</Text>
+          </View>
+          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: GAP }}>
           {categories.map((item) => (
             <PressScale
               key={item.label}
@@ -167,6 +172,7 @@ export function BuyerHomeScreen() {
               </Text>
             </PressScale>
           ))}
+          </View>
         </View>
 
         {submitted ? (

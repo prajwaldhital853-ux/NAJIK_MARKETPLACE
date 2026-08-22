@@ -35,6 +35,7 @@ import { ProviderRegisterScreen } from "../screens/ProviderRegisterScreen";
 import { ProviderIdCardScreen } from "../screens/ProviderIdCardScreen";
 import { BookingsScreen } from "../screens/BookingsScreen";
 import { SellerHubScreen } from "../screens/SellerHubScreen";
+import { UrgentSellListScreen } from "../screens/UrgentSellListScreen";
 import { colors } from "../theme";
 import { createInstantTabNavigator } from "./InstantTabs";
 
@@ -99,6 +100,7 @@ function MainDrawer() {
       <Drawer.Screen name="ListingDetail" component={ListingDetailScreen} />
       <Drawer.Screen name="EditListing" component={PostScreen} />
       <Drawer.Screen name="SellerHub" component={SellerHubScreen} />
+      <Drawer.Screen name="UrgentSellList" component={UrgentSellListScreen} />
       <Drawer.Screen name="Bookings" component={BookingsScreen} />
       <Drawer.Screen name="ChatInbox" component={ChatInboxScreen} />
       <Drawer.Screen name="ChatThread" component={ChatThreadScreen} options={{ swipeEnabled: false }} />

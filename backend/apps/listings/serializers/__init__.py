@@ -274,6 +274,18 @@ class ListingWriteSerializer(serializers.Serializer):
                 msg = exc.messages[0] if getattr(exc, "messages", None) else str(exc)
                 raise serializers.ValidationError({"detail": msg}) from exc
             qualify_referral_for_listing(listing)
+            from apps.notifications.models.inbox import InboxNotice
+            from apps.notifications.services import notify_user
+
+            notify_user(
+                owner,
+                "Listing is live",
+                f"“{listing.title}” is now in the buyer feed.",
+                kind=InboxNotice.KIND_LISTING,
+                target="listing",
+                target_id=str(listing.id),
+                sender_name="NAJIK",
+            )
         return listing
 
     @transaction.atomic
@@ -326,6 +338,18 @@ class ListingWriteSerializer(serializers.Serializer):
                 msg = exc.messages[0] if getattr(exc, "messages", None) else str(exc)
                 raise serializers.ValidationError({"detail": msg}) from exc
             qualify_referral_for_listing(instance)
+            from apps.notifications.models.inbox import InboxNotice
+            from apps.notifications.services import notify_user
+
+            notify_user(
+                instance.owner,
+                "Listing is live",
+                f"“{instance.title}” is now in the buyer feed.",
+                kind=InboxNotice.KIND_LISTING,
+                target="listing",
+                target_id=str(instance.id),
+                sender_name="NAJIK",
+            )
         return instance
 
 

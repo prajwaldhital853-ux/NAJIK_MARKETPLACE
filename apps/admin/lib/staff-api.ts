@@ -492,6 +492,31 @@ export async function staffAdjustSellerWallet(providerId: string, amount_rupees:
   });
 }
 
+export type SellerWalletDetail = {
+  provider_id: string;
+  provider_name: string;
+  provider_phone: string;
+  balance_paisa: number;
+  balance_label: string;
+  transactions: Array<{
+    id: string;
+    kind: string;
+    amount_paisa: number;
+    amount_label: string;
+    balance_after_paisa: number;
+    balance_after_label: string;
+    listing_id?: string | null;
+    listing_title?: string;
+    note: string;
+    created_at: string;
+  }>;
+  load_requests: SellerLoadRequestRow[];
+};
+
+export async function getStaffSellerWalletDetail(providerId: string) {
+  return staffRequest<SellerWalletDetail>(`/api/admin/app-control/seller-wallets/${providerId}/`);
+}
+
 export type ChatReportParty = {
   id: string;
   full_name: string;

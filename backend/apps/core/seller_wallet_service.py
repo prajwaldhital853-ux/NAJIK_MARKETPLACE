@@ -71,7 +71,7 @@ def deduct_listing_fee(provider, listing):
         raise InsufficientBalanceError("Insufficient balance to publish this listing.")
     wallet.balance_paisa -= fee
     wallet.save(update_fields=["balance_paisa", "updated_at"])
-    return SellerWalletTransaction.objects.create(
+    tx = SellerWalletTransaction.objects.create(
         wallet=wallet,
         kind=SellerWalletTransaction.KIND_LISTING_FEE,
         amount_paisa=-fee,
@@ -79,6 +79,19 @@ def deduct_listing_fee(provider, listing):
         listing=listing,
         note=f"Listing fee: {listing.title or listing.pk}",
     )
+    from apps.notifications.models.inbox import InboxNotice
+    from apps.notifications.services import notify_user
+
+    notify_user(
+        provider,
+        "Listing fee charged",
+        f"{paisa_to_label(fee)} deducted for “{listing.title or 'listing'}”. Balance: {paisa_to_label(wallet.balance_paisa)}.",
+        kind=InboxNotice.KIND_OTHER,
+        target="payments",
+        target_id=str(listing.id),
+        sender_name="NAJIK Payments",
+    )
+    return tx
 
 
 @transaction.atomic

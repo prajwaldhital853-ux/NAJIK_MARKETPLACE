@@ -11,6 +11,7 @@ export type SellerPage =
   | "settings"
   | "help"
   | "payments"
+  | "add-fund"
   | "invite";
 
 export const sellerPageMeta: Record<
@@ -35,7 +36,8 @@ export const sellerPageMeta: Record<
   messages: { title: "Messages", sub: "Chats with buyers nearby", icon: "mail", color: "#7C3AED", bg: "#F1E9FF", photo: require("../../assets/listings/apartment.jpg") },
   settings: { title: "Settings", sub: "Account, alerts and privacy", icon: "settings", color: "#4B5563", bg: "#F3F4F6", photo: require("../../assets/listings/office.jpg") },
   help: { title: "Help & Support", sub: "Guides, FAQs and contact", icon: "headset", color: "#EA580C", bg: "#FFF1E0", photo: require("../../assets/listings/services.jpg") },
-  payments: { title: "Payments", sub: "Balance, add funds, listing fees", icon: "wallet", color: "#1B7D2C", bg: "#E4F6EA", photo: require("../../assets/listings/land.jpg") },
+  payments: { title: "Payments", sub: "Balance and transaction history", icon: "wallet", color: "#1B7D2C", bg: "#E4F6EA", photo: require("../../assets/listings/land.jpg") },
+  "add-fund": { title: "Add funds", sub: "Bank transfer, QR and top-up request", icon: "add-circle", color: "#2563EB", bg: "#E8F1FE", photo: require("../../assets/listings/land.jpg") },
   invite: { title: "Invite & Earn", sub: "Share your code, earn when friends list", icon: "gift", color: "#1B7D2C", bg: "#E4F6EA", photo: require("../../assets/listings/land.jpg") },
 };
 

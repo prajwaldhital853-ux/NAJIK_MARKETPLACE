@@ -21,6 +21,7 @@ import { useSavedListings } from "../context/SavedListings";
 import { PressScale } from "./PressScale";
 
 const GREEN = "#1B7D2C";
+const RED = "#DC2626";
 const LINE = "#E8E8E8";
 const { width: SCREEN_W } = Dimensions.get("window");
 const PAD = 16;
@@ -152,9 +153,9 @@ function UrgentCountdownInline({ endsAt }: { endsAt: string }) {
   const s = total % 60;
   const label = `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
   return (
-    <View style={{ flexDirection: "row", alignItems: "center", gap: 4, marginTop: 4 }}>
-      <Ionicons name="time-outline" size={11} color="#6B7280" />
-      <Text style={{ color: "#6B7280", fontSize: 10, fontWeight: "700" }}>{label}</Text>
+    <View style={{ flexDirection: "row", alignItems: "center", gap: 4, marginTop: 4, minHeight: 16 }}>
+      <Ionicons name="time-outline" size={11} color={RED} />
+      <Text style={{ color: RED, fontSize: 10, fontWeight: "700" }}>{label}</Text>
     </View>
   );
 }
@@ -298,11 +299,15 @@ function ListingAdCard({
   const badge = item.urgent ? "URGENT" : item.badge === "FEATURED" ? "FEATURED" : item.badge === "VERIFIED" ? "VERIFIED" : null;
   const badgeColor = item.urgent ? "#EAB308" : GREEN;
 
+  const compactBodyMin = 108;
+  const cardMinHeight = compact ? photoH + compactBodyMin : undefined;
+
   return (
     <PressScale
       onPress={() => openListing(navigation, item.id)}
       style={{
         width,
+        minHeight: cardMinHeight,
         backgroundColor: "#fff",
         borderRadius: 16,
         overflow: "hidden",
@@ -330,7 +335,7 @@ function ListingAdCard({
         </View>
       ) : null}
 
-      <View style={{ padding: compact ? 10 : 14, paddingBottom: compact ? 10 : 12 }}>
+      <View style={{ padding: compact ? 10 : 14, paddingBottom: compact ? 10 : 12, flex: compact ? 1 : undefined, minHeight: compact ? compactBodyMin : undefined }}>
         <Text style={{ fontWeight: "800", fontSize: compact ? 13 : 17, color: colors.navy }} numberOfLines={1}>
           {item.title}
         </Text>
@@ -339,13 +344,15 @@ function ListingAdCard({
             {blurb}
           </Text>
         ) : null}
-        <View style={{ marginTop: compact ? 5 : 8 }}>
+        <View style={{ marginTop: compact ? 5 : 8, minHeight: compact ? 28 : undefined }}>
           <SalePrice amount={amount} unit={unit} originalPrice={item.originalPrice} discountPercent={item.discountPercent} compact={compact} />
         </View>
         {item.urgent && item.urgentEndsAt ? (
           <UrgentCountdownInline endsAt={item.urgentEndsAt} />
+        ) : compact ? (
+          <View style={{ minHeight: 16 }} />
         ) : null}
-        <View style={{ flexDirection: "row", alignItems: "flex-end", marginTop: compact ? 8 : 10 }}>
+        <View style={{ flexDirection: "row", alignItems: "flex-end", marginTop: compact ? 6 : 10, minHeight: compact ? 36 : undefined }}>
           <View style={{ flex: 1, paddingRight: 6 }}>
             <View style={{ flexDirection: "row", alignItems: "center", gap: 3 }}>
               <Ionicons name="location-outline" size={compact ? 11 : 14} color="#9AA0A6" />
@@ -354,13 +361,15 @@ function ListingAdCard({
                 {item.distanceKm != null ? ` · ${formatDistance(item.distanceKm)}` : ""}
               </Text>
             </View>
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 3, marginTop: compact ? 4 : 6 }}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 3, marginTop: compact ? 4 : 6, minHeight: compact ? 14 : undefined }}>
               {item.reviewCount ? (
                 <StarsCount rating={item.rating || 0} count={item.reviewCount} compact={compact} />
               ) : (
                 <>
                   <Ionicons name="time-outline" size={compact ? 11 : 14} color="#9AA0A6" />
-                  <Text style={{ color: "#6B7280", fontSize: compact ? 10 : 13 }}>{compact ? item.time : postedLabel(item.time)}</Text>
+                  <Text style={{ color: "#6B7280", fontSize: compact ? 10 : 13 }} numberOfLines={1}>
+                    {compact ? item.time : postedLabel(item.time)}
+                  </Text>
                 </>
               )}
               {item.verified ? <Text style={{ color: GREEN, fontSize: compact ? 10 : 12, fontWeight: "800", marginLeft: 4 }}>Verified</Text> : null}

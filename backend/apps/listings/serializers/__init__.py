@@ -106,6 +106,7 @@ class ListingSerializer(serializers.ModelSerializer):
     has_pending_edit = serializers.SerializerMethodField()
     pending_edit = serializers.SerializerMethodField()
     saved_by_me = serializers.SerializerMethodField()
+    is_urgent = serializers.SerializerMethodField()
 
     class Meta:
         model = Listing
@@ -131,6 +132,8 @@ class ListingSerializer(serializers.ModelSerializer):
             "extras",
             "promote_requested",
             "is_promoted",
+            "is_urgent",
+            "urgent_ends_at",
             "admin_reason",
             "reviewed_at",
             "created_at",
@@ -182,6 +185,11 @@ class ListingSerializer(serializers.ModelSerializer):
         if not user or not getattr(user, "is_authenticated", False) or not hasattr(user, "account_type"):
             return False
         return obj.saves.filter(user_id=user.id).exists()
+
+    def get_is_urgent(self, obj):
+        if not obj.is_urgent or not obj.urgent_ends_at:
+            return False
+        return obj.urgent_ends_at > timezone.now()
 
     def get_photos(self, obj):
         request = self.context.get("request")

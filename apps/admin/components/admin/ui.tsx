@@ -46,6 +46,7 @@ export function StatusBadge({ status }: { status: string }) {
     under_review: "bg-brand-soft text-brand",
     open: "bg-brand-soft text-brand",
     flagged: "bg-brand-soft text-brand",
+    urgent: "bg-amber-soft text-amber",
     ended: "text-muted bg-elevated",
     none: "text-muted bg-elevated",
     resolved: "bg-green-soft text-green",
@@ -227,27 +228,38 @@ export function Btn({
   kind = "primary",
   type = "button",
   disabled,
+  loading,
+  loadingLabel,
 }: {
   children: React.ReactNode;
-  onClick?: () => void;
+  onClick?: () => void | Promise<void>;
   kind?: "primary" | "ghost" | "danger";
   type?: "button" | "submit";
   disabled?: boolean;
+  loading?: boolean;
+  loadingLabel?: string;
 }) {
   const cls =
     kind === "primary"
-      ? "bg-brand text-white"
+      ? "bg-brand text-white hover:bg-brand/90"
       : kind === "danger"
-        ? "bg-red-soft text-red"
-        : "border border-line bg-elevated text-ink";
+        ? "border border-red/30 bg-red-soft text-red hover:bg-red/10"
+        : "border border-line bg-card text-ink hover:bg-elevated";
   return (
     <button
       type={type}
-      disabled={disabled}
+      disabled={disabled || loading}
       onClick={onClick}
-      className={`rounded px-2.5 py-1.5 text-[12px] font-medium disabled:opacity-50 ${cls}`}
+      className={`inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-[12px] font-semibold transition disabled:opacity-50 ${cls}`}
     >
-      {children}
+      {loading ? (
+        <>
+          <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
+          <span>{loadingLabel || children}</span>
+        </>
+      ) : (
+        children
+      )}
     </button>
   );
 }

@@ -105,6 +105,8 @@ export function listingToCatalog(row: ApiListing): CatalogItem {
     verified: Boolean(row.seller_verified),
     available: Boolean(extras.availability),
     sold: extras.sold === true || String(extras.sold || "") === "true",
+    urgent: Boolean(row.is_urgent),
+    urgentEndsAt: row.urgent_ends_at || undefined,
     apiCategory: row.category,
   };
   if (row.photos[0]?.url) item.photo = { uri: row.photos[0].url };

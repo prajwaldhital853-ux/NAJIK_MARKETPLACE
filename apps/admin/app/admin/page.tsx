@@ -14,7 +14,7 @@ import {
   Users,
   Wrench,
 } from "lucide-react";
-import { REVENUE_BARS, type Activity } from "@/lib/demo-data";
+import { REVENUE_BARS, type Activity, type User } from "@/lib/demo-data";
 import { compact, npr } from "@/lib/format";
 import { useAdmin } from "@/lib/store";
 import { useSession } from "@/lib/session";
@@ -22,6 +22,7 @@ import { CategoryDonut, LineGrowth, RevenueBars } from "@/components/admin/chart
 import { LiveSellerQueue } from "@/components/admin/live-seller-queue";
 import { Avatar, KpiCard, MiniStat, StatusBadge } from "@/components/admin/ui";
 import { DataTable, TypeChip, type Column } from "@/components/admin/table";
+import { UserDetailDrawer } from "@/components/admin/user-detail-drawer";
 import { staffListingDetailHref } from "@/lib/staff-listing-nav";
 
 const RANGES = [
@@ -37,8 +38,9 @@ const TABLE_TABS = ["All", "Users", "Properties", "Jobs", "Electronics", "Report
 export default function DashboardPage() {
   const router = useRouter();
   const { staff } = useSession();
-  const { kpis: k, growth, categories, activity, liveListings } = useAdmin();
+  const { kpis: k, growth, categories, activity, liveListings, users } = useAdmin();
   const [range, setRange] = useState(RANGES[0]);
+  const [openUser, setOpenUser] = useState<User | null>(null);
   const chartKeys = Object.keys(growth) as (keyof typeof growth)[];
   const [chartTab, setChartTab] = useState<(keyof typeof growth)>("Users");
   const [tableTab, setTableTab] = useState("All");
@@ -204,7 +206,9 @@ export default function DashboardPage() {
           onTab={setTableTab}
           onRow={(row) => {
             if (row.id.startsWith("live-")) {
-              router.push(`/admin/users?id=${row.id.replace("live-", "")}`);
+              const userId = row.id.replace("live-", "");
+              const user = users.find((u) => u.id === userId);
+              if (user) setOpenUser(user);
               return;
             }
             if (row.id.startsWith("listing-")) {
@@ -215,6 +219,7 @@ export default function DashboardPage() {
           }}
         />
       </div>
+      <UserDetailDrawer user={openUser} onClose={() => setOpenUser(null)} />
     </div>
   );
 }

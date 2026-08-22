@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
-import type { RefObject } from "react";
+import { useEffect, useState } from "react";
 import {
   Alert,
   Dimensions,
@@ -137,6 +137,28 @@ function HeartSave({ id }: { id: string }) {
   );
 }
 
+function UrgentCountdownInline({ endsAt }: { endsAt: string }) {
+  const [ms, setMs] = useState(0);
+  useEffect(() => {
+    const tick = () => setMs(Math.max(0, Date.parse(endsAt) - Date.now()));
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [endsAt]);
+  if (ms <= 0) return null;
+  const total = Math.floor(ms / 1000);
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  const label = `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+  return (
+    <View style={{ flexDirection: "row", alignItems: "center", gap: 4, marginTop: 4 }}>
+      <Ionicons name="time-outline" size={11} color="#6B7280" />
+      <Text style={{ color: "#6B7280", fontSize: 10, fontWeight: "700" }}>{label}</Text>
+    </View>
+  );
+}
+
 function categoryIcon(item: CatalogItem): keyof typeof Ionicons.glyphMap {
   const map: Record<string, keyof typeof Ionicons.glyphMap> = {
     home: "home-outline",
@@ -157,6 +179,15 @@ export function ClassifiedCard({ item }: { item: CatalogItem }) {
 
 export function ClassifiedGridCard({ item, width }: { item: CatalogItem; width: number }) {
   return <ListingAdCard item={item} width={width} photoH={Math.round(width * 0.68)} compact />;
+}
+
+export function UrgentListingCard({ item }: { item: CatalogItem }) {
+  const width = Math.min(200, LISTING_CARD_W + 24);
+  return (
+    <View style={{ width }}>
+      <ListingAdCard item={item} width={width} photoH={Math.round(width * 0.62)} compact urgent />
+    </View>
+  );
 }
 
 export function ListingGrid({ items }: { items: CatalogItem[] }) {
@@ -252,17 +283,20 @@ function ListingAdCard({
   photoH,
   compact,
   flush,
+  urgent,
 }: {
   item: CatalogItem;
   width?: number;
   photoH: number;
   compact?: boolean;
   flush?: boolean;
+  urgent?: boolean;
 }) {
   const navigation = useNavigation<any>();
   const blurb = listingBlurb(item);
   const { amount, unit } = splitPrice(item.price);
-  const badge = item.badge === "FEATURED" ? "FEATURED" : item.badge === "VERIFIED" ? "VERIFIED" : null;
+  const badge = item.urgent ? "URGENT" : item.badge === "FEATURED" ? "FEATURED" : item.badge === "VERIFIED" ? "VERIFIED" : null;
+  const badgeColor = item.urgent ? "#EAB308" : GREEN;
 
   return (
     <PressScale
@@ -281,8 +315,8 @@ function ListingAdCard({
         <View>
           <Image source={item.photo} style={{ width: "100%", height: photoH, backgroundColor: "#E8EEF0" }} />
           {badge ? (
-            <View style={{ position: "absolute", top: 8, left: 8, backgroundColor: GREEN, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, zIndex: 1 }}>
-              <Text style={{ color: "#fff", fontSize: 9, fontWeight: "800", letterSpacing: 0.3 }}>{badge}</Text>
+            <View style={{ position: "absolute", top: 8, left: 8, backgroundColor: badgeColor, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, zIndex: 1 }}>
+              <Text style={{ color: item.urgent ? "#111827" : "#fff", fontSize: 9, fontWeight: "800", letterSpacing: 0.3 }}>{badge}</Text>
             </View>
           ) : null}
           {item.sold ? (
@@ -308,6 +342,9 @@ function ListingAdCard({
         <View style={{ marginTop: compact ? 5 : 8 }}>
           <SalePrice amount={amount} unit={unit} originalPrice={item.originalPrice} discountPercent={item.discountPercent} compact={compact} />
         </View>
+        {item.urgent && item.urgentEndsAt ? (
+          <UrgentCountdownInline endsAt={item.urgentEndsAt} />
+        ) : null}
         <View style={{ flexDirection: "row", alignItems: "flex-end", marginTop: compact ? 8 : 10 }}>
           <View style={{ flex: 1, paddingRight: 6 }}>
             <View style={{ flexDirection: "row", alignItems: "center", gap: 3 }}>

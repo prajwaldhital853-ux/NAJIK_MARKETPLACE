@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { useEffect, useMemo, useState } from "react";
-import { Dimensions, Image, ScrollView, Text, TextInput, View } from "react-native";
+import { Dimensions, ScrollView, Text, TextInput, View } from "react-native";
 import { AppHeader } from "../components/AppHeader";
 import { ListingGrid } from "../components/ClassifiedCard";
 import { useAppRefreshControl } from "../components/KeyboardScreen";
@@ -11,7 +11,8 @@ import { StaffWarningCard, AccountStatusCard } from "../components/StaffWarningB
 import { useBuyerLocation } from "../context/BuyerLocationContext";
 import { homeCategoryKey, type CatalogItem, type CatalogKey } from "../data/catalog";
 import { listingsToCatalog } from "../data/liveListings";
-import { fetchHomeBanner } from "../homeBannerApi";
+import { HomeBannerCarousel } from "../components/HomeBannerCarousel";
+import { UrgentSellSection } from "../components/UrgentSellSection";
 import { fetchListingFeed } from "../listingsApi";
 import { subscribeListingsChanged } from "../listingsRefresh";
 import { openCategory } from "../navigation/browse";
@@ -22,7 +23,6 @@ const PAD = 16;
 const GAP = 11;
 const TILE = (SCREEN_W - PAD * 2 - GAP * 3) / 4;
 const GREEN = "#1B7D2C";
-const BANNER_HEIGHT = 156;
 
 const categories: { label: string; icon: keyof typeof Ionicons.glyphMap; bg: string; color: string }[] = [
   { label: "Property", icon: "home", bg: "#E8F1FE", color: "#1D4ED8" },
@@ -52,13 +52,6 @@ export function BuyerHomeScreen() {
   const [submitted, setSubmitted] = useState("");
   const [live, setLive] = useState<CatalogItem[]>([]);
   const [trendChip, setTrendChip] = useState("all");
-  const [bannerUrl, setBannerUrl] = useState<string | null>(null);
-
-  useEffect(() => {
-    void fetchHomeBanner()
-      .then((row) => setBannerUrl(row.image_url || null))
-      .catch(() => setBannerUrl(null));
-  }, []);
 
   useEffect(() => {
     const load = () => {
@@ -73,27 +66,27 @@ export function BuyerHomeScreen() {
   const refreshControl = useAppRefreshControl(async () => {
     const rows = await fetchListingFeed({ ...feedParams, q: submitted || undefined }).catch(() => []);
     setLive(listingsToCatalog(rows));
-    const banner = await fetchHomeBanner().catch(() => ({ image_url: null }));
-    setBannerUrl(banner.image_url || null);
   });
 
   const recommended = useMemo(() => {
-    const featured = live.filter((item) => item.badge === "FEATURED" || item.badge === "VERIFIED" || item.verified);
-    return (featured.length ? featured : live).slice(0, 8);
+    const pool = live.filter((item) => !item.urgent);
+    const featured = pool.filter((item) => item.badge === "FEATURED" || item.badge === "VERIFIED" || item.verified);
+    return (featured.length ? featured : pool).slice(0, 8);
   }, [live]);
 
   const verifiedSellers = useMemo(
-    () => live.filter((item) => item.verified || item.badge === "VERIFIED").slice(0, 8),
+    () => live.filter((item) => !item.urgent && (item.verified || item.badge === "VERIFIED")).slice(0, 8),
     [live],
   );
 
   const trending = useMemo(() => {
     const chip = TREND_CHIPS.find((c) => c.key === trendChip);
-    const pool = chip?.catalog ? live.filter((item) => item.key === chip.catalog || (chip.catalog === "used" && item.key === "electronics")) : live;
+    const base = live.filter((item) => !item.urgent);
+    const pool = chip?.catalog ? base.filter((item) => item.key === chip.catalog || (chip.catalog === "used" && item.key === "electronics")) : base;
     return pool.slice(0, 10);
   }, [live, trendChip]);
 
-  const latest = useMemo(() => live, [live]);
+  const latest = useMemo(() => live.filter((item) => !item.urgent), [live]);
 
   function runSearch() {
     setSubmitted(query.trim());
@@ -150,13 +143,11 @@ export function BuyerHomeScreen() {
         <AccountStatusCard />
         <StaffWarningCard />
 
-        {!submitted && bannerUrl ? (
-          <View style={{ marginBottom: 14, height: BANNER_HEIGHT, borderRadius: 18, overflow: "hidden", ...shadow.card }}>
-            <Image source={{ uri: bannerUrl }} style={{ width: "100%", height: "100%" }} resizeMode="cover" />
-          </View>
-        ) : null}
+        {!submitted ? <HomeBannerCarousel audience="buyer" /> : null}
 
-        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: GAP }}>
+        {!submitted ? <UrgentSellSection /> : null}
+
+        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: GAP, marginTop: !submitted ? 0 : 0 }}>
           {categories.map((item) => (
             <PressScale
               key={item.label}

@@ -49,9 +49,7 @@ def listing_queryset():
     )
 
 
-def exclude_sold_listings(queryset):
-    """Postgres JSONField bool lookups are unreliable; match explicit sold flags only."""
-    return queryset.exclude(Q(extras__contains={"sold": True}) | Q(extras__contains={"sold": "true"}))
+from apps.listings.urgent import active_urgent_filter, exclude_sold_listings, expire_urgent_listings, is_sold_extras
 
 
 class ListingFeedView(APIView):
@@ -59,7 +57,11 @@ class ListingFeedView(APIView):
     permission_classes = [AllowAny]
 
     def get(self, request):
+        expire_urgent_listings()
         items = exclude_sold_listings(listing_queryset().filter(status=Listing.STATUS_APPROVED))
+        urgent_only = request.query_params.get("urgent") == "1"
+        if urgent_only:
+            items = items.filter(active_urgent_filter())
         q = (request.query_params.get("q") or "").strip()
         if q:
             items = items.filter(listing_search_q(q))
@@ -147,6 +149,7 @@ class ListingFeedView(APIView):
                 return int(digits) if digits else 0
 
             rows = [row for row in rows if (not lo or price_num(row) >= lo) and (not hi or price_num(row) <= hi)]
+        rows = [row for row in rows if not is_sold_extras(row.get("extras"))]
         return Response(rows)
 
 
@@ -264,7 +267,10 @@ class ListingSoldView(APIView):
         extras = dict(listing.extras or {})
         extras["sold"] = sold
         listing.extras = extras
-        listing.save(update_fields=["extras", "updated_at"])
+        if sold:
+            listing.is_urgent = False
+            listing.urgent_ends_at = None
+        listing.save(update_fields=["extras", "is_urgent", "urgent_ends_at", "updated_at"])
         if sold:
             from apps.chat.models import ChatThread
             from apps.notifications.models import InboxNotice
@@ -417,3 +423,53 @@ class StaffListingPhotoView(APIView):
         photo = get_object_or_404(ListingPhoto, pk=photo_id, listing_id=pk)
         content_type, _ = mimetypes.guess_type(photo.image.name)
         return FileResponse(photo.image.open("rb"), content_type=content_type or "application/octet-stream")
+
+
+class StaffListingUrgentView(APIView):
+    authentication_classes = [StaffJWTAuthentication]
+    permission_classes = [IsStaffUser]
+
+    def post(self, request, pk):
+        listing = get_object_or_404(Listing, pk=pk)
+        if request.data.get("remove"):
+            listing.is_urgent = False
+            listing.urgent_ends_at = None
+            listing.save(update_fields=["is_urgent", "urgent_ends_at", "updated_at"])
+            listing = listing_queryset().get(pk=listing.pk)
+            return Response(ListingSerializer(listing, context={"request": request}).data)
+
+        hours = request.data.get("duration_hours")
+        days = request.data.get("duration_days")
+        try:
+            hours = float(hours) if hours is not None else 0
+            days = float(days) if days is not None else 0
+        except (TypeError, ValueError):
+            return Response({"detail": "Invalid duration."}, status=status.HTTP_400_BAD_REQUEST)
+        total_hours = hours + days * 24
+        if total_hours <= 0:
+            return Response({"detail": "Set duration_hours or duration_days."}, status=status.HTTP_400_BAD_REQUEST)
+        if listing.status != Listing.STATUS_APPROVED:
+            return Response({"detail": "Only approved listings can join Urgent Sell."}, status=status.HTTP_400_BAD_REQUEST)
+        if is_sold_extras(listing.extras):
+            return Response({"detail": "Sold listings cannot be urgent."}, status=status.HTTP_400_BAD_REQUEST)
+
+        expire_urgent_listings()
+        active = Listing.objects.filter(is_urgent=True, urgent_ends_at__gt=timezone.now()).count()
+        if active >= 12 and not (listing.is_urgent and listing.urgent_ends_at and listing.urgent_ends_at > timezone.now()):
+            return Response({"detail": "Urgent Sell queue is full. Remove one first."}, status=status.HTTP_400_BAD_REQUEST)
+
+        listing.is_urgent = True
+        listing.urgent_ends_at = timezone.now() + timezone.timedelta(hours=total_hours)
+        listing.save(update_fields=["is_urgent", "urgent_ends_at", "updated_at"])
+        listing = listing_queryset().get(pk=listing.pk)
+        return Response(ListingSerializer(listing, context={"request": request}).data)
+
+
+class StaffUrgentListingListView(APIView):
+    authentication_classes = [StaffJWTAuthentication]
+    permission_classes = [IsStaffUser]
+
+    def get(self, request):
+        expire_urgent_listings()
+        items = listing_queryset().filter(active_urgent_filter()).order_by("urgent_ends_at")
+        return Response(ListingSerializer(items, many=True, context={"request": request}).data)

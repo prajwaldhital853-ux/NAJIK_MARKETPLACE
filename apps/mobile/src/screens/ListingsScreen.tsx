@@ -555,8 +555,8 @@ function ListingManageCard({
   const statusColor = sold ? "#DC2626" : pending ? "#F59E0B" : rejected ? colors.red : GREEN;
   const deal = dealTypeOf(item);
   const sale = listingSale(item);
-  const badge = item.is_promoted ? "FEATURED" : item.status === "approved" ? "VERIFIED" : pending ? "PENDING" : undefined;
-  const badgeColor = badge === "FEATURED" ? GREEN : badge === "VERIFIED" ? "#2563EB" : "#F59E0B";
+  const badge = item.is_urgent ? "URGENT" : item.is_promoted ? "FEATURED" : item.status === "approved" ? "VERIFIED" : pending ? "PENDING" : undefined;
+  const badgeColor = badge === "URGENT" ? "#EAB308" : badge === "FEATURED" ? GREEN : badge === "VERIFIED" ? "#2563EB" : "#F59E0B";
   const beds = extraText(item, "beds");
   const baths = extraText(item, "baths");
   const area = extraText(item, "area");
@@ -584,7 +584,7 @@ function ListingManageCard({
         <AuthImage uri={photoUrl} style={{ width: compact ? "100%" : 104, height: compact ? 96 : 112, borderRadius: 12 } as any} />
         {badge ? (
           <View style={{ position: "absolute", top: 7, left: 7, backgroundColor: badgeColor, paddingHorizontal: 7, paddingVertical: 3, borderRadius: 6, zIndex: 1 }}>
-            <Text style={{ color: "#fff", fontSize: 8, fontWeight: "800", letterSpacing: 0.3 }}>{badge}</Text>
+            <Text style={{ color: badge === "URGENT" ? "#111827" : "#fff", fontSize: 8, fontWeight: "800", letterSpacing: 0.3 }}>{badge}</Text>
           </View>
         ) : null}
         {sold ? (

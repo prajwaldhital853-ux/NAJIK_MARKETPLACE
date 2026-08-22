@@ -11,13 +11,14 @@ import { formatNptDateTime, formatNptTime, relativeTime } from "@/lib/format";
 import { useSession } from "@/lib/session";
 import { ADMIN_POLL_MS } from "@/lib/live-inbox";
 import { deleteStaffListing, listStaffListings, patchStaffListing, type StaffListing } from "@/lib/staff-api";
+import { UrgentListingControls } from "./urgent-listing-controls";
 
 const TABS = ["Pending", "All", "Approved", "Rejected", "Deactivated"] as const;
 
-function tabFromParam(raw: string | null, fallback: (typeof TABS)[number]): (typeof TABS)[number] {
-  if (!raw) return fallback;
+function tabFromParam(raw: string | null): (typeof TABS)[number] {
+  if (!raw) return "All";
   const hit = TABS.find((t) => t.toLowerCase() === raw.toLowerCase());
-  return hit || fallback;
+  return hit || "All";
 }
 
 export function ListingModeration({
@@ -41,7 +42,7 @@ export function ListingModeration({
   const autoOpenedId = useRef<string | null>(null);
   const [items, setItems] = useState<StaffListing[]>([]);
   const [error, setError] = useState("");
-  const [tab, setTab] = useState<(typeof TABS)[number]>(() => tabFromParam(params.get("status"), defaultTab));
+  const [tab, setTab] = useState<(typeof TABS)[number]>(() => tabFromParam(params.get("status")));
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
   const [reason, setReason] = useState("");
   const [open, setOpen] = useState<StaffListing | null>(null);
@@ -68,8 +69,8 @@ export function ListingModeration({
   }
 
   useEffect(() => {
-    setTab(tabFromParam(params.get("status"), defaultTab));
-  }, [params, defaultTab]);
+    setTab(tabFromParam(params.get("status")));
+  }, [params]);
 
   useEffect(() => {
     if (!apiSession) {
@@ -106,7 +107,7 @@ export function ListingModeration({
   }
 
   function setTabAndUrl(next: string) {
-    const nextTab = tabFromParam(next, defaultTab);
+    const nextTab = (TABS.find((t) => t === next) || "All") as (typeof TABS)[number];
     setTab(nextTab);
     const q = new URLSearchParams();
     // Keep category-style filters that identify the page, drop sticky status/type/featured
@@ -355,7 +356,10 @@ export function ListingModeration({
         }
         footer={
           open ? (
-            <div className="space-y-2">
+            <div className="space-y-3">
+              {open.status === "approved" ? (
+                <UrgentListingControls listing={open} onUpdated={() => void load()} />
+              ) : null}
               {open.status === "pending" || open.has_pending_edit ? (
                 <>
                   <textarea

@@ -6,6 +6,7 @@ import { listStaffListings, type StaffListing } from "@/lib/staff-api";
 import { staffListingDetailHref } from "@/lib/staff-listing-nav";
 import { relativeTime } from "@/lib/format";
 import { Btn, StatusBadge } from "./ui";
+import { UrgentListingControls } from "./urgent-listing-controls";
 
 export function UserListingsPanel({
   userId,
@@ -20,6 +21,7 @@ export function UserListingsPanel({
   const [rows, setRows] = useState<StaffListing[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [expanded, setExpanded] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -59,23 +61,37 @@ export function UserListingsPanel({
             <p className="px-2 py-6 text-center text-sm text-muted">No listings posted yet.</p>
           ) : null}
           {rows.map((row) => (
-            <button
-              key={row.id}
-              type="button"
-              onClick={() => {
-                onClose();
-                router.push(staffListingDetailHref(row));
-              }}
-              className="flex w-full items-start justify-between gap-3 rounded-xl px-3 py-2.5 text-left hover:bg-elevated"
-            >
-              <div className="min-w-0">
-                <p className="truncate font-medium text-ink">{row.title}</p>
-                <p className="text-[11px] text-muted">
-                  {row.category} · {row.location} · {relativeTime(row.created_at)}
-                </p>
-              </div>
-              <StatusBadge status={row.has_pending_edit ? "edit pending" : row.status} />
-            </button>
+            <div key={row.id} className="mb-2 rounded-xl border border-line bg-elevated">
+              <button
+                type="button"
+                onClick={() => setExpanded((id) => (id === row.id ? null : row.id))}
+                className="flex w-full items-start justify-between gap-3 px-3 py-2.5 text-left"
+              >
+                <div className="min-w-0">
+                  <p className="truncate font-medium text-ink">{row.title}</p>
+                  <p className="text-[11px] text-muted">
+                    {row.category} · {row.location} · {relativeTime(row.created_at)}
+                  </p>
+                </div>
+                <StatusBadge status={row.is_urgent ? "urgent" : row.has_pending_edit ? "edit pending" : row.status} />
+              </button>
+              {expanded === row.id ? (
+                <div className="border-t border-line px-3 pb-3">
+                  <UrgentListingControls listing={row} compact onUpdated={() => void load()} />
+                  <div className="mt-2 flex gap-2">
+                    <Btn
+                      kind="ghost"
+                      onClick={() => {
+                        onClose();
+                        router.push(staffListingDetailHref(row));
+                      }}
+                    >
+                      Open listing page
+                    </Btn>
+                  </div>
+                </div>
+              ) : null}
+            </div>
           ))}
         </div>
         <div className="border-t border-line px-4 py-3">

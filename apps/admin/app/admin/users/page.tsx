@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { ResourcePage, Kv } from "@/components/admin/resource-page";
+import { userDocuments } from "@/components/admin/user-detail-drawer";
 import { UserListingsPanel } from "@/components/admin/user-listings-panel";
 import { Avatar, Btn, StatusBadge } from "@/components/admin/ui";
 import type { Column } from "@/components/admin/table";
@@ -39,7 +40,7 @@ export default function UsersPage() {
     <>
       <ResourcePage
         title="User Management"
-        summary="Live app signups. Open a row to send a note, deactivate, block, or permanently delete the account."
+        summary="Live app signups. Sellers open with KYC docs and listings. Buyers show basic account details."
         kpis={[
           { label: "Accounts", value: users.length, tone: "brand" },
           { label: "Active", value: users.filter((u) => u.status === "active" || u.status === "verified").length, tone: "green" },
@@ -56,15 +57,7 @@ export default function UsersPage() {
         allowDelete
         deleteConfirm="Delete this account and all of their listings? This cannot be undone."
         allowSendNote
-        documents={(u) =>
-          [
-            { label: "Profile photo", src: u.photo_uri || u.avatar_uri },
-            { label: "Citizenship front (Nagrita)", src: u.nagrita_uri },
-            { label: "Citizenship back", src: u.nagrita_back_uri },
-            { label: "Nation card", src: u.nation_card_uri },
-            { label: "Other document", src: u.other_document_uri },
-          ].filter((d) => d.src)
-        }
+        documents={(u) => (u.role === "provider" ? userDocuments(u) : [])}
         detail={(u) => (
           <>
             <Kv label="Email" value={u.email} />
@@ -72,19 +65,22 @@ export default function UsersPage() {
             <Kv label="City" value={u.city} />
             <Kv label="Role" value={u.role} />
             <Kv label="Joined" value={u.joined} />
-            <Kv label="Listings" value={u.listings} />
-            <Kv label="KYC" value={u.kyc} />
+            {u.role === "provider" ? <Kv label="Listings" value={u.listings} /> : null}
+            {u.role === "provider" ? <Kv label="KYC" value={u.kyc} /> : null}
+            {u.role === "provider" ? <Kv label="Segment" value={u.category} /> : null}
             <Kv label="Status" value={u.status} />
             {u.staff_warning ? <Kv label="Current note to user" value={u.staff_warning} /> : null}
           </>
         )}
-        detailFooterExtra={(u) => (
-          <div className="pb-2">
-            <Btn kind="primary" onClick={() => setListingsUser(u)}>
-              See all listings of this user
-            </Btn>
-          </div>
-        )}
+        detailFooterExtra={(u) =>
+          u.role === "provider" ? (
+            <div className="pb-2">
+              <Btn kind="primary" onClick={() => setListingsUser(u)}>
+                See all listings of this user
+              </Btn>
+            </div>
+          ) : null
+        }
       />
       {listingsUser ? (
         <UserListingsPanel

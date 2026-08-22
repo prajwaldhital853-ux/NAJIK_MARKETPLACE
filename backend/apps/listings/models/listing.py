@@ -73,6 +73,8 @@ class Listing(models.Model):
     extras = models.JSONField(default=dict, blank=True)
     promote_requested = models.BooleanField(default=False)
     is_promoted = models.BooleanField(default=False)
+    is_urgent = models.BooleanField(default=False)
+    urgent_ends_at = models.DateTimeField(null=True, blank=True)
     admin_reason = models.TextField(blank=True)
     pending_edit = models.JSONField(default=dict, blank=True)
     view_count = models.PositiveIntegerField(default=0)

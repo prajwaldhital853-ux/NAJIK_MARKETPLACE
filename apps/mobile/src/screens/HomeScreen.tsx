@@ -8,6 +8,7 @@ import { AuthImage } from "../components/AuthImage";
 import { SalePrice } from "../components/ClassifiedCard";
 import { useAppRefreshControl } from "../components/KeyboardScreen";
 import { PressScale } from "../components/PressScale";
+import { HomeBannerCarousel } from "../components/HomeBannerCarousel";
 import { SellerHeroBanner } from "../components/SellerHeroBanner";
 import { AccountStatusCard, ListingAdminNotesCard, StaffWarningCard } from "../components/StaffWarningBanner";
 import { useAuth } from "../context/AuthContext";
@@ -79,6 +80,7 @@ function SellerHomeScreen() {
         />
       </View>
       <ScrollView refreshControl={refreshControl} contentContainerStyle={{ padding: 16, paddingBottom: 36 }} showsVerticalScrollIndicator={false}>
+        <HomeBannerCarousel audience="provider" />
         <AccountStatusCard />
         <StaffWarningCard />
         <ListingAdminNotesCard listings={posts} />
@@ -128,6 +130,7 @@ function RecentPostCard({ item }: { item: ApiListing }) {
   const navigation = useNavigation<any>();
   const deal = String(item.extras?.dealType || item.subcategory || item.category);
   const pending = item.status !== "approved";
+  const urgent = Boolean(item.is_urgent);
   const beds = item.extras?.beds;
   const baths = item.extras?.baths;
   const area = item.extras?.area;
@@ -174,8 +177,8 @@ function RecentPostCard({ item }: { item: ApiListing }) {
       {photoUrl ? (
       <View>
         <AuthImage uri={photoUrl} style={{ width: 102, height: 108, borderRadius: 12 }} />
-        <View style={{ position: "absolute", top: 6, left: 6, backgroundColor: pending ? "#F59E0B" : "#1B7D2C", paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6 }}>
-          <Text style={{ color: "#fff", fontSize: 9, fontWeight: "800" }}>{pending ? "PENDING" : "LIVE"}</Text>
+        <View style={{ position: "absolute", top: 6, left: 6, backgroundColor: urgent ? "#EAB308" : pending ? "#F59E0B" : "#1B7D2C", paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6 }}>
+          <Text style={{ color: urgent ? "#111827" : "#fff", fontSize: 9, fontWeight: "800" }}>{urgent ? "URGENT" : pending ? "PENDING" : "LIVE"}</Text>
         </View>
         <View style={{ position: "absolute", left: 6, bottom: 6, backgroundColor: "rgba(0,0,0,0.55)", borderRadius: 10, paddingHorizontal: 6, paddingVertical: 2, flexDirection: "row", alignItems: "center", gap: 3 }}>
           <Ionicons name="eye" size={10} color="#fff" />

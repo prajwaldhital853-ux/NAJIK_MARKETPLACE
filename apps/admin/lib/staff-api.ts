@@ -235,6 +235,8 @@ export type StaffListing = {
   review_count?: number;
   promote_requested: boolean;
   is_promoted: boolean;
+  is_urgent?: boolean;
+  urgent_ends_at?: string | null;
   admin_reason: string;
   reviewed_at?: string | null;
   created_at: string;
@@ -265,6 +267,27 @@ export async function patchStaffListing(
 
 export async function deleteStaffListing(id: string) {
   return staffRequest<void>(`/api/admin/listings/${id}/`, { method: "DELETE" });
+}
+
+export async function listUrgentStaffListings() {
+  return staffRequest<StaffListing[]>("/api/admin/listings/urgent/");
+}
+
+export async function setStaffListingUrgent(
+  id: string,
+  payload: { duration_hours?: number; duration_days?: number },
+) {
+  return staffRequest<StaffListing>(`/api/admin/listings/${id}/urgent/`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function removeStaffListingUrgent(id: string) {
+  return staffRequest<StaffListing>(`/api/admin/listings/${id}/urgent/`, {
+    method: "POST",
+    body: JSON.stringify({ remove: true }),
+  });
 }
 
 export type ChatReportParty = {
@@ -546,22 +569,42 @@ export async function uploadSignatory(image_uri: string) {
   return updateBranding({ signatory_uri: image_uri });
 }
 
-export type HomeBannerPayload = {
-  image_url: string | null;
+export type HomeBannerSlide = {
+  id: string;
+  image_url: string;
+  audience: "all" | "buyer" | "provider";
+  audience_label?: string;
+  sort_order: number;
+  is_active: boolean;
+  created_at?: string;
   updated_at?: string;
 };
 
-export async function fetchHomeBanner() {
-  return staffRequest<HomeBannerPayload>("/api/admin/app-control/home-banner/");
+export async function listHomeBannerSlides() {
+  return staffRequest<HomeBannerSlide[]>("/api/admin/app-control/home-banners/");
 }
 
-export async function uploadHomeBanner(image_uri: string) {
-  return staffRequest<HomeBannerPayload>("/api/admin/app-control/home-banner/", {
+export async function createHomeBannerSlide(payload: {
+  image_uri: string;
+  audience: "all" | "buyer" | "provider";
+  sort_order?: number;
+}) {
+  return staffRequest<HomeBannerSlide>("/api/admin/app-control/home-banners/", {
     method: "POST",
-    body: JSON.stringify({ image_uri }),
+    body: JSON.stringify(payload),
   });
 }
 
-export async function deleteHomeBanner() {
-  return staffRequest<HomeBannerPayload>("/api/admin/app-control/home-banner/", { method: "DELETE" });
+export async function patchHomeBannerSlide(
+  id: string,
+  payload: Partial<{ image_uri: string; audience: "all" | "buyer" | "provider"; sort_order: number; is_active: boolean }>,
+) {
+  return staffRequest<HomeBannerSlide>(`/api/admin/app-control/home-banners/${id}/`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteHomeBannerSlide(id: string) {
+  return staffRequest<void>(`/api/admin/app-control/home-banners/${id}/`, { method: "DELETE" });
 }

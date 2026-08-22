@@ -26,6 +26,8 @@ export type ApiListing = {
   extras: Record<string, string | number | boolean | string[]>;
   promote_requested: boolean;
   is_promoted: boolean;
+  is_urgent?: boolean;
+  urgent_ends_at?: string | null;
   admin_reason: string;
   reviewed_at: string | null;
   created_at: string;
@@ -86,6 +88,7 @@ export type FeedQuery = {
   min_rating?: number;
   place?: string;
   owner?: string;
+  urgent?: string;
 };
 
 export type SellerPublicProfile = {

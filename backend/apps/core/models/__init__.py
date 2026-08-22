@@ -1,3 +1,5 @@
+import uuid
+
 from django.db import models
 
 
@@ -30,25 +32,47 @@ class BrandingConfig(models.Model):
 
 
 def home_banner_path(_instance, filename):
+    """Legacy upload path for migration 0003."""
     ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else "jpg"
     return f"app-control/home-banner.{ext}"
 
 
-class HomeBanner(models.Model):
-    """Singleton buyer-home promo banner controlled from admin General App Control."""
+def home_banner_slide_path(instance, filename):
+    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else "jpg"
+    return f"app-control/banners/{instance.id}/image.{ext}"
 
-    id = models.PositiveSmallIntegerField(primary_key=True, default=1, editable=False)
-    image = models.ImageField(upload_to=home_banner_path, blank=True)
+
+class HomeBannerSlide(models.Model):
+    AUDIENCE_ALL = "all"
+    AUDIENCE_BUYER = "buyer"
+    AUDIENCE_PROVIDER = "provider"
+    AUDIENCE_CHOICES = (
+        (AUDIENCE_ALL, "Buyers and sellers"),
+        (AUDIENCE_BUYER, "Buyers only"),
+        (AUDIENCE_PROVIDER, "Sellers only"),
+    )
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    image = models.ImageField(upload_to=home_banner_slide_path)
+    audience = models.CharField(max_length=20, choices=AUDIENCE_CHOICES, default=AUDIENCE_ALL)
+    sort_order = models.PositiveSmallIntegerField(default=0)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        verbose_name = "home banner"
-        verbose_name_plural = "home banner"
+        ordering = ["sort_order", "-created_at"]
 
     def __str__(self):
-        return "Buyer home banner"
+        return f"Home banner ({self.audience})"
 
-    @classmethod
-    def get_solo(cls):
-        obj, _ = cls.objects.get_or_create(pk=1)
-        return obj
+    def matches_audience(self, audience: str) -> bool:
+        if not self.is_active:
+            return False
+        if self.audience == self.AUDIENCE_ALL:
+            return True
+        if audience == "buyer":
+            return self.audience in {self.AUDIENCE_ALL, self.AUDIENCE_BUYER}
+        if audience == "provider":
+            return self.audience in {self.AUDIENCE_ALL, self.AUDIENCE_PROVIDER}
+        return self.audience == self.AUDIENCE_ALL

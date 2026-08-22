@@ -1,6 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
-import { LinearGradient } from "expo-linear-gradient";
 import { useEffect, useMemo, useState } from "react";
 import { Dimensions, Image, ScrollView, Text, TextInput, View } from "react-native";
 import { AppHeader } from "../components/AppHeader";
@@ -12,19 +11,18 @@ import { StaffWarningCard, AccountStatusCard } from "../components/StaffWarningB
 import { useBuyerLocation } from "../context/BuyerLocationContext";
 import { homeCategoryKey, type CatalogItem, type CatalogKey } from "../data/catalog";
 import { listingsToCatalog } from "../data/liveListings";
+import { fetchHomeBanner } from "../homeBannerApi";
 import { fetchListingFeed } from "../listingsApi";
 import { subscribeListingsChanged } from "../listingsRefresh";
 import { openCategory } from "../navigation/browse";
 import { colors, shadow } from "../theme";
 
-const housePhoto = require("../../assets/listings/house.jpg");
-
 const { width: SCREEN_W } = Dimensions.get("window");
 const PAD = 16;
 const GAP = 11;
 const TILE = (SCREEN_W - PAD * 2 - GAP * 3) / 4;
-const FOREST = "#0E4A3C";
 const GREEN = "#1B7D2C";
+const BANNER_HEIGHT = 156;
 
 const categories: { label: string; icon: keyof typeof Ionicons.glyphMap; bg: string; color: string }[] = [
   { label: "Property", icon: "home", bg: "#E8F1FE", color: "#1D4ED8" },
@@ -54,6 +52,13 @@ export function BuyerHomeScreen() {
   const [submitted, setSubmitted] = useState("");
   const [live, setLive] = useState<CatalogItem[]>([]);
   const [trendChip, setTrendChip] = useState("all");
+  const [bannerUrl, setBannerUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    void fetchHomeBanner()
+      .then((row) => setBannerUrl(row.image_url || null))
+      .catch(() => setBannerUrl(null));
+  }, []);
 
   useEffect(() => {
     const load = () => {
@@ -68,6 +73,8 @@ export function BuyerHomeScreen() {
   const refreshControl = useAppRefreshControl(async () => {
     const rows = await fetchListingFeed({ ...feedParams, q: submitted || undefined }).catch(() => []);
     setLive(listingsToCatalog(rows));
+    const banner = await fetchHomeBanner().catch(() => ({ image_url: null }));
+    setBannerUrl(banner.image_url || null);
   });
 
   const recommended = useMemo(() => {
@@ -143,6 +150,12 @@ export function BuyerHomeScreen() {
         <AccountStatusCard />
         <StaffWarningCard />
 
+        {!submitted && bannerUrl ? (
+          <View style={{ marginBottom: 14, height: BANNER_HEIGHT, borderRadius: 18, overflow: "hidden", ...shadow.card }}>
+            <Image source={{ uri: bannerUrl }} style={{ width: "100%", height: "100%" }} resizeMode="cover" />
+          </View>
+        ) : null}
+
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: GAP }}>
           {categories.map((item) => (
             <PressScale
@@ -164,43 +177,6 @@ export function BuyerHomeScreen() {
             </PressScale>
           ))}
         </View>
-
-        {!submitted ? (
-          <View style={{ marginTop: 18, height: 156, borderRadius: 18, overflow: "hidden", ...shadow.card }}>
-            <Image source={housePhoto} style={{ position: "absolute", right: 0, top: 0, width: "62%", height: "100%" }} resizeMode="cover" />
-            <LinearGradient
-              colors={[FOREST, FOREST, "rgba(14,74,60,0.55)", "transparent"]}
-              locations={[0, 0.36, 0.58, 0.86]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={{ position: "absolute", left: 0, top: 0, bottom: 0, right: 0 }}
-            />
-            <View style={{ position: "absolute", left: 16, top: 18, right: "36%" }}>
-              <Text style={{ color: "#fff", fontSize: 18, fontWeight: "800", lineHeight: 24 }}>
-                Find the Best{"\n"}
-                <Text style={{ color: "#7CDE6A" }}>Property</Text> Near You
-              </Text>
-              <Text style={{ color: "#D5EDE4", marginTop: 4, fontSize: 12 }}>Trusted. Local. Easy.</Text>
-              <PressScale
-                onPress={() => openCategory(navigation, "property")}
-                style={{
-                  marginTop: 12,
-                  alignSelf: "flex-start",
-                  backgroundColor: "#fff",
-                  paddingHorizontal: 14,
-                  paddingVertical: 8,
-                  borderRadius: 20,
-                  flexDirection: "row",
-                  alignItems: "center",
-                  gap: 4,
-                }}
-              >
-                <Text style={{ color: FOREST, fontWeight: "800", fontSize: 12 }}>Browse property</Text>
-                <Ionicons name="arrow-forward" size={12} color={FOREST} />
-              </PressScale>
-            </View>
-          </View>
-        ) : null}
 
         {submitted ? (
           <View style={{ marginTop: 16 }}>

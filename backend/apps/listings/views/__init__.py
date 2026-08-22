@@ -367,6 +367,9 @@ class StaffListingListView(APIView):
         if category:
             cats = [item.strip() for item in category.split(",") if item.strip()]
             items = items.filter(category__in=cats)
+        owner = (request.query_params.get("owner") or "").strip()
+        if owner:
+            items = items.filter(owner_id=owner)
         return Response(ListingSerializer(items, many=True, context={"request": request}).data)
 
 

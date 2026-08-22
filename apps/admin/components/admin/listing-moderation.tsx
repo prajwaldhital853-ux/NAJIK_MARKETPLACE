@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { PageHeader, SummaryStrip } from "@/components/admin/page-frame";
@@ -37,6 +37,8 @@ export function ListingModeration({
   const params = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
+  const openId = params.get("id");
+  const autoOpenedId = useRef<string | null>(null);
   const [items, setItems] = useState<StaffListing[]>([]);
   const [error, setError] = useState("");
   const [tab, setTab] = useState<(typeof TABS)[number]>(() => tabFromParam(params.get("status"), defaultTab));
@@ -83,6 +85,25 @@ export function ListingModeration({
   useEffect(() => {
     setOpen((prev) => (prev ? items.find((i) => i.id === prev.id) || prev : prev));
   }, [items]);
+
+  useEffect(() => {
+    if (!openId) return;
+    if (autoOpenedId.current === openId) return;
+    const match = items.find((item) => item.id === openId);
+    if (!match) return;
+    autoOpenedId.current = openId;
+    setOpen(match);
+  }, [openId, items]);
+
+  function closeDrawer() {
+    if (openId) autoOpenedId.current = openId;
+    setOpen(null);
+    if (!openId) return;
+    const q = new URLSearchParams(params.toString());
+    q.delete("id");
+    const query = q.toString();
+    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+  }
 
   function setTabAndUrl(next: string) {
     const nextTab = tabFromParam(next, defaultTab);
@@ -285,7 +306,7 @@ export function ListingModeration({
       <DetailOverlay
         open={!!open}
         title={open?.title || "Listing"}
-        onClose={() => setOpen(null)}
+        onClose={closeDrawer}
         details={
           open ? (
             <div>

@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   CalendarDays,
   Filter,
@@ -21,6 +22,7 @@ import { CategoryDonut, LineGrowth, RevenueBars } from "@/components/admin/chart
 import { LiveSellerQueue } from "@/components/admin/live-seller-queue";
 import { Avatar, KpiCard, MiniStat, StatusBadge } from "@/components/admin/ui";
 import { DataTable, TypeChip, type Column } from "@/components/admin/table";
+import { staffListingDetailHref } from "@/lib/staff-listing-nav";
 
 const RANGES = [
   "Jul 17, 2026 – Aug 17, 2026",
@@ -33,8 +35,9 @@ const RANGES = [
 const TABLE_TABS = ["All", "Users", "Properties", "Jobs", "Electronics", "Reports", "Services"];
 
 export default function DashboardPage() {
+  const router = useRouter();
   const { staff } = useSession();
-  const { kpis: k, growth, categories, activity } = useAdmin();
+  const { kpis: k, growth, categories, activity, liveListings } = useAdmin();
   const [range, setRange] = useState(RANGES[0]);
   const chartKeys = Object.keys(growth) as (keyof typeof growth)[];
   const [chartTab, setChartTab] = useState<(keyof typeof growth)>("Users");
@@ -193,7 +196,24 @@ export default function DashboardPage() {
             View All
           </Link>
         </div>
-        <DataTable rows={rows} columns={columns} tabs={TABLE_TABS} tab={tableTab} onTab={setTableTab} />
+        <DataTable
+          rows={rows}
+          columns={columns}
+          tabs={TABLE_TABS}
+          tab={tableTab}
+          onTab={setTableTab}
+          onRow={(row) => {
+            if (row.id.startsWith("live-")) {
+              router.push(`/admin/users?id=${row.id.replace("live-", "")}`);
+              return;
+            }
+            if (row.id.startsWith("listing-")) {
+              const listingId = row.id.replace(/^listing-/, "").replace(/-edit$/, "");
+              const listing = liveListings.find((item) => item.id === listingId);
+              if (listing) router.push(staffListingDetailHref(listing));
+            }
+          }}
+        />
       </div>
     </div>
   );

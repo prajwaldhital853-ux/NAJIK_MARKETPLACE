@@ -137,6 +137,7 @@ export const NAV: NavItem[] = [
     ],
   },
   { href: "/admin/analytics", label: "Analytics", icon: "chart" },
+  { href: "/admin/general-app-control", label: "General App Control", icon: "sliders" },
   {
     href: "/admin/staff",
     label: "Admin & Staff Management",

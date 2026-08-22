@@ -243,10 +243,11 @@ export type StaffListing = {
   owner_id: string;
 };
 
-export async function listStaffListings(query?: { category?: string; status?: string }) {
+export async function listStaffListings(query?: { category?: string; status?: string; owner?: string }) {
   const params = new URLSearchParams();
   if (query?.category) params.set("category", query.category);
   if (query?.status) params.set("status", query.status);
+  if (query?.owner) params.set("owner", query.owner);
   const suffix = params.toString() ? `?${params.toString()}` : "";
   return staffRequest<StaffListing[]>(`/api/admin/listings/${suffix}`);
 }
@@ -543,4 +544,24 @@ export async function fetchSystemStatus() {
 /** @deprecated use updateBranding */
 export async function uploadSignatory(image_uri: string) {
   return updateBranding({ signatory_uri: image_uri });
+}
+
+export type HomeBannerPayload = {
+  image_url: string | null;
+  updated_at?: string;
+};
+
+export async function fetchHomeBanner() {
+  return staffRequest<HomeBannerPayload>("/api/admin/app-control/home-banner/");
+}
+
+export async function uploadHomeBanner(image_uri: string) {
+  return staffRequest<HomeBannerPayload>("/api/admin/app-control/home-banner/", {
+    method: "POST",
+    body: JSON.stringify({ image_uri }),
+  });
+}
+
+export async function deleteHomeBanner() {
+  return staffRequest<HomeBannerPayload>("/api/admin/app-control/home-banner/", { method: "DELETE" });
 }

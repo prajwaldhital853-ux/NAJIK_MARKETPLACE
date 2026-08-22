@@ -114,7 +114,7 @@ function SellerHomeScreen() {
               {verified
                 ? posts.length
                   ? "Sold listings stay on My Listings. Active posts will show here."
-                  : "No listings yet. Use Add Listing to submit a post for admin review."
+                  : "No listings yet. Use Add Listing to post live in the marketplace."
                 : "No listings yet. After admin verifies you, you can post your services here."}
             </Text>
           </View>
@@ -209,7 +209,7 @@ function RecentPostCard({ item }: { item: ApiListing }) {
         ) : null}
         <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 8 }}>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
-            <Text style={{ color: colors.muted, fontSize: 10 }}>{pending ? "Pending admin review" : "Live in buyer feed"}</Text>
+            <Text style={{ color: colors.muted, fontSize: 10 }}>{pending ? "Edit pending review" : "Live in buyer feed"}</Text>
             <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: pending ? "#F59E0B" : "#1B7D2C" }} />
           </View>
           <View style={{ borderWidth: 1.5, borderColor: colors.green, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 14 }}>

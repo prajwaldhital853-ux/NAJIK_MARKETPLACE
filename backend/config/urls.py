@@ -12,6 +12,8 @@ urlpatterns = [
     path("api/ok/", OkView.as_view(), name="ok"),
     path("api/admin/media/import/", StaffMediaImportView.as_view(), name="staff-media-import"),
     path("api/branding/", include("apps.core.branding_urls")),
+    path("api/app-control/", include("apps.core.app_control_urls")),
+    path("api/admin/app-control/", include("apps.core.staff_app_control_urls")),
     path("api/auth/", include("apps.accounts.urls")),
     path("api/admin/auth/", include("apps.staff.urls")),
     path("api/verification/", include("apps.verification.urls")),

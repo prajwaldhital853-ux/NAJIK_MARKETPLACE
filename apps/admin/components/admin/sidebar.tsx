@@ -24,6 +24,7 @@ import {
   BadgeCheck,
   BarChart3,
   LifeBuoy,
+  SlidersHorizontal,
 } from "lucide-react";
 import { NAV } from "@/lib/nav";
 import { useAdmin } from "@/lib/store";
@@ -48,6 +49,7 @@ const ICONS: Record<string, React.ReactNode> = {
   chart: <BarChart3 size={14} />,
   badge: <BadgeCheck size={14} />,
   settings: <Settings size={14} />,
+  sliders: <SlidersHorizontal size={14} />,
 };
 
 function pathMatches(href: string, pathname: string, search: string) {

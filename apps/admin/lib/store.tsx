@@ -100,6 +100,7 @@ type Store = {
   inboxCount: number;
   inboxReady: boolean;
   badges: Record<string, number>;
+  liveListings: StaffListing[];
   patch: (key: StoreKey, id: string, data: Record<string, unknown>) => Promise<void>;
   add: (key: StoreKey, row: unknown) => void;
   remove: (key: StoreKey, id: string) => Promise<void>;
@@ -344,9 +345,12 @@ export function AdminStoreProvider({ children }: { children: React.ReactNode }) 
   }, [markInboxSeen]);
 
   const mergedUsers = useMemo(() => {
+    const counts = new Map<string, number>();
+    liveListings.forEach((row) => counts.set(row.owner_id, (counts.get(row.owner_id) || 0) + 1));
     const ids = new Set(liveUsers.map((u) => u.id));
-    return [...liveUsers, ...users.filter((u) => !ids.has(u.id))];
-  }, [liveUsers, users]);
+    const withCounts = liveUsers.map((u) => ({ ...u, listings: counts.get(u.id) || 0 }));
+    return [...withCounts, ...users.filter((u) => !ids.has(u.id))];
+  }, [liveUsers, users, liveListings]);
 
   const listingCount = (category: string) => liveListings.filter((row) => row.category === category).length;
 
@@ -454,6 +458,7 @@ export function AdminStoreProvider({ children }: { children: React.ReactNode }) 
       inboxCount: inbox.length,
       inboxReady,
       badges,
+      liveListings,
       patch,
       add,
       remove,

@@ -904,7 +904,7 @@ export function PostScreen() {
               ))}
             </View>
             <Text style={{ marginTop: 12, color: colors.muted, fontSize: 12 }}>
-              Submit sends this listing to NAJIK admin. Buyers will not see it until it is approved.
+              Submit publishes this listing live in the buyer feed right away. Admin can still review and deactivate if needed.
             </Text>
           </View>
         ) : null}

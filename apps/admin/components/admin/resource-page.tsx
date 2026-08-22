@@ -30,6 +30,7 @@ export function ResourcePage<T extends { id: string; status?: string; staff_warn
   allowSendNote,
   detail,
   documents,
+  detailFooterExtra,
 }: {
   title: string;
   crumb?: string;
@@ -46,6 +47,7 @@ export function ResourcePage<T extends { id: string; status?: string; staff_warn
   allowSendNote?: boolean;
   detail?: (row: T) => React.ReactNode;
   documents?: (row: T) => { label: string; src?: string | null }[];
+  detailFooterExtra?: (row: T) => React.ReactNode;
 }) {
   const params = useSearchParams();
   const router = useRouter();
@@ -257,6 +259,7 @@ export function ResourcePage<T extends { id: string; status?: string; staff_warn
         footer={
           open ? (
             <div className="space-y-3 text-sm">
+              {detailFooterExtra ? detailFooterExtra(open) : null}
               {storeKey && statusActions?.length ? (
                 <div className="space-y-2">
                   <p className="text-xs font-semibold text-muted">Moderation</p>

@@ -111,23 +111,22 @@ class ListingModerationTests(TestCase):
         posted = self.client.post("/api/listings/me/", self.payload(phone()), format="json")
         self.assertEqual(posted.status_code, 403)
 
-    def test_pending_listing_hidden_from_feed_until_approved(self):
+    def test_listing_live_immediately_and_admin_can_reject(self):
         _, p, addr = self.verified_provider()
         posted = self.client.post("/api/listings/me/", self.payload(p), format="json")
         self.assertEqual(posted.status_code, 201, posted.data)
-        self.assertEqual(posted.data["status"], "pending")
+        self.assertEqual(posted.data["status"], "approved")
         listing_id = posted.data["id"]
 
         anon = APIClient()
         feed = anon.get("/api/listings/feed/")
         self.assertEqual(feed.status_code, 200)
-        self.assertEqual(feed.data, [])
-        hidden = anon.get(f"/api/listings/{listing_id}/")
-        self.assertEqual(hidden.status_code, 404)
+        self.assertEqual(len(feed.data), 1)
+        self.assertEqual(feed.data[0]["id"], listing_id)
 
         mine = self.client.get("/api/listings/me/")
         self.assertEqual(len(mine.data), 1)
-        self.assertEqual(mine.data[0]["status"], "pending")
+        self.assertEqual(mine.data[0]["status"], "approved")
 
         staff = self.staff_client()
         listed = staff.get("/api/admin/listings/")
@@ -161,15 +160,8 @@ class ListingModerationTests(TestCase):
             format="json",
         )
         self.assertEqual(republish.status_code, 200, republish.data)
-        self.assertEqual(republish.data["status"], "pending")
+        self.assertEqual(republish.data["status"], "approved")
 
-        approved = staff.patch(
-            f"/api/admin/listings/{listing_id}/",
-            {"status": "approved"},
-            format="json",
-        )
-        self.assertEqual(approved.status_code, 200)
-        self.assertEqual(approved.data["status"], "approved")
         feed = anon.get("/api/listings/feed/")
         self.assertEqual(len(feed.data), 1)
         self.assertEqual(feed.data[0]["title"], "Updated house in Lahan")
@@ -202,7 +194,7 @@ class ListingModerationTests(TestCase):
         posted = self.client.post("/api/listings/me/", self.payload(p), format="json")
         listing_id = posted.data["id"]
         staff = self.staff_client()
-        staff.patch(f"/api/admin/listings/{listing_id}/", {"status": "approved"}, format="json")
+        # Listing is live on publish; staff approval only needed for edit requests.
 
         edited = self.client.patch(
             f"/api/listings/me/{listing_id}/",
@@ -232,7 +224,7 @@ class ListingModerationTests(TestCase):
         posted = self.client.post("/api/listings/me/", self.payload(p), format="json")
         listing_id = posted.data["id"]
         staff = self.staff_client()
-        staff.patch(f"/api/admin/listings/{listing_id}/", {"status": "approved"}, format="json")
+        # Listing is live on publish; staff approval only needed for edit requests.
 
         buyer = APIClient()
         buyer_phone = phone()
@@ -286,7 +278,7 @@ class ListingModerationTests(TestCase):
         self.assertEqual(posted.status_code, 201, posted.data)
         self.assertEqual(posted.data["category"], "jobs")
         self.assertEqual(posted.data["photos"], [])
-        self.assertEqual(posted.data["status"], "pending")
+        self.assertEqual(posted.data["status"], "approved")
 
     def test_property_listing_can_omit_price_and_photos(self):
         _, p, _ = self.verified_provider()
@@ -298,19 +290,19 @@ class ListingModerationTests(TestCase):
         self.assertEqual(posted.data["photos"], [])
         self.assertEqual(posted.data["price"], "")
 
-    def test_owner_can_open_pending_listing_photo(self):
+    def test_owner_can_open_listing_photo(self):
         _, p, _ = self.verified_provider()
         posted = self.client.post("/api/listings/me/", self.payload(p), format="json")
         self.assertEqual(posted.status_code, 201, posted.data)
-        self.assertEqual(posted.data["status"], "pending")
+        self.assertEqual(posted.data["status"], "approved")
         self.assertTrue(posted.data["photos"])
         from urllib.parse import urlparse
 
         path = urlparse(posted.data["photos"][0]["url"]).path
         photo = self.client.get(path)
         self.assertEqual(photo.status_code, 200)
-        hidden = APIClient().get(path)
-        self.assertEqual(hidden.status_code, 404)
+        public = APIClient().get(path)
+        self.assertEqual(public.status_code, 200)
 
     def test_staff_list_excludes_drafts_and_filters_category(self):
         _, p, _ = self.verified_provider()
@@ -353,7 +345,7 @@ class ListingModerationTests(TestCase):
         posted = self.client.post("/api/listings/me/", self.payload(p), format="json")
         listing_id = posted.data["id"]
         staff = self.staff_client()
-        staff.patch(f"/api/admin/listings/{listing_id}/", {"status": "approved"}, format="json")
+        # Listing is live on publish; staff approval only needed for edit requests.
 
         stale = APIClient()
         stale.credentials(HTTP_AUTHORIZATION="Bearer not-a-jwt")

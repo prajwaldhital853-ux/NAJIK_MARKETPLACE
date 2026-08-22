@@ -253,15 +253,20 @@ class ListingWriteSerializer(serializers.Serializer):
             validated_data["promote_requested"] = promote
 
         if instance.status == Listing.STATUS_APPROVED and publish:
-            for key, value in validated_data.items():
-                setattr(instance, key, value)
+            edit = dict(instance.pending_edit or {})
+            for key in EDIT_FIELDS:
+                if key in validated_data:
+                    edit[key] = validated_data[key]
             if promote is not None:
-                instance.is_promoted = promote
-            instance.save()
+                edit["promote_requested"] = promote
             if photos is not None:
-                instance.photos.all().delete()
+                keep_ids = [str(photo.id) for photo in instance.photos.filter(is_pending=False)]
+                edit["keep_photo_ids"] = keep_ids
+                instance.photos.filter(is_pending=True).delete()
                 for index, photo in enumerate(photos):
-                    ListingPhoto.objects.create(listing=instance, image=photo, sort_order=index)
+                    ListingPhoto.objects.create(listing=instance, image=photo, sort_order=index, is_pending=True)
+            instance.pending_edit = edit
+            instance.save(update_fields=["pending_edit", "updated_at"])
             return instance
 
         for key, value in validated_data.items():

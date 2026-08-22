@@ -95,7 +95,7 @@ export function UrgentListingControls({
             kind="danger"
             loading={loading === "remove"}
             loadingLabel="Removing…"
-            onClick={() => void run("remove", () => removeStaffListingUrgent(listing.id))}
+            onClick={() => void run("remove", async () => { await removeStaffListingUrgent(listing.id); })}
           >
             Remove from Urgent
           </Btn>

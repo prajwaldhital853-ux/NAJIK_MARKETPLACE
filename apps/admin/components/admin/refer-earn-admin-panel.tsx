@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Btn, Field } from "./ui";
+import { Btn, Field, inputClass } from "./ui";
 import {
   getReferEarnConfig,
   listStaffReferrals,
@@ -63,22 +63,32 @@ export function ReferEarnAdminPanel() {
         Service providers share a code; you earn on-system when friends join and post their first live listing. No in-app payment.
       </p>
       <div className="mt-3 grid gap-3 md:grid-cols-2">
-        <Field label="Reward amount (Rs.)" value={rewardAmount} onChange={(e) => setRewardAmount(e.target.value)} />
-        <Field label="Reward label" value={rewardLabel} onChange={(e) => setRewardLabel(e.target.value)} />
-        <Field
-          label="Description"
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          className="md:col-span-2"
-        />
+        <Field label="Reward amount (Rs.)">
+          <input className={inputClass} value={rewardAmount} onChange={(e) => setRewardAmount(e.target.value)} />
+        </Field>
+        <Field label="Reward label">
+          <input className={inputClass} value={rewardLabel} onChange={(e) => setRewardLabel(e.target.value)} />
+        </Field>
+        <div className="md:col-span-2">
+          <Field label="Description">
+            <textarea
+              className={inputClass}
+              rows={3}
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+            />
+          </Field>
+        </div>
         <label className="flex items-center gap-2 text-[12px] font-semibold text-ink md:col-span-2">
           <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} />
           Program active
         </label>
       </div>
-      <Btn className="mt-3" onClick={() => void save()} loading={busy} loadingLabel="Saving…">
-        Save Refer & Earn
-      </Btn>
+      <div className="mt-3">
+        <Btn onClick={() => void save()} loading={busy} loadingLabel="Saving…">
+          Save Refer & Earn
+        </Btn>
+      </div>
       {cfg ? (
         <p className="mt-2 text-[11px] text-muted">
           Current reward: {cfg.reward_label} · {cfg.is_active ? "Active" : "Paused"}

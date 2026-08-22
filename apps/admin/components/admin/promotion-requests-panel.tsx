@@ -76,7 +76,7 @@ export function PromotionRequestsPanel() {
           <div key={row.id} className="rounded-xl border border-line bg-elevated p-3">
             <p className="font-medium text-ink">{row.title}</p>
             <p className="text-[11px] text-muted">
-              {row.owner_name} · {row.category} · updated {relativeTime(row.updated_at)}
+              {row.owner_name} · {row.category} · updated {relativeTime(row.updated_at ?? row.created_at)}
             </p>
             <div className="mt-2 flex flex-wrap gap-2">
               <Btn

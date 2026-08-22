@@ -242,6 +242,7 @@ export type StaffListing = {
   admin_reason: string;
   reviewed_at?: string | null;
   created_at: string;
+  updated_at?: string;
   photos: { id: string; url: string }[];
   owner_name: string;
   owner_id: string;

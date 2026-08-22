@@ -73,13 +73,21 @@ export function ProviderPlansPanel() {
         Fee labels for ID cards and records. Money does not flow through the app — offline collection only.
       </p>
       <div className="mt-3 grid gap-3 md:grid-cols-3">
-        <Field label="Plan name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Basic seller" />
-        <Field label="Fee label" value={priceLabel} onChange={(e) => setPriceLabel(e.target.value)} placeholder="Rs. 5,000/year" />
-        <Field label="Note" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Optional details" />
+        <Field label="Plan name">
+          <input className={inputClass} value={name} onChange={(e) => setName(e.target.value)} placeholder="Basic seller" />
+        </Field>
+        <Field label="Fee label">
+          <input className={inputClass} value={priceLabel} onChange={(e) => setPriceLabel(e.target.value)} placeholder="Rs. 5,000/year" />
+        </Field>
+        <Field label="Note">
+          <input className={inputClass} value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Optional details" />
+        </Field>
       </div>
-      <Btn className="mt-3" onClick={() => void onAdd()} loading={busy} loadingLabel="Adding…">
-        Add plan
-      </Btn>
+      <div className="mt-3">
+        <Btn onClick={() => void onAdd()} loading={busy} loadingLabel="Adding…">
+          Add plan
+        </Btn>
+      </div>
       <div className="mt-4 space-y-2">
         {plans.map((plan) => (
           <div key={plan.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-line bg-elevated px-3 py-2">
@@ -174,7 +182,14 @@ export function ProviderLedgerPanel() {
         Manual refund, promotion, and plan notes for service providers. No payment gateway — reporting only.
       </p>
       <div className="mt-3 grid gap-3 md:grid-cols-2">
-        <Field label="Provider user ID" value={providerId} onChange={(e) => setProviderId(e.target.value)} placeholder="UUID from user drawer" />
+        <Field label="Provider user ID">
+          <input
+            className={inputClass}
+            value={providerId}
+            onChange={(e) => setProviderId(e.target.value)}
+            placeholder="UUID from user drawer"
+          />
+        </Field>
         <label className="block text-[12px] font-semibold text-ink">
           Type
           <select className={`${inputClass} mt-1`} value={kind} onChange={(e) => setKind(e.target.value as ProviderLedgerEntry["kind"])}>
@@ -183,13 +198,23 @@ export function ProviderLedgerPanel() {
             ))}
           </select>
         </label>
-        <Field label="Title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Boost refund" />
-        <Field label="Amount label" value={amountLabel} onChange={(e) => setAmountLabel(e.target.value)} placeholder="Rs. 500" />
-        <Field label="Note" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Optional admin note" className="md:col-span-2" />
+        <Field label="Title">
+          <input className={inputClass} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Boost refund" />
+        </Field>
+        <Field label="Amount label">
+          <input className={inputClass} value={amountLabel} onChange={(e) => setAmountLabel(e.target.value)} placeholder="Rs. 500" />
+        </Field>
+        <div className="md:col-span-2">
+          <Field label="Note">
+            <input className={inputClass} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Optional admin note" />
+          </Field>
+        </div>
       </div>
-      <Btn className="mt-3" onClick={() => void onAdd()} loading={busy} loadingLabel="Saving…">
-        Add record
-      </Btn>
+      <div className="mt-3">
+        <Btn onClick={() => void onAdd()} loading={busy} loadingLabel="Saving…">
+          Add record
+        </Btn>
+      </div>
       <div className="mt-4 max-h-64 space-y-2 overflow-y-auto">
         {rows.map((row) => (
           <div key={row.id} className="rounded-lg border border-line bg-elevated px-3 py-2 text-[12px]">

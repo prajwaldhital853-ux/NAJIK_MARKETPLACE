@@ -9,13 +9,7 @@ import {
   SellerPaymentsConfigPanel,
   SellerWalletsPanel,
 } from "@/components/admin/seller-payments-admin-panel";
-import {
-  getReferEarnConfig,
-  getSellerPaymentConfig,
-  listStaffLoadRequests,
-  listStaffReferrals,
-  listStaffSellerWallets,
-} from "@/lib/staff-api";
+import { getStaffPaymentsSummary } from "@/lib/staff-api";
 import { ADMIN_POLL_MS } from "@/lib/live-inbox";
 
 const TABS = [
@@ -36,26 +30,13 @@ export function PaymentsHub() {
   const tabParam = searchParams.get("tab");
   const active: TabId = isTab(tabParam) ? tabParam : "requests";
 
-  const [pendingCount, setPendingCount] = useState(0);
-  const [walletCount, setWalletCount] = useState(0);
-  const [referralEarned, setReferralEarned] = useState(0);
-  const [listingFee, setListingFee] = useState("—");
+  const [summary, setSummary] = useState<Awaited<ReturnType<typeof getStaffPaymentsSummary>> | null>(null);
 
   const loadStats = useCallback(async () => {
     try {
-      const [pending, wallets, referrals, cfg, payCfg] = await Promise.all([
-        listStaffLoadRequests("pending"),
-        listStaffSellerWallets(),
-        listStaffReferrals("earned"),
-        getReferEarnConfig(),
-        getSellerPaymentConfig(),
-      ]);
-      setPendingCount(pending.length);
-      setWalletCount(wallets.length);
-      setReferralEarned(referrals.reduce((s, r) => s + r.reward_amount, 0));
-      setListingFee(payCfg.listing_fee_label);
+      setSummary(await getStaffPaymentsSummary());
     } catch {
-      /* panels show their own errors */
+      setSummary(null);
     }
   }, []);
 
@@ -66,6 +47,12 @@ export function PaymentsHub() {
   }, [loadStats]);
 
   const activeMeta = useMemo(() => TABS.find((t) => t.id === active)!, [active]);
+
+  const pendingCount = summary?.pending_load_count ?? 0;
+  const walletCount = summary?.seller_wallet_count ?? 0;
+  const walletTotal = summary?.total_wallet_balance_label ?? "Rs. 0";
+  const referralEarned = summary?.referral_earned_label ?? "Rs. 0";
+  const listingFee = summary?.listing_fee_label ?? "—";
 
   return (
     <div>
@@ -78,8 +65,12 @@ export function PaymentsHub() {
       <SummaryStrip
         items={[
           { label: "Pending top-ups", value: pendingCount, tone: pendingCount ? "amber" : "green" },
-          { label: "Seller wallets", value: walletCount, tone: "brand" },
-          { label: "Referral earned (tracked)", value: `Rs. ${referralEarned.toLocaleString("en-IN")}`, tone: "green" },
+          {
+            label: "Seller wallet balance",
+            value: walletCount ? `${walletTotal} · ${walletCount} seller${walletCount === 1 ? "" : "s"}` : walletTotal,
+            tone: "brand",
+          },
+          { label: "Referral earned (paid)", value: referralEarned, tone: "green" },
           { label: "Listing fee", value: listingFee, tone: "brand" },
         ]}
       />
@@ -109,7 +100,7 @@ export function PaymentsHub() {
 
       {active === "requests" ? <SellerLoadRequestsPanel embedded onChanged={loadStats} /> : null}
       {active === "wallets" ? <SellerWalletsPanel embedded onChanged={loadStats} /> : null}
-      {active === "settings" ? <SellerPaymentsConfigPanel embedded /> : null}
+      {active === "settings" ? <SellerPaymentsConfigPanel embedded onChanged={loadStats} /> : null}
       {active === "refer" ? <ReferEarnAdminPanel embedded onChanged={loadStats} /> : null}
     </div>
   );

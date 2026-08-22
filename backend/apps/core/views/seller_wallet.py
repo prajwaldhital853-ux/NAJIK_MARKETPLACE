@@ -1,7 +1,7 @@
 import mimetypes
 
 from django.core.exceptions import ValidationError as DjangoValidationError
-from django.db.models import Sum
+from django.db.models import Count, Sum
 from django.http import FileResponse, HttpResponse
 from rest_framework import serializers, status
 from rest_framework.permissions import AllowAny
@@ -311,6 +311,42 @@ class StaffLoadRequestProofView(APIView):
             return HttpResponse(status=404)
         content_type, _ = mimetypes.guess_type(load.proof_image.name)
         return FileResponse(load.proof_image.open("rb"), content_type=content_type or "image/jpeg")
+
+
+class StaffPaymentsSummaryView(APIView):
+    authentication_classes = [StaffJWTAuthentication]
+    permission_classes = [IsStaffUser]
+
+    def get(self, request):
+        from apps.accounts.models.referral import Referral
+
+        pending_count = SellerLoadRequest.objects.filter(status=SellerLoadRequest.STATUS_PENDING).count()
+        wallet_agg = SellerWallet.objects.aggregate(count=Count("id"), total_paisa=Sum("balance_paisa"))
+        referral_credited_paisa = (
+            SellerWalletTransaction.objects.filter(kind=SellerWalletTransaction.KIND_REFERRAL_REWARD)
+            .aggregate(total=Sum("amount_paisa"))["total"]
+            or 0
+        )
+        referral_earned_rupees = (
+            Referral.objects.filter(status=Referral.STATUS_EARNED).aggregate(total=Sum("reward_amount"))["total"] or 0
+        )
+        cfg = SellerPaymentConfig.get_solo()
+        wallet_count = wallet_agg["count"] or 0
+        total_balance_paisa = wallet_agg["total_paisa"] or 0
+        return Response(
+            {
+                "pending_load_count": pending_count,
+                "seller_wallet_count": wallet_count,
+                "total_wallet_balance_paisa": total_balance_paisa,
+                "total_wallet_balance_label": paisa_to_label(total_balance_paisa),
+                "referral_earned_rupees": referral_earned_rupees,
+                "referral_earned_label": f"Rs. {referral_earned_rupees:,}",
+                "referral_credited_paisa": referral_credited_paisa,
+                "referral_credited_label": paisa_to_label(referral_credited_paisa),
+                "listing_fee_label": cfg.listing_fee_label,
+                "listing_fee_rupees": cfg.listing_fee_rupees,
+            }
+        )
 
 
 class StaffSellerWalletListView(APIView):

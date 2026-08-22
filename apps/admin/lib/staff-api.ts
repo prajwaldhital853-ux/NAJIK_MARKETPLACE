@@ -433,6 +433,23 @@ export async function getSellerPaymentConfig() {
   return staffRequest<SellerPaymentConfig>("/api/admin/app-control/seller-payments/");
 }
 
+export type StaffPaymentsSummary = {
+  pending_load_count: number;
+  seller_wallet_count: number;
+  total_wallet_balance_paisa: number;
+  total_wallet_balance_label: string;
+  referral_earned_rupees: number;
+  referral_earned_label: string;
+  referral_credited_paisa: number;
+  referral_credited_label: string;
+  listing_fee_label: string;
+  listing_fee_rupees: number;
+};
+
+export async function getStaffPaymentsSummary() {
+  return staffRequest<StaffPaymentsSummary>("/api/admin/app-control/payments-summary/");
+}
+
 export async function patchSellerPaymentConfig(payload: Record<string, unknown>) {
   return staffRequest<SellerPaymentConfig>("/api/admin/app-control/seller-payments/", {
     method: "PATCH",
@@ -482,7 +499,7 @@ export type SellerWalletRow = {
 
 export async function listStaffSellerWallets(providerId?: string) {
   const q = providerId ? `?provider=${encodeURIComponent(providerId)}` : "";
-  return staffRequest<SellerWalletRow[]>(`/api/admin/app-control/seller-wallets/${q}`);
+  return staffRequest<SellerWalletRow[]>(`/api/admin/app-control/seller-wallets${q}`);
 }
 
 export async function staffAdjustSellerWallet(providerId: string, amount_rupees: number, note: string) {

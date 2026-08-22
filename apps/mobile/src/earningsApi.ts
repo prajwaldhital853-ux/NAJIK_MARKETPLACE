@@ -19,15 +19,19 @@ export async function fetchSellerEarningsSummary(): Promise<SellerEarningsSummar
     fetchSellerPaymentsMe().catch(() => null),
     fetchReferEarnMe().catch(() => null),
   ]);
-  const loadedPaisa = payments?.balance_paisa ?? 0;
+  const walletPaisa = payments?.balance_paisa ?? 0;
+  const referPaisa = payments?.refer_earn_total_paisa ?? 0;
+  const referFromApi = refer?.stats?.earned_total ?? 0;
+  const referRupees = referPaisa > 0 ? Math.floor(referPaisa / 100) : referFromApi;
+  const loadedPaisa = Math.max(0, walletPaisa - referPaisa);
   const loadedRupees = Math.floor(loadedPaisa / 100);
-  const referrerRupees = refer?.stats?.earned_total ?? 0;
+  const combinedRupees = loadedRupees + referRupees;
   return {
     loaded_balance_paisa: loadedPaisa,
-    loaded_balance_label: payments?.balance_label ?? formatRs(0),
-    referrer_balance_rupees: referrerRupees,
-    referrer_balance_label: refer?.stats?.earned_total_label ?? formatRs(0),
-    combined_balance_label: payments?.balance_label ?? formatRs(0),
+    loaded_balance_label: formatRs(loadedRupees),
+    referrer_balance_rupees: referRupees,
+    referrer_balance_label: referPaisa > 0 ? payments?.refer_earn_total_label ?? formatRs(referRupees) : refer?.stats?.earned_total_label ?? formatRs(referRupees),
+    combined_balance_label: formatRs(combinedRupees),
     listing_fee_label: payments?.config?.listing_fee_label ?? "—",
   };
 }

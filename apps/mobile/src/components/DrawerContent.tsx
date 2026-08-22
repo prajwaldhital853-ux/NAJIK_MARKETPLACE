@@ -2,6 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useEffect, useState } from "react";
 import { fetchSellerEarningsSummary } from "../earningsApi";
 import type { DrawerContentComponentProps } from "@react-navigation/drawer";
+import { useDrawerStatus } from "@react-navigation/drawer";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import Svg, { Path } from "react-native-svg";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -106,13 +107,14 @@ export function DrawerContent({ navigation }: DrawerContentComponentProps) {
   const photo = user?.photo_uri || "";
   const menu = sellerMenu;
   const [balances, setBalances] = useState<Awaited<ReturnType<typeof fetchSellerEarningsSummary>> | null>(null);
+  const drawerStatus = useDrawerStatus();
 
   useEffect(() => {
-    if (!provider) return;
+    if (!provider || drawerStatus !== "open") return;
     void fetchSellerEarningsSummary()
       .then(setBalances)
       .catch(() => setBalances(null));
-  }, [provider]);
+  }, [provider, drawerStatus]);
 
   if (!provider) {
     return <BuyerDrawer navigation={navigation} />;

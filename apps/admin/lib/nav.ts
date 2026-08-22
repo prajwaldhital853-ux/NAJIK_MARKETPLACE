@@ -84,12 +84,13 @@ export const NAV: NavItem[] = [
   },
   {
     href: "/admin/payments",
-    label: "Payments & Transactions",
+    label: "Seller payments",
     icon: "wallet",
     children: [
-      { href: "/admin/payments", label: "All transactions" },
-      { href: "/admin/payments?status=pending", label: "Pending" },
-      { href: "/admin/payments?status=failed", label: "Failed" },
+      { href: "/admin/payments?tab=requests", label: "Add-fund requests" },
+      { href: "/admin/payments?tab=wallets", label: "Seller wallets" },
+      { href: "/admin/payments?tab=settings", label: "Fees & bank info" },
+      { href: "/admin/payments?tab=refer", label: "Refer & Earn" },
     ],
   },
   {

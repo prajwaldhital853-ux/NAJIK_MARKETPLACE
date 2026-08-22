@@ -25,7 +25,7 @@ async function fileToDataUri(file: File) {
   return `data:${file.type || "image/png"};base64,${btoa(binary)}`;
 }
 
-export function SellerPaymentsConfigPanel() {
+export function SellerPaymentsConfigPanel({ embedded, onChanged }: { embedded?: boolean; onChanged?: () => void }) {
   const { toast } = useAdmin();
   const [cfg, setCfg] = useState<SellerPaymentConfig | null>(null);
   const [fee, setFee] = useState("10");
@@ -77,6 +77,7 @@ export function SellerPaymentsConfigPanel() {
       const next = await patchSellerPaymentConfig(payload);
       setCfg(next);
       toast("Seller payment settings saved.");
+      onChanged?.();
     } catch (err) {
       toast(err instanceof Error ? err.message : "Could not save settings.");
     } finally {
@@ -85,7 +86,7 @@ export function SellerPaymentsConfigPanel() {
   }
 
   return (
-    <section className="mt-4 rounded border border-line bg-card p-4">
+    <section className={`${embedded ? "mt-0" : "mt-4"} rounded border border-line bg-card p-4`}>
       <h2 className="text-[13px] font-semibold text-ink">Seller listing payments</h2>
       <p className="mt-1 text-[12px] text-muted">
         Per-listing fee deducted when a seller publishes live. Offline bank top-ups — approve load requests below.
@@ -144,7 +145,7 @@ export function SellerPaymentsConfigPanel() {
   );
 }
 
-export function SellerLoadRequestsPanel() {
+export function SellerLoadRequestsPanel({ embedded, onChanged }: { embedded?: boolean; onChanged?: () => void }) {
   const { toast } = useAdmin();
   const [rows, setRows] = useState<SellerLoadRequestRow[]>([]);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -168,6 +169,7 @@ export function SellerLoadRequestsPanel() {
       await approveStaffLoadRequest(id);
       toast("Load approved and credited.");
       await load();
+      onChanged?.();
     } catch (err) {
       toast(err instanceof Error ? err.message : "Approve failed.");
     } finally {
@@ -181,6 +183,7 @@ export function SellerLoadRequestsPanel() {
       await rejectStaffLoadRequest(id, rejectNote[id] || "");
       toast("Load request rejected.");
       await load();
+      onChanged?.();
     } catch (err) {
       toast(err instanceof Error ? err.message : "Reject failed.");
     } finally {
@@ -189,7 +192,7 @@ export function SellerLoadRequestsPanel() {
   }
 
   return (
-    <section className="mt-4 rounded border border-line bg-card p-4">
+    <section className={`${embedded ? "mt-0" : "mt-4"} rounded border border-line bg-card p-4`}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h2 className="text-[13px] font-semibold text-ink">Add-fund requests</h2>
@@ -233,7 +236,7 @@ export function SellerLoadRequestsPanel() {
   );
 }
 
-export function SellerWalletsPanel() {
+export function SellerWalletsPanel({ embedded, onChanged }: { embedded?: boolean; onChanged?: () => void }) {
   const { toast } = useAdmin();
   const [rows, setRows] = useState<SellerWalletRow[]>([]);
   const [providerId, setProviderId] = useState("");
@@ -259,6 +262,7 @@ export function SellerWalletsPanel() {
       setAdjustAmount("");
       setAdjustNote("");
       setRows(await listStaffSellerWallets());
+      onChanged?.();
     } catch (err) {
       toast(err instanceof Error ? err.message : "Adjust failed.");
     } finally {
@@ -267,7 +271,7 @@ export function SellerWalletsPanel() {
   }
 
   return (
-    <section className="mt-4 rounded border border-line bg-card p-4">
+    <section className={`${embedded ? "mt-0" : "mt-4"} rounded border border-line bg-card p-4`}>
       <h2 className="text-[13px] font-semibold text-ink">User payments (seller wallets)</h2>
       <p className="mt-1 text-[12px] text-muted">Balances, listing fee deductions, refunds, and manual fixes.</p>
       <div className="mt-3 grid gap-3 md:grid-cols-3">

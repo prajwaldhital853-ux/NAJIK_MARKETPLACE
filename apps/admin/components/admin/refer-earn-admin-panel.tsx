@@ -12,7 +12,7 @@ import {
 import { formatNptDateTime } from "@/lib/format";
 import { useAdmin } from "@/lib/store";
 
-export function ReferEarnAdminPanel() {
+export function ReferEarnAdminPanel({ embedded, onChanged }: { embedded?: boolean; onChanged?: () => void }) {
   const { toast } = useAdmin();
   const [cfg, setCfg] = useState<ReferEarnConfig | null>(null);
   const [rows, setRows] = useState<StaffReferralRow[]>([]);
@@ -49,6 +49,7 @@ export function ReferEarnAdminPanel() {
       });
       setCfg(next);
       toast("Refer & Earn settings saved.");
+      onChanged?.();
     } catch (err) {
       toast(err instanceof Error ? err.message : "Could not save settings.");
     } finally {
@@ -57,7 +58,7 @@ export function ReferEarnAdminPanel() {
   }
 
   return (
-    <section className="mt-4 rounded border border-line bg-card p-4">
+    <section className={`${embedded ? "mt-0" : "mt-4"} rounded border border-line bg-card p-4`}>
       <h2 className="text-[13px] font-semibold text-ink">Refer & Earn</h2>
       <p className="mt-1 text-[12px] text-muted">
         Service providers share a code; you earn on-system when friends join and post their first live listing. No in-app payment.

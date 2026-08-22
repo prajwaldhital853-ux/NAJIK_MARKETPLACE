@@ -8,12 +8,6 @@ import { useAdmin } from "@/lib/store";
 import { UrgentSellAdminPanel } from "@/components/admin/urgent-sell-admin-panel";
 import { PromotionRequestsPanel } from "@/components/admin/promotion-requests-panel";
 import { ProviderPlansPanel } from "@/components/admin/provider-plans-panel";
-import { ReferEarnAdminPanel } from "@/components/admin/refer-earn-admin-panel";
-import {
-  SellerLoadRequestsPanel,
-  SellerPaymentsConfigPanel,
-  SellerWalletsPanel,
-} from "@/components/admin/seller-payments-admin-panel";
 import {
   createHomeBannerSlide,
   deleteHomeBannerSlide,
@@ -213,10 +207,6 @@ export default function GeneralAppControlPage() {
       <UrgentSellAdminPanel />
       <PromotionRequestsPanel />
       <ProviderPlansPanel />
-      <SellerPaymentsConfigPanel />
-      <SellerLoadRequestsPanel />
-      <SellerWalletsPanel />
-      <ReferEarnAdminPanel />
     </div>
   );
 }

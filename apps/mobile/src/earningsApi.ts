@@ -27,7 +27,7 @@ export async function fetchSellerEarningsSummary(): Promise<SellerEarningsSummar
     loaded_balance_label: payments?.balance_label ?? formatRs(0),
     referrer_balance_rupees: referrerRupees,
     referrer_balance_label: refer?.stats?.earned_total_label ?? formatRs(0),
-    combined_balance_label: formatRs(loadedRupees + referrerRupees),
+    combined_balance_label: payments?.balance_label ?? formatRs(0),
     listing_fee_label: payments?.config?.listing_fee_label ?? "—",
   };
 }

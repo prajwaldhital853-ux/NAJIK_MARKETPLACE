@@ -201,6 +201,62 @@ def reject_load_request(load_id, staff_user, admin_note: str):
 
 
 @transaction.atomic
+def credit_referral_reward(referral):
+    """Credit referrer wallet when a referral is earned (idempotent)."""
+    from apps.accounts.models.referral import Referral
+
+    if referral.status != Referral.STATUS_EARNED:
+        return None
+    amount_paisa = rupees_to_paisa(max(0, int(referral.reward_amount or 0)))
+    if amount_paisa <= 0:
+        return None
+    referred = referral.referred
+    referred_name = referred.full_name or referred.phone or "friend"
+    referrer = referral.referrer
+    referrer_name = referrer.full_name or referrer.phone or "Your friend"
+    amount_label = paisa_to_label(amount_paisa)
+    note = f"Invite & Earn · {referred_name}"
+    wallet = SellerWallet.objects.select_for_update().get_or_create(provider=referral.referrer)[0]
+    if SellerWalletTransaction.objects.filter(
+        wallet=wallet,
+        kind=SellerWalletTransaction.KIND_REFERRAL_REWARD,
+        note=note,
+    ).exists():
+        return None
+    wallet.balance_paisa += amount_paisa
+    wallet.save(update_fields=["balance_paisa", "updated_at"])
+    tx = SellerWalletTransaction.objects.create(
+        wallet=wallet,
+        kind=SellerWalletTransaction.KIND_REFERRAL_REWARD,
+        amount_paisa=amount_paisa,
+        balance_after_paisa=wallet.balance_paisa,
+        note=note,
+    )
+    from apps.notifications.models.inbox import InboxNotice
+    from apps.notifications.services import notify_user
+
+    notify_user(
+        referrer,
+        "Refer & Earn reward",
+        f"{amount_label} credited — {referred_name} published their first live listing.",
+        kind=InboxNotice.KIND_OTHER,
+        target="invite",
+        target_id=str(referral.pk),
+        sender_name="NAJIK",
+    )
+    notify_user(
+        referred,
+        "You helped a friend earn",
+        f"Your first live listing helped {referrer_name} earn {amount_label} in Refer & Earn. Thank you for joining with their code!",
+        kind=InboxNotice.KIND_OTHER,
+        target="invite",
+        target_id=str(referral.pk),
+        sender_name=referrer_name[:120],
+    )
+    return tx
+
+
+@transaction.atomic
 def admin_adjust_wallet(provider, amount_rupees: int, note: str, staff_user):
     amount_paisa = rupees_to_paisa(amount_rupees)
     if amount_paisa == 0:

@@ -193,6 +193,12 @@ export function PostScreen() {
     return () => clearTimeout(timer);
   }, [location]);
 
+  useEffect(() => {
+    return () => {
+      if (toastTimer.current) clearTimeout(toastTimer.current);
+    };
+  }, []);
+
   if (isProvider(user) && !canPostServices(user)) {
     const rejected = user?.verification_status === "rejected";
     return (
@@ -218,12 +224,6 @@ export function PostScreen() {
     if (toastTimer.current) clearTimeout(toastTimer.current);
     toastTimer.current = setTimeout(() => setToast(""), 5000);
   }
-
-  useEffect(() => {
-    return () => {
-      if (toastTimer.current) clearTimeout(toastTimer.current);
-    };
-  }, []);
 
   function clearFieldError(field?: FieldKey) {
     if (!field || errorField === field) {

@@ -14,10 +14,17 @@ export type ReferEarnInvite = {
   name: string;
   status: "joined" | "earned";
   status_label: string;
+  status_detail: string;
   reward_amount: number;
   reward_label: string;
   joined_at: string;
   earned_at?: string | null;
+};
+
+export type ReferEarnHowStep = {
+  step: number;
+  title: string;
+  body: string;
 };
 
 export type ReferEarnMe = {
@@ -26,6 +33,7 @@ export type ReferEarnMe = {
   reward_amount: number;
   reward_label: string;
   description: string;
+  how_it_works?: ReferEarnHowStep[];
   stats: ReferEarnStats;
   recent: ReferEarnInvite[];
 };

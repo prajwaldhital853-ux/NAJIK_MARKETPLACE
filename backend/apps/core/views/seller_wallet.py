@@ -1,6 +1,7 @@
 import mimetypes
 
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.db.models import Sum
 from django.http import FileResponse, HttpResponse
 from rest_framework import serializers, status
 from rest_framework.permissions import AllowAny
@@ -47,14 +48,32 @@ def payment_config_payload(request, cfg: SellerPaymentConfig) -> dict:
     }
 
 
+def transaction_kind_label(kind: str) -> str:
+    labels = {
+        SellerWalletTransaction.KIND_REFERRAL_REWARD: "Invite & Earn",
+        SellerWalletTransaction.KIND_LOAD: "Bank top-up",
+        SellerWalletTransaction.KIND_LISTING_FEE: "Listing fee",
+        SellerWalletTransaction.KIND_ADMIN_CREDIT: "Admin credit",
+        SellerWalletTransaction.KIND_ADMIN_DEBIT: "Admin debit",
+        SellerWalletTransaction.KIND_REFUND: "Refund",
+    }
+    return labels.get(kind, kind.replace("_", " "))
+
+
 def transaction_payload(tx: SellerWalletTransaction) -> dict:
     listing_title = ""
     if tx.listing_id:
         listing_title = tx.listing.title if tx.listing else ""
+    elif tx.kind == SellerWalletTransaction.KIND_REFERRAL_REWARD and tx.note:
+        if tx.note.startswith("Invite & Earn · "):
+            listing_title = tx.note.replace("Invite & Earn · ", "", 1).strip()
+        else:
+            listing_title = ""
     sign = "+" if tx.amount_paisa >= 0 else "-"
     return {
         "id": str(tx.id),
         "kind": tx.kind,
+        "kind_label": transaction_kind_label(tx.kind),
         "amount_paisa": tx.amount_paisa,
         "amount_label": f"{sign}{paisa_to_label(abs(tx.amount_paisa))}",
         "balance_after_paisa": tx.balance_after_paisa,
@@ -126,10 +145,19 @@ class SellerPaymentsMeView(APIView):
             .order_by("-created_at")[:80]
         )
         recent_loads = SellerLoadRequest.objects.filter(provider=user).order_by("-created_at")[:10]
+        refer_earn_paisa = (
+            SellerWalletTransaction.objects.filter(
+                wallet=wallet,
+                kind=SellerWalletTransaction.KIND_REFERRAL_REWARD,
+            ).aggregate(total=Sum("amount_paisa"))["total"]
+            or 0
+        )
         return Response(
             {
                 "balance_paisa": wallet.balance_paisa,
                 "balance_label": paisa_to_label(wallet.balance_paisa),
+                "refer_earn_total_paisa": refer_earn_paisa,
+                "refer_earn_total_label": paisa_to_label(refer_earn_paisa),
                 "config": payment_config_payload(request, cfg),
                 "pending_load": load_request_payload(request, pending) if pending else None,
                 "can_request_load": pending is None and cfg.is_active,

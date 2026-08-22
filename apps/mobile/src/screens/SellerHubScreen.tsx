@@ -1,7 +1,9 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute, useFocusEffect } from "@react-navigation/native";
+import * as Clipboard from "expo-clipboard";
 import { useCallback, useEffect, useState } from "react";
 import { Alert, AppState, Image, Linking, Pressable, ScrollView, Share, Switch, Text, TextInput, View } from "react-native";
+import QRCode from "react-native-qrcode-svg";
 import { AppHeader } from "../components/AppHeader";
 import { KeyboardScreen, useKeyboardScroll } from "../components/KeyboardScreen";
 import { PressScale } from "../components/PressScale";
@@ -286,67 +288,158 @@ function EarningsBody() {
 function InviteBody() {
   const [data, setData] = useState<Awaited<ReturnType<typeof fetchReferEarnMe>> | null>(null);
   const [loading, setLoading] = useState(true);
+  const [copied, setCopied] = useState(false);
+  const [showQr, setShowQr] = useState(false);
 
-  useEffect(() => {
+  const reload = useCallback(() => {
     void fetchReferEarnMe()
       .then(setData)
       .catch(() => setData(null))
       .finally(() => setLoading(false));
   }, []);
 
+  useFocusEffect(
+    useCallback(() => {
+      reload();
+    }, [reload]),
+  );
+
   const code = data?.invite_code || "—";
-  const description = data?.description || "Share your code. You earn when friends register and publish their first live listing.";
+  const reward = data?.reward_label ?? "Rs. 200";
   const stats = data?.stats;
   const friends = data?.recent || [];
+  const steps = data?.how_it_works ?? [];
+
+  async function copyCode() {
+    if (!code || code === "—") return;
+    await Clipboard.setStringAsync(code);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+
+  function shareWhatsApp() {
+    if (!code || code === "—") return;
+    const message = `Join NAJIK as a service provider on NAJIK. My one-time invite code: ${code}\n\nEnter this when you register. Each code works for one person only.`;
+    const url = `whatsapp://send?text=${encodeURIComponent(message)}`;
+    void Linking.openURL(url).catch(() => void Share.share({ message }));
+  }
 
   return (
     <>
+      <View style={{ marginHorizontal: 16, marginTop: 12, backgroundColor: "#E8F1FE", borderRadius: 16, padding: 14, ...shadow.card }}>
+        <Text style={{ fontWeight: "800", fontSize: 15, color: "#1D4ED8" }}>How Refer & Earn works</Text>
+        <Text style={{ color: "#4B5563", fontSize: 12, lineHeight: 18, marginTop: 8 }}>
+          You earn <Text style={{ fontWeight: "800" }}>{reward}</Text> in Payments when a friend completes all steps below. Each invite code works for{" "}
+          <Text style={{ fontWeight: "800" }}>one friend only</Text> — a new code appears after someone joins.
+        </Text>
+        {steps.map((step) => (
+          <View key={step.step} style={{ flexDirection: "row", marginTop: 10, gap: 10 }}>
+            <View style={{ width: 22, height: 22, borderRadius: 11, backgroundColor: "#2563EB", alignItems: "center", justifyContent: "center" }}>
+              <Text style={{ color: "#fff", fontWeight: "800", fontSize: 11 }}>{step.step}</Text>
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontWeight: "800", fontSize: 12, color: "#111827" }}>{step.title}</Text>
+              <Text style={{ color: "#6B7280", fontSize: 11, lineHeight: 16, marginTop: 2 }}>{step.body}</Text>
+            </View>
+          </View>
+        ))}
+      </View>
+
       <StatStrip
         items={[
-          { n: String(stats?.invites_sent ?? 0), l: "Invites sent" },
-          { n: String(stats?.joined ?? 0), l: "Joined" },
-          { n: stats?.earned_total_label ?? "Rs. 0", l: "Refer earnings" },
+          { n: String(stats?.invites_sent ?? 0), l: "Invites used" },
+          { n: String(stats?.earned_count ?? 0), l: "Rewards paid" },
+          { n: stats?.earned_total_label ?? "Rs. 0", l: "In Payments" },
         ]}
       />
+
       <View style={{ marginHorizontal: 16, marginTop: 12, backgroundColor: "#fff", borderRadius: 16, padding: 14, ...shadow.card }}>
-        <Text style={{ color: "#6B7280", fontWeight: "700", fontSize: 12 }}>Your invite code</Text>
+        <Text style={{ color: "#6B7280", fontWeight: "700", fontSize: 12 }}>Your active invite code (one-time)</Text>
         <View style={{ flexDirection: "row", alignItems: "center", marginTop: 6 }}>
-          <Text style={{ flex: 1, fontSize: 22, fontWeight: "800", letterSpacing: 1 }}>{loading ? "…" : code}</Text>
-          <PressScale onPress={() => Alert.alert("Copied", code)} style={{ backgroundColor: GREEN, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10 }}>
-            <Text style={{ color: "#fff", fontWeight: "800", fontSize: 12 }}>Copy</Text>
+          <Text style={{ flex: 1, fontSize: 20, fontWeight: "800", letterSpacing: 0.5 }} selectable>
+            {loading ? "…" : code}
+          </Text>
+          <PressScale onPress={() => void copyCode()} style={{ backgroundColor: copied ? "#E7F6EC" : GREEN, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10 }}>
+            <Text style={{ color: copied ? GREEN : "#fff", fontWeight: "800", fontSize: 12 }}>{copied ? "Copied!" : "Copy"}</Text>
           </PressScale>
         </View>
-        <Text style={{ color: "#6B7280", marginTop: 8, fontSize: 12, lineHeight: 18 }}>{description}</Text>
+        <Text style={{ color: "#6B7280", marginTop: 8, fontSize: 12, lineHeight: 18 }}>
+          {data?.description || "Share this code. After one friend registers with it, this code stops working and a new one is generated here."}
+        </Text>
+
+        {!loading && code !== "—" ? (
+          <PressScale
+            onPress={() => setShowQr((v) => !v)}
+            style={{
+              marginTop: 12,
+              paddingVertical: 12,
+              borderRadius: 12,
+              borderWidth: 1,
+              borderColor: showQr ? "#2563EB" : "#E5E7EB",
+              backgroundColor: showQr ? "#E8F1FE" : "#F9FAFB",
+              alignItems: "center",
+              flexDirection: "row",
+              justifyContent: "center",
+              gap: 8,
+            }}
+          >
+            <Ionicons name="qr-code-outline" size={18} color="#2563EB" />
+            <Text style={{ color: "#2563EB", fontWeight: "800", fontSize: 13 }}>{showQr ? "Hide QR code" : "Show QR code"}</Text>
+          </PressScale>
+        ) : null}
+
+        {!loading && code !== "—" && showQr ? (
+          <View style={{ alignItems: "center", marginTop: 12, paddingVertical: 12, backgroundColor: "#F9FAFB", borderRadius: 14 }}>
+            <QRCode value={code} size={160} backgroundColor="#F9FAFB" color="#111827" />
+            <Text style={{ marginTop: 8, fontSize: 11, color: "#6B7280", textAlign: "center", paddingHorizontal: 12 }}>
+              Scan to read the invite code · share via WhatsApp below
+            </Text>
+            <Text style={{ marginTop: 4, fontWeight: "800", fontSize: 13, color: "#111827" }} selectable>{code}</Text>
+          </View>
+        ) : null}
       </View>
+
       <QuickRow
         items={[
-          { icon: "copy-outline", label: "Copy", onPress: () => Alert.alert("Copied", code) },
-          {
-            icon: "logo-whatsapp",
-            label: "WhatsApp",
-            onPress: () => void Share.share({ message: `Join NAJIK as a service provider with my code ${code}` }),
-          },
-          { icon: "chatbubble-outline", label: "SMS", onPress: () => Alert.alert("SMS", "Share your invite code with friends.") },
+          { icon: "copy-outline", label: copied ? "Copied" : "Copy", onPress: () => void copyCode() },
+          { icon: "logo-whatsapp", label: "WhatsApp", onPress: shareWhatsApp },
         ]}
       />
-      <Text style={{ fontWeight: "800", marginHorizontal: 16, marginTop: 18 }}>Recent invites</Text>
+
+      <Text style={{ fontWeight: "800", marginHorizontal: 16, marginTop: 18 }}>People who used your codes</Text>
+      <Text style={{ color: "#6B7280", marginHorizontal: 16, marginTop: 4, fontSize: 12, lineHeight: 18 }}>
+        If reward is not in Payments yet, read the status line — most often they still need to publish their first live listing.
+      </Text>
       {!loading && friends.length === 0 ? (
         <Text style={{ color: "#6B7280", marginHorizontal: 16, marginTop: 10, fontSize: 13 }}>No invites yet — share your code to start earning.</Text>
+      ) : friends.length > 0 ? (
+        <ScrollView
+          style={{ maxHeight: friends.length > 3 ? 320 : undefined, marginTop: 8 }}
+          nestedScrollEnabled
+          showsVerticalScrollIndicator={friends.length > 3}
+        >
+          {friends.map((row) => (
+            <View key={row.id} style={{ marginHorizontal: 16, marginTop: 10, backgroundColor: "#fff", borderRadius: 14, padding: 12, ...shadow.card }}>
+              <View style={{ flexDirection: "row", alignItems: "flex-start" }}>
+                <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: row.status === "earned" ? "#E7F6EC" : "#F3F4F6", alignItems: "center", justifyContent: "center" }}>
+                  <Text style={{ fontWeight: "800", color: row.status === "earned" ? GREEN : "#6B7280" }}>{row.name[0] || "?"}</Text>
+                </View>
+                <View style={{ flex: 1, marginLeft: 10 }}>
+                  <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                    <Text style={{ fontWeight: "800", fontSize: 13 }}>{row.name}</Text>
+                    <Text style={{ color: row.status === "earned" ? GREEN : "#9CA3AF", fontWeight: "800", fontSize: 12 }}>
+                      {row.status === "earned" ? row.reward_label : "Pending"}
+                    </Text>
+                  </View>
+                  <Text style={{ color: row.status === "earned" ? GREEN : "#6B7280", fontSize: 11, marginTop: 4, lineHeight: 16 }}>
+                    {row.status_detail || (row.status === "earned" ? "Reward credited." : "Waiting for friend to complete steps.")}
+                  </Text>
+                </View>
+              </View>
+            </View>
+          ))}
+        </ScrollView>
       ) : null}
-      {friends.map((row) => (
-        <View key={row.id} style={{ marginHorizontal: 16, marginTop: 10, backgroundColor: "#fff", borderRadius: 14, padding: 12, flexDirection: "row", alignItems: "center", ...shadow.card }}>
-          <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: "#E7F6EC", alignItems: "center", justifyContent: "center" }}>
-            <Text style={{ fontWeight: "800", color: GREEN }}>{row.name[0] || "?"}</Text>
-          </View>
-          <View style={{ flex: 1, marginLeft: 10 }}>
-            <Text style={{ fontWeight: "800", fontSize: 13 }}>{row.name}</Text>
-            <Text style={{ color: "#6B7280", fontSize: 11, marginTop: 2 }}>{row.status_label}</Text>
-          </View>
-          <Text style={{ color: GREEN, fontWeight: "800", fontSize: 12 }}>
-            {row.status === "earned" ? row.reward_label : "—"}
-          </Text>
-        </View>
-      ))}
     </>
   );
 }
@@ -387,6 +480,12 @@ function PaymentsBody() {
   const pending = data?.pending_load;
   const approvedHistory = (data?.recent_load_requests ?? []).filter((r) => r.status !== "pending");
   const transactions = data?.transactions ?? [];
+  const referEarnTxs = transactions.filter((row) => row.kind === "referral_reward");
+  const otherTxs = transactions.filter((row) => row.kind !== "referral_reward");
+
+  function txTitle(row: { kind: string; kind_label?: string }) {
+    return row.kind_label || row.kind.replace(/_/g, " ");
+  }
 
   return (
     <>
@@ -397,6 +496,11 @@ function PaymentsBody() {
           <Text style={{ color: "rgba(255,255,255,0.9)", fontSize: 12, marginTop: 6 }}>
             {cfg?.listing_fee_label ?? "Per listing"} · ≈ {balanceListings} live post{balanceListings === 1 ? "" : "s"} left
           </Text>
+          {!loading && (data?.refer_earn_total_paisa ?? 0) > 0 ? (
+            <Text style={{ color: "rgba(255,255,255,0.9)", fontSize: 11, marginTop: 6 }}>
+              Includes {data?.refer_earn_total_label ?? "Rs. 0"} from Invite & Earn
+            </Text>
+          ) : null}
         </View>
       </View>
 
@@ -431,11 +535,7 @@ function PaymentsBody() {
       {approvedHistory.length ? (
         <>
           <Text style={{ fontWeight: "800", marginHorizontal: 16, marginTop: 18 }}>Top-up history</Text>
-          <ScrollView
-            style={{ maxHeight: approvedHistory.length > 5 ? 220 : undefined, marginTop: 8 }}
-            nestedScrollEnabled
-            showsVerticalScrollIndicator={approvedHistory.length > 5}
-          >
+          <View style={{ marginTop: 8 }}>
             {approvedHistory.map((row) => (
               <View
                 key={row.id}
@@ -455,36 +555,56 @@ function PaymentsBody() {
                 {row.admin_note ? <Text style={{ fontSize: 11, color: "#6B7280", marginTop: 2 }}>{row.admin_note}</Text> : null}
               </View>
             ))}
-          </ScrollView>
+          </View>
+        </>
+      ) : null}
+
+      {referEarnTxs.length ? (
+        <>
+          <Text style={{ fontWeight: "800", marginHorizontal: 16, marginTop: 18 }}>Invite & Earn history</Text>
+          <Text style={{ color: "#6B7280", marginHorizontal: 16, marginTop: 4, fontSize: 12 }}>
+            Rewards when friends publish their first live listing.
+          </Text>
+          <View style={{ marginTop: 8 }}>
+            {referEarnTxs.map((row) => (
+              <View key={row.id} style={{ marginHorizontal: 16, marginTop: 10, backgroundColor: "#E8F1FE", borderRadius: 14, padding: 12, borderWidth: 1, borderColor: "#BFDBFE", ...shadow.card }}>
+                <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+                  <Text style={{ fontWeight: "800", fontSize: 13, color: "#1D4ED8" }}>{txTitle(row)}</Text>
+                  <Text style={{ fontWeight: "800", color: GREEN }}>{row.amount_label}</Text>
+                </View>
+                {row.listing_title ? <Text style={{ color: "#6B7280", fontSize: 11, marginTop: 4 }}>Friend: {row.listing_title}</Text> : null}
+                <Text style={{ color: "#8A8F98", fontSize: 10, marginTop: 4 }}>Balance {row.balance_after_label}</Text>
+              </View>
+            ))}
+          </View>
         </>
       ) : null}
 
       <Text style={{ fontWeight: "800", marginHorizontal: 16, marginTop: 18 }}>Activity</Text>
-      {transactions.length === 0 && !loading ? (
+      {otherTxs.length === 0 && referEarnTxs.length === 0 && !loading ? (
         <Text style={{ color: "#6B7280", marginHorizontal: 16, marginTop: 10, fontSize: 13 }}>No payment activity yet.</Text>
+      ) : otherTxs.length === 0 ? (
+        <Text style={{ color: "#6B7280", marginHorizontal: 16, marginTop: 10, fontSize: 13 }}>No other payment activity yet.</Text>
       ) : (
-        <ScrollView
-          style={{ maxHeight: transactions.length > 3 ? 280 : undefined, marginTop: 8 }}
-          nestedScrollEnabled
-          showsVerticalScrollIndicator={transactions.length > 3}
-        >
-          {transactions.map((row) => (
+        <View style={{ marginTop: 8 }}>
+          {otherTxs.map((row) => (
             <View key={row.id} style={{ marginHorizontal: 16, marginTop: 10, backgroundColor: "#fff", borderRadius: 14, padding: 12, ...shadow.card }}>
               <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
-                <Text style={{ fontWeight: "800", fontSize: 13 }}>{row.kind.replace(/_/g, " ")}</Text>
+                <Text style={{ fontWeight: "800", fontSize: 13 }}>{txTitle(row)}</Text>
                 <Text style={{ fontWeight: "800", color: row.amount_paisa >= 0 ? GREEN : colors.red }}>{row.amount_label}</Text>
               </View>
               {row.listing_title ? <Text style={{ color: "#6B7280", fontSize: 11, marginTop: 4 }}>{row.listing_title}</Text> : null}
               <Text style={{ color: "#8A8F98", fontSize: 10, marginTop: 4 }}>Balance {row.balance_after_label}</Text>
             </View>
           ))}
-        </ScrollView>
+        </View>
       )}
     </>
   );
 }
 
 function AddFundBody() {
+  const navigation = useNavigation<any>();
   const { onInputFocus } = useKeyboardScroll();
   const { refresh: refreshInbox } = useInbox();
   const { data, loading, reload } = usePaymentsData();
@@ -518,6 +638,7 @@ function AddFundBody() {
       setProofUri(null);
       await reload();
       await refreshInbox();
+      navigation.navigate("SellerHub", { page: "payments" });
     } catch (err) {
       Alert.alert("Could not submit", err instanceof Error ? err.message : "Try again.");
     } finally {

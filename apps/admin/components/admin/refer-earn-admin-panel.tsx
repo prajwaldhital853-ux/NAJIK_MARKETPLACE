@@ -102,7 +102,9 @@ export function ReferEarnAdminPanel({ embedded, onChanged }: { embedded?: boolea
               {row.referrer_name} → {row.referred_name}
             </p>
             <p className="text-muted">
-              {row.invite_code} · {row.status} · Rs. {row.reward_amount} · {formatNptDateTime(row.joined_at)}
+              {row.invite_code} · {row.status === "earned" ? "Earned" : "Pending"} ·{" "}
+              {row.status === "earned" ? `Rs. ${row.reward_amount} credited` : `Rs. ${row.reward_amount} when they post`} ·{" "}
+              {formatNptDateTime(row.joined_at)}
             </p>
           </div>
         ))}

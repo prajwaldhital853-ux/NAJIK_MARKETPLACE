@@ -10,6 +10,8 @@ from apps.accounts.models.referral import (
     generate_referral_code,
     lookup_referrer,
     qualify_referral_for_listing,
+    rotate_referral_code,
+    sync_joined_referral_earnings,
     validate_invite_code_for_registration,
 )
 from apps.listings.models import Listing
@@ -98,6 +100,35 @@ class ReferralLogicTests(TestCase):
         self.assertEqual(ref.status, Referral.STATUS_EARNED)
         self.assertEqual(ref.reward_amount, 200)
         self.assertFalse(Referral.objects.filter(referrer=referred, status=Referral.STATUS_EARNED).exists())
+        from apps.core.models.seller_wallet import SellerWallet, SellerWalletTransaction
+
+        wallet = SellerWallet.objects.get(provider=referrer)
+        self.assertEqual(wallet.balance_paisa, 20000)
+        self.assertTrue(
+            SellerWalletTransaction.objects.filter(
+                wallet=wallet,
+                kind=SellerWalletTransaction.KIND_REFERRAL_REWARD,
+            ).exists()
+        )
+        from apps.notifications.models.inbox import InboxNotice
+
+        self.assertTrue(
+            InboxNotice.objects.filter(user=referrer, title="Refer & Earn reward").exists()
+        )
+        self.assertTrue(
+            InboxNotice.objects.filter(user=referred, title="You helped a friend earn").exists()
+        )
+
+    def test_code_rotates_after_one_join(self):
+        referrer = _verified_provider()
+        old_code = referrer.referral_code
+        referred = _referred_provider()
+        apply_referral_code(referred, old_code)
+        referrer.refresh_from_db()
+        self.assertNotEqual(referrer.referral_code, old_code)
+        self.assertIsNone(lookup_referrer(old_code))
+        with self.assertRaises(ValidationError):
+            validate_invite_code_for_registration(old_code, _phone(), _email("second"))
 
     def test_self_referral_blocked(self):
         referrer = _verified_provider()
@@ -193,6 +224,9 @@ class ReferralLogicTests(TestCase):
             }
         )
         self.assertEqual(Referral.objects.get(referred=referred).status, Referral.STATUS_JOINED)
+        from apps.core.models.seller_wallet import SellerWallet
+
+        SellerWallet.objects.create(provider=referred, balance_paisa=1000)
         serializer.update(listing, {"publish": True})
         self.assertEqual(Referral.objects.get(referred=referred).status, Referral.STATUS_EARNED)
 
@@ -202,3 +236,18 @@ class ReferralLogicTests(TestCase):
         referred = _referred_provider(phone=phone)
         apply_referral_code(referred, referrer.referral_code)
         self.assertTrue(ReferralConsumedIdentity.objects.filter(phone=phone).exists())
+
+    def test_sync_joined_referral_after_listing_exists(self):
+        referrer = _verified_provider()
+        referred = _referred_provider()
+        apply_referral_code(referred, referrer.referral_code)
+        Listing.objects.create(
+            owner=referred,
+            title="Already live",
+            location="Kathmandu",
+            contact_phone=referred.phone,
+            status=Listing.STATUS_APPROVED,
+        )
+        sync_joined_referral_earnings(referrer)
+        ref = Referral.objects.get(referred=referred)
+        self.assertEqual(ref.status, Referral.STATUS_EARNED)

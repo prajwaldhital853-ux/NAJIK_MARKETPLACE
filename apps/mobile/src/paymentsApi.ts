@@ -19,6 +19,7 @@ export type SellerPaymentConfig = {
 export type SellerWalletTransaction = {
   id: string;
   kind: string;
+  kind_label?: string;
   amount_paisa: number;
   amount_label: string;
   balance_after_paisa: number;
@@ -44,6 +45,8 @@ export type SellerLoadRequest = {
 export type SellerPaymentsMe = {
   balance_paisa: number;
   balance_label: string;
+  refer_earn_total_paisa?: number;
+  refer_earn_total_label?: string;
   config: SellerPaymentConfig;
   pending_load: SellerLoadRequest | null;
   can_request_load: boolean;

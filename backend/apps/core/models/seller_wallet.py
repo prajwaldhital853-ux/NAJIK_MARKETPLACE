@@ -105,12 +105,14 @@ class SellerWalletTransaction(models.Model):
     KIND_ADMIN_CREDIT = "admin_credit"
     KIND_ADMIN_DEBIT = "admin_debit"
     KIND_REFUND = "refund"
+    KIND_REFERRAL_REWARD = "referral_reward"
     KIND_CHOICES = (
         (KIND_LOAD, "Load approved"),
         (KIND_LISTING_FEE, "Listing fee"),
         (KIND_ADMIN_CREDIT, "Admin credit"),
         (KIND_ADMIN_DEBIT, "Admin debit"),
         (KIND_REFUND, "Refund"),
+        (KIND_REFERRAL_REWARD, "Refer & Earn reward"),
     )
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)

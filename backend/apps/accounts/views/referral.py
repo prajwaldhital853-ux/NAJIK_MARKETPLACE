@@ -10,6 +10,7 @@ from apps.accounts.models.referral import (
     ReferEarnConfig,
     Referral,
     generate_referral_code,
+    referral_status_detail,
 )
 from apps.accounts.permissions import IsAppUser
 from apps.staff.authentication import StaffJWTAuthentication
@@ -33,11 +34,38 @@ def referral_row_payload(row: Referral) -> dict:
         "name": referred.full_name or referred.phone or "User",
         "status": row.status,
         "status_label": "Earned" if row.status == Referral.STATUS_EARNED else "Joined",
+        "status_detail": referral_status_detail(row),
         "reward_amount": row.reward_amount,
         "reward_label": f"Rs. {row.reward_amount}",
         "joined_at": row.joined_at,
         "earned_at": row.earned_at,
     }
+
+
+def refer_how_it_works(cfg: ReferEarnConfig) -> list[dict]:
+    reward = cfg.reward_label
+    return [
+        {
+            "step": 1,
+            "title": "Share your one-time code",
+            "body": "Each code works for one friend only. After someone joins, you get a new code automatically.",
+        },
+        {
+            "step": 2,
+            "title": "Friend registers as seller",
+            "body": "They must enter your code when signing up as a service provider on NAJIK.",
+        },
+        {
+            "step": 3,
+            "title": "Friend gets verified",
+            "body": "NAJIK admin must approve their nagrita and profile before the reward can count.",
+        },
+        {
+            "step": 4,
+            "title": "Friend publishes first live listing",
+            "body": f"They must publish one live listing (not draft). Then you receive {reward} in Payments.",
+        },
+    ]
 
 
 class PublicReferEarnConfigView(APIView):
@@ -56,13 +84,14 @@ class ReferEarnMeView(APIView):
         user = request.user
         if user.account_type != AppUser.ACCOUNT_PROVIDER:
             return Response({"detail": "Refer & Earn is for service providers."}, status=status.HTTP_403_FORBIDDEN)
-        from apps.accounts.models.referral import _referrer_is_eligible
+        from apps.accounts.models.referral import _referrer_is_eligible, sync_joined_referral_earnings
 
         if not _referrer_is_eligible(user):
             return Response(
                 {"detail": "Complete verification to unlock your invite code and earn rewards."},
                 status=status.HTTP_403_FORBIDDEN,
             )
+        sync_joined_referral_earnings(user)
         code = generate_referral_code(user)
         cfg = ReferEarnConfig.get_solo()
         rows = list(Referral.objects.filter(referrer=user).select_related("referred").order_by("-joined_at")[:50])
@@ -82,6 +111,7 @@ class ReferEarnMeView(APIView):
                 "reward_amount": cfg.reward_amount,
                 "reward_label": cfg.reward_label,
                 "description": cfg.description,
+                "how_it_works": refer_how_it_works(cfg),
                 "stats": {
                     "invites_sent": all_sent,
                     "joined": joined_count,

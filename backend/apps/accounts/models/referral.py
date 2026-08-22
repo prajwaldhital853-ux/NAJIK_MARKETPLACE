@@ -14,7 +14,11 @@ class ReferEarnConfig(models.Model):
     reward_amount = models.PositiveIntegerField(default=200)
     reward_label = models.CharField(max_length=40, default="Rs. 200")
     description = models.TextField(
-        default="Share your code with friends. You earn Rs. 200 when they register as a service provider and publish their first live listing. Reward is tracked on-system; payout is offline.",
+        default=(
+            "Each invite code works for one friend only. Share your code — when they register as a "
+            "verified seller and publish their first live listing, you get the reward in Payments. "
+            "A new code is generated after each successful invite."
+        ),
         blank=True,
     )
     is_active = models.BooleanField(default=True)
@@ -102,8 +106,17 @@ def _referrer_is_eligible(referrer) -> bool:
     return app.status == ProviderApplication.STATUS_VERIFIED
 
 
+def _new_random_invite_code() -> str:
+    """Hard-to-guess single-use invite code."""
+    return f"NAJIK-{secrets.token_hex(2).upper()}-{secrets.token_hex(3).upper()}"
+
+
+def _code_was_consumed(code: str) -> bool:
+    return Referral.objects.filter(invite_code__iexact=code).exists()
+
+
 def lookup_referrer(raw_code: str):
-    """Return active verified referrer for code, or None if code blank/invalid."""
+    """Return active verified referrer for the user's current code, or None."""
     from apps.accounts.models import AppUser
 
     code = _normalize_invite_code(raw_code)
@@ -128,6 +141,10 @@ def validate_invite_code_for_registration(raw_code: str, phone: str, email: str)
         raise ValidationError("Refer & Earn is paused right now.")
     referrer = lookup_referrer(code)
     if not referrer:
+        if _code_was_consumed(code):
+            raise ValidationError(
+                "This invite code was already used. Ask your friend to open Invite & Earn and share their new code."
+            )
         raise ValidationError("This invite code is not valid.")
     phone = (phone or "").strip()
     email = (email or "").lower().strip()
@@ -142,23 +159,26 @@ def validate_invite_code_for_registration(raw_code: str, phone: str, email: str)
     return code
 
 
-def generate_referral_code(user) -> str:
+def generate_referral_code(user, force_new: bool = False) -> str:
     from apps.accounts.models import AppUser
 
-    if user.referral_code:
+    if user.referral_code and not force_new:
         return user.referral_code
-    base = _code_slug(user.full_name)
-    for attempt in range(20):
-        suffix = "" if attempt == 0 else str(secrets.randbelow(90) + 10)
-        code = f"NAJIK-{base}{suffix}"
+    for _ in range(40):
+        code = _new_random_invite_code()
         if not AppUser.objects.filter(referral_code=code).exclude(pk=user.pk).exists():
             user.referral_code = code
             user.save(update_fields=["referral_code"])
             return code
-    code = f"NAJIK-{secrets.token_hex(3).upper()}"
+    code = f"NAJIK-{secrets.token_hex(4).upper()}-{secrets.token_hex(4).upper()}"
     user.referral_code = code
     user.save(update_fields=["referral_code"])
     return code
+
+
+def rotate_referral_code(user) -> str:
+    """Invalidate the current code and issue a new one (after a successful invite)."""
+    return generate_referral_code(user, force_new=True)
 
 
 @transaction.atomic
@@ -188,6 +208,7 @@ def apply_referral_code(referred_user, raw_code: str):
         reward_amount=cfg.reward_amount,
     )
     ReferralConsumedIdentity.objects.create(phone=phone, email=email or None)
+    rotate_referral_code(referrer)
     return referral
 
 
@@ -223,13 +244,13 @@ def qualify_referral_for_listing(listing):
 
     if app.status != ProviderApplication.STATUS_VERIFIED:
         return
-    prior = (
-        Listing.objects.filter(owner=owner, status=Listing.STATUS_APPROVED)
-        .exclude(pk=listing.pk)
-        .exclude(extras__contains={"sold": True})
-        .exclude(extras__sold=True)
-        .count()
-    )
+    prior = 0
+    for row in Listing.objects.filter(owner=owner, status=Listing.STATUS_APPROVED).exclude(pk=listing.pk):
+        if is_sold_extras(row.extras):
+            continue
+        if not (row.title or "").strip():
+            continue
+        prior += 1
     if prior > 0:
         return
     from django.utils import timezone
@@ -237,3 +258,51 @@ def qualify_referral_for_listing(listing):
     ref.status = Referral.STATUS_EARNED
     ref.earned_at = timezone.now()
     ref.save(update_fields=["status", "earned_at"])
+    from apps.core.seller_wallet_service import credit_referral_reward
+
+    credit_referral_reward(ref)
+
+
+def _first_qualifying_listing_for_referred(referred):
+    from apps.listings.models import Listing
+    from apps.listings.urgent import is_sold_extras
+
+    for row in Listing.objects.filter(owner=referred, status=Listing.STATUS_APPROVED).order_by("created_at", "pk"):
+        if is_sold_extras(row.extras):
+            continue
+        if not (row.title or "").strip():
+            continue
+        return row
+    return None
+
+
+def referral_status_detail(row: Referral) -> str:
+    if row.status == Referral.STATUS_EARNED:
+        return f"Rs. {row.reward_amount} was added to your Payments balance."
+    cfg = ReferEarnConfig.get_solo()
+    referred = row.referred
+    try:
+        app = referred.provider_application
+    except Exception:
+        return "Friend joined — waiting for them to complete seller registration."
+    from apps.verification.models import ProviderApplication
+
+    if app.status != ProviderApplication.STATUS_VERIFIED:
+        return "Friend joined — reward pending until NAJIK verifies their seller account."
+    if _first_qualifying_listing_for_referred(referred):
+        return "Friend has a live listing — syncing your reward. Pull to refresh."
+    return (
+        f"Friend joined — you earn {cfg.reward_label} when they publish their first live listing "
+        "(not draft). Reward goes to Payments."
+    )
+
+
+def sync_joined_referral_earnings(referrer=None):
+    """Backfill earned status + wallet credit when a referred user already has a qualifying listing."""
+    qs = Referral.objects.filter(status=Referral.STATUS_JOINED).select_related("referred", "referrer")
+    if referrer is not None:
+        qs = qs.filter(referrer=referrer)
+    for ref in qs:
+        listing = _first_qualifying_listing_for_referred(ref.referred)
+        if listing:
+            qualify_referral_for_listing(listing)

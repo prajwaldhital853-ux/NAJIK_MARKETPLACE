@@ -28,6 +28,10 @@ export function openSellerPage(navigation: { navigate: (...args: any[]) => void 
   navigation.navigate("SellerHub", { page });
 }
 
+export function openBookings(navigation: { navigate: (...args: any[]) => void }) {
+  navigateNamed(navigation, "Bookings");
+}
+
 export function openChatInbox(navigation: { navigate: (...args: any[]) => void }) {
   navigation.navigate("ChatInbox");
 }

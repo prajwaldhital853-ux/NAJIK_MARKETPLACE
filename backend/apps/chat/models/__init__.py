@@ -52,11 +52,13 @@ class ChatMessage(models.Model):
     KIND_IMAGE = "image"
     KIND_VOICE = "voice"
     KIND_LOCATION = "location"
+    KIND_BOOKING = "booking"
     KIND_CHOICES = (
         (KIND_TEXT, "Text"),
         (KIND_IMAGE, "Image"),
         (KIND_VOICE, "Voice"),
         (KIND_LOCATION, "Location"),
+        (KIND_BOOKING, "Booking"),
     )
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)

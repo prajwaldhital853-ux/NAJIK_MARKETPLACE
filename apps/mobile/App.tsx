@@ -5,8 +5,9 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { AuthProvider } from "./src/context/AuthContext";
 import { BuyerLocationProvider } from "./src/context/BuyerLocationContext";
 import { SavedListingsProvider } from "./src/context/SavedListings";
-import { StaffWarningBanner } from "./src/components/StaffWarningBanner";
+import { InboxProvider } from "./src/context/InboxContext";
 import { forceLightMode, subscribeForceLightMode } from "./src/forceLightMode";
+import { StaffWarningBanner } from "./src/components/StaffWarningBanner";
 import { RootNavigator } from "./src/navigation/RootNavigator";
 
 forceLightMode();
@@ -20,9 +21,11 @@ export default function App() {
         <AuthProvider>
           <BuyerLocationProvider>
           <SavedListingsProvider>
+            <InboxProvider>
             <StatusBar style="dark" />
             <RootNavigator />
             <StaffWarningBanner />
+            </InboxProvider>
           </SavedListingsProvider>
           </BuyerLocationProvider>
         </AuthProvider>

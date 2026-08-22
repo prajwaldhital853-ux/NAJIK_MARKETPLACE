@@ -66,6 +66,8 @@ export function PostScreen() {
   const [description, setDescription] = useState("");
   const [price, setPrice] = useState("");
   const [negotiable, setNegotiable] = useState(true);
+  const [discountPct, setDiscountPct] = useState("");
+  const [soldFlag, setSoldFlag] = useState(false);
   const [city, setCity] = useState("Kathmandu");
   const [district, setDistrict] = useState("Kathmandu");
   const [location, setLocation] = useState("");
@@ -125,6 +127,9 @@ export function PostScreen() {
         setDescription(row.description || "");
         setPrice(String(row.price || "").replace(/\D/g, "") || String(row.price || ""));
         setNegotiable(Boolean(row.negotiable));
+        const disc = Number(row.extras?.discountPercent ?? row.extras?.discount_percent ?? 0);
+        setDiscountPct(disc > 0 ? String(disc) : "");
+        setSoldFlag(String(row.extras?.sold) === "true" || row.extras?.sold === true);
         setCity(row.city || "Kathmandu");
         setDistrict(row.district || "Kathmandu");
         setLocation(row.location || "");
@@ -283,7 +288,13 @@ export function PostScreen() {
 
   function extrasPayload() {
     const featureTags = features.filter(Boolean);
-    const shared = { dealType, features: featureTags };
+    const pct = Math.min(90, Math.max(0, Number(String(discountPct).replace(/\D/g, "") || 0)));
+    const shared = {
+      dealType,
+      features: featureTags,
+      ...(pct ? { discountPercent: pct } : { discountPercent: 0 }),
+      ...(soldFlag ? { sold: true } : {}),
+    };
     if (vertical === "jobs") {
       return { ...shared, company, experience, applyEmail, workplace: propertyType };
     }
@@ -759,6 +770,27 @@ export function PostScreen() {
         {step === 2 ? (
           <View>
             <Field label={`${copy.priceLabel} (optional)`} value={price} onChangeText={setPrice} onFocus={onInputFocus} placeholder={copy.pricePlaceholder} keyboardType="number-pad" />
+            <Field
+              label="Discount % (optional)"
+              value={discountPct}
+              onChangeText={(v) => setDiscountPct(v.replace(/\D/g, "").slice(0, 2))}
+              onFocus={onInputFocus}
+              placeholder="e.g. 15"
+              keyboardType="number-pad"
+            />
+            {Number(discountPct) > 0 && String(price).replace(/\D/g, "") ? (
+              <View style={{ marginTop: 4, marginBottom: 10, backgroundColor: "#FFF7ED", borderRadius: 14, padding: 12, borderWidth: 1, borderColor: "#FED7AA" }}>
+                <Text style={{ fontWeight: "800", fontSize: 20, color: "#EA580C" }}>
+                  Rs. {Math.max(0, Math.round(Number(String(price).replace(/\D/g, "")) * (100 - Number(discountPct)) / 100)).toLocaleString("en-IN")}
+                </Text>
+                <View style={{ flexDirection: "row", gap: 8, marginTop: 2 }}>
+                  <Text style={{ color: "#9CA3AF", textDecorationLine: "line-through" }}>
+                    Rs. {Number(String(price).replace(/\D/g, "")).toLocaleString("en-IN")}
+                  </Text>
+                  <Text style={{ color: "#9CA3AF" }}>-{Number(discountPct)}%</Text>
+                </View>
+              </View>
+            ) : null}
             <PressScale
               onPress={() => setNegotiable((value) => !value)}
               style={[toggleStyle, { backgroundColor: negotiable ? "#E4F6EA" : "#fff", borderColor: negotiable ? GREEN : colors.border }]}

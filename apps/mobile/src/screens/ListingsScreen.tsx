@@ -8,7 +8,7 @@ import { useAppRefreshControl } from "../components/KeyboardScreen";
 import { PressScale } from "../components/PressScale";
 import { useAuth } from "../context/AuthContext";
 import { canPostServices, isPendingProvider } from "../demo";
-import { fetchMyListings, deleteMyListing, type ApiListing } from "../listingsApi";
+import { fetchMyListings, deleteMyListing, setListingSold, type ApiListing } from "../listingsApi";
 import { subscribeListingsChanged } from "../listingsRefresh";
 import { openListing, openSellerPage } from "../navigation/browse";
 import { colors, shadow } from "../theme";
@@ -52,19 +52,23 @@ function postedOn(iso: string) {
   return date.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
 }
 
+function isSold(item: ApiListing) {
+  return extraText(item, "sold") === "true" || item.extras?.sold === true;
+}
+
 function statusLabel(item: ApiListing) {
+  if (isSold(item)) return "Sold";
   if (item.status === "approved") return "Active";
   if (item.status === "pending") return "Pending";
   if (item.status === "draft") return "Draft";
-  if (extraText(item, "sold") === "true") return "Sold/Rented";
   return "Rejected";
 }
 
 function matchesFilter(item: ApiListing, filter: FilterKey) {
   if (filter === "all") return true;
-  if (filter === "active") return item.status === "approved";
+  if (filter === "active") return item.status === "approved" && !isSold(item);
   if (filter === "pending") return item.status === "pending" || item.status === "draft";
-  if (filter === "sold") return extraText(item, "sold") === "true" || extraText(item, "rented") === "true";
+  if (filter === "sold") return isSold(item);
   if (filter === "expired") return item.status === "rejected";
   return true;
 }
@@ -345,6 +349,12 @@ function VerifiedBody() {
                   compact
                   onOpen={() => openListing(navigation, item.id, true)}
                   onPromote={() => openSellerPage(navigation, "promotions")}
+                  onSold={() => {
+                    const next = !isSold(item);
+                    void setListingSold(item.id, next).catch((err) =>
+                      Alert.alert("Update failed", err instanceof Error ? err.message : "Could not update listing."),
+                    );
+                  }}
                   onDelete={() => {
                     Alert.alert("Delete listing", `Remove “${item.title}” permanently? This also removes it from the admin panel.`, [
                       { text: "Cancel", style: "cancel" },
@@ -370,6 +380,12 @@ function VerifiedBody() {
               item={item}
               onOpen={() => openListing(navigation, item.id, true)}
               onPromote={() => openSellerPage(navigation, "promotions")}
+              onSold={() => {
+                const next = !isSold(item);
+                void setListingSold(item.id, next).catch((err) =>
+                  Alert.alert("Update failed", err instanceof Error ? err.message : "Could not update listing."),
+                );
+              }}
               onDelete={() => {
                 Alert.alert("Delete listing", `Remove “${item.title}” permanently? This also removes it from the admin panel.`, [
                   { text: "Cancel", style: "cancel" },
@@ -511,12 +527,14 @@ function ListingManageCard({
   item,
   onOpen,
   onPromote,
+  onSold,
   onDelete,
   compact,
 }: {
   item: ApiListing;
   onOpen: () => void;
   onPromote: () => void;
+  onSold: () => void;
   onDelete: () => void;
   compact?: boolean;
 }) {
@@ -654,6 +672,7 @@ function ListingManageCard({
             <PressScale
               onPress={() =>
                 Alert.alert(item.title, undefined, [
+                  { text: isSold(item) ? "Mark as active" : "Mark as sold", onPress: onSold },
                   { text: "Promote", onPress: onPromote },
                   { text: "Delete listing", style: "destructive", onPress: onDelete },
                   { text: "Cancel", style: "cancel" },

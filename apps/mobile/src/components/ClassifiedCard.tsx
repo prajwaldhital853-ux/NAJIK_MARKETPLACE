@@ -58,6 +58,50 @@ export function listingTags(item: CatalogItem) {
   return tags.slice(0, 3);
 }
 
+export function StarsCount({ rating, count, compact }: { rating: number; count: number; compact?: boolean }) {
+  if (!count) return null;
+  const filled = Math.max(0, Math.min(5, Math.round(rating || 0)));
+  const size = compact ? 10 : 12;
+  return (
+    <View style={{ flexDirection: "row", alignItems: "center", gap: 2 }}>
+      {[1, 2, 3, 4, 5].map((n) => (
+        <Ionicons key={n} name="star" size={size} color={n <= filled ? "#F5C518" : "#D1D5DB"} />
+      ))}
+      <Text style={{ color: "#6B7280", fontSize: compact ? 10 : 12, marginLeft: 2 }}>({count})</Text>
+    </View>
+  );
+}
+
+export function SalePrice({
+  amount,
+  unit,
+  originalPrice,
+  discountPercent,
+  compact,
+}: {
+  amount: string;
+  unit?: string;
+  originalPrice?: string;
+  discountPercent?: number;
+  compact?: boolean;
+}) {
+  const sale = Boolean(discountPercent && originalPrice);
+  return (
+    <View>
+      <View style={{ flexDirection: "row", alignItems: "baseline", flexWrap: "wrap" }}>
+        <Text style={{ fontWeight: "800", fontSize: compact ? 15 : 20, color: sale ? "#EA580C" : GREEN }}>{amount}</Text>
+        {unit ? <Text style={{ color: "#8A8F98", fontSize: compact ? 10 : 13, marginLeft: 3 }}>{unit}</Text> : null}
+      </View>
+      {sale ? (
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 2 }}>
+          <Text style={{ color: "#9CA3AF", fontSize: compact ? 11 : 13, textDecorationLine: "line-through" }}>{originalPrice}</Text>
+          <Text style={{ color: "#9CA3AF", fontSize: compact ? 11 : 13 }}>-{discountPercent}%</Text>
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
 export function splitPrice(price: string) {
   const cleaned = price.replace(/\s*\/mo\b/i, " /month");
   const idx = cleaned.search(/\s\//);
@@ -186,13 +230,13 @@ export function ListingListRow({ item }: { item: CatalogItem }) {
       )}
       <View style={{ flex: 1 }}>
         <Text style={{ fontWeight: "800", color: colors.navy }} numberOfLines={2}>{item.title}</Text>
-        <Text style={{ color: GREEN, fontWeight: "800", marginTop: 4 }}>{splitPrice(item.price).amount}</Text>
+        <SalePrice amount={splitPrice(item.price).amount} originalPrice={item.originalPrice} discountPercent={item.discountPercent} compact />
         <Text style={{ color: "#6B7280", fontSize: 12, marginTop: 4 }} numberOfLines={1}>
           {item.location}
           {item.distanceKm != null ? ` · ${formatDistance(item.distanceKm)}` : ""}
         </Text>
         <View style={{ flexDirection: "row", alignItems: "center", marginTop: 6, gap: 8 }}>
-          {item.rating ? <Text style={{ fontSize: 11, fontWeight: "700" }}>★ {item.rating}</Text> : null}
+          <StarsCount rating={item.rating || 0} count={item.reviewCount || 0} compact />
           {item.verified ? <Text style={{ fontSize: 11, color: GREEN, fontWeight: "800" }}>Verified</Text> : null}
           <View style={{ flex: 1 }} />
           <BookmarkBtn id={item.id} />
@@ -256,9 +300,8 @@ function ListingAdCard({
             {blurb}
           </Text>
         ) : null}
-        <View style={{ flexDirection: "row", alignItems: "baseline", marginTop: compact ? 5 : 8, flexWrap: "wrap" }}>
-          <Text style={{ fontWeight: "800", fontSize: compact ? 13 : 18, color: GREEN }}>{amount}</Text>
-          {unit ? <Text style={{ color: "#8A8F98", fontSize: compact ? 10 : 13, marginLeft: 3 }}>{unit}</Text> : null}
+        <View style={{ marginTop: compact ? 5 : 8 }}>
+          <SalePrice amount={amount} unit={unit} originalPrice={item.originalPrice} discountPercent={item.discountPercent} compact={compact} />
         </View>
         <View style={{ flexDirection: "row", alignItems: "flex-end", marginTop: compact ? 8 : 10 }}>
           <View style={{ flex: 1, paddingRight: 6 }}>
@@ -270,11 +313,8 @@ function ListingAdCard({
               </Text>
             </View>
             <View style={{ flexDirection: "row", alignItems: "center", gap: 3, marginTop: compact ? 4 : 6 }}>
-              {item.rating ? (
-                <>
-                  <Ionicons name="star" size={compact ? 11 : 14} color="#F59E0B" />
-                  <Text style={{ color: "#6B7280", fontSize: compact ? 10 : 13 }}>{item.rating}</Text>
-                </>
+              {item.reviewCount ? (
+                <StarsCount rating={item.rating || 0} count={item.reviewCount} compact={compact} />
               ) : (
                 <>
                   <Ionicons name="time-outline" size={compact ? 11 : 14} color="#9AA0A6" />

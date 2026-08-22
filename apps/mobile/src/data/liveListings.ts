@@ -51,15 +51,33 @@ export function formatListingPrice(price: string, negotiable?: boolean) {
   return digits && negotiable ? `${amount} (nego.)` : amount;
 }
 
+export function listingDiscountPercent(extras?: Record<string, unknown> | null) {
+  const raw = extras?.discountPercent ?? extras?.discount_percent ?? extras?.discount;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n <= 0 || n > 90) return 0;
+  return Math.round(n);
+}
+
+export function discountedAmount(price: string, percent: number) {
+  const digits = String(price || "").replace(/[^\d]/g, "");
+  if (!digits || percent <= 0) return "";
+  const sale = Math.max(0, Math.round(Number(digits) * (100 - percent) / 100));
+  return `Rs. ${sale.toLocaleString("en-IN")}`;
+}
+
 export function listingToCatalog(row: ApiListing): CatalogItem {
   const features = Array.isArray(row.extras?.features) ? (row.extras.features as string[]) : [];
   const extras = row.extras || {};
   const condition = String(extras.condition || extras.dealType || "");
+  const percent = listingDiscountPercent(extras);
+  const sale = discountedAmount(row.price, percent);
   const item: CatalogItem = {
     id: row.id,
     key: catalogKeyForCategory(row.category, row.subcategory),
     title: row.title,
-    price: formatListingPrice(row.price, row.negotiable),
+    price: sale || formatListingPrice(row.price, row.negotiable),
+    originalPrice: percent && sale ? formatListingPrice(row.price, false) : undefined,
+    discountPercent: percent || undefined,
     location: row.location,
     time: row.created_at ? new Date(row.created_at).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "Just now",
     badge: row.is_promoted ? "FEATURED" : row.status === "approved" ? "VERIFIED" : "PENDING",
@@ -69,6 +87,7 @@ export function listingToCatalog(row: ApiListing): CatalogItem {
     lat: row.lat,
     lng: row.lng,
     rating: row.rating_avg || 0,
+    reviewCount: row.review_count || 0,
     verified: Boolean(row.seller_verified),
     available: Boolean(extras.availability),
     apiCategory: row.category,
@@ -101,11 +120,14 @@ export function liveSpecs(row: ApiListing) {
     extras.area ? { label: "Area", value: `${extras.area} sqft` } : null,
     extras.furnished !== undefined && extras.furnished !== "" ? { label: "Furnished", value: extras.furnished ? "Yes" : "No" } : null,
     extras.parking !== undefined && extras.parking !== "" ? { label: "Parking", value: extras.parking ? "Yes" : "No" } : null,
+    extras.discountPercent ? { label: "Discount", value: `${extras.discountPercent}%` } : null,
     { label: "Price negotiable", value: row.negotiable ? "Yes" : "No" },
   ].filter(Boolean) as { label: string; value: string }[];
   return rows;
 }
 
 export function listingsToCatalog(rows: ApiListing[]) {
-  return rows.map(listingToCatalog);
+  return rows
+    .filter((row) => row.extras?.sold !== true && String(row.extras?.sold || "") !== "true")
+    .map(listingToCatalog);
 }

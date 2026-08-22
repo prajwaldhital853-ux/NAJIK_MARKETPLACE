@@ -1,11 +1,13 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { useEffect, useState } from "react";
-import { Modal, Pressable, Text, TextInput, View } from "react-native";
+import { Modal, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "../context/AuthContext";
-import { lookupPlace, useBuyerLocation } from "../context/BuyerLocationContext";
+import { useInbox } from "../context/InboxContext";
 import { isPendingProvider, isProvider } from "../demo";
+import { openBookings, openChatThread, openListing, openSellerPage } from "../navigation/browse";
+import { lookupPlace, useBuyerLocation } from "../context/BuyerLocationContext";
 import { searchPlaces } from "../geo";
 import { colors, shadow } from "../theme";
 import { KeyboardScreen, useKeyboardScroll } from "./KeyboardScreen";
@@ -102,31 +104,7 @@ export function AppHeader({
               <Text style={{ color: colors.green, fontWeight: "700", fontSize: 12 }}>Save Draft</Text>
             </PressScale>
           ) : (
-            <View>
-              <Ionicons name="notifications-outline" size={22} color="#111827" />
-              {bellCount ? (
-                <View
-                  style={{
-                    position: "absolute",
-                    top: -5,
-                    right: -7,
-                    backgroundColor: "#E53935",
-                    minWidth: 16,
-                    height: 16,
-                    borderRadius: 8,
-                    alignItems: "center",
-                    justifyContent: "center",
-                    paddingHorizontal: 3,
-                    borderWidth: 1.5,
-                    borderColor: "#fff",
-                  }}
-                >
-                  <Text style={{ color: "#fff", fontSize: 9, fontWeight: "800" }}>{bellCount}</Text>
-                </View>
-              ) : bellCount && bellCount > 0 ? (
-                <View style={dotStyle} />
-              ) : null}
-            </View>
+            <NotificationBell />
           )}
           {right === "bell-chat" ? (
             <Pressable
@@ -188,6 +166,113 @@ export function AppHeader({
         </View>
       </Modal>
     </View>
+  );
+}
+
+function NotificationBell() {
+  const navigation = useNavigation<any>();
+  const insets = useSafeAreaInsets();
+  const { user } = useAuth();
+  const { items, unread, mark, markAll, refresh } = useInbox();
+  const [open, setOpen] = useState(false);
+
+  function go(item: (typeof items)[0]) {
+    void mark(item.id, true);
+    setOpen(false);
+    if (item.target === "chat" && item.target_id) {
+      openChatThread(navigation, item.target_id);
+      return;
+    }
+    if (item.target === "listing" && item.target_id) {
+      openListing(navigation, item.target_id);
+      return;
+    }
+    if (item.target === "booking" || item.kind === "booking") {
+      if (isProvider(user)) openSellerPage(navigation, "bookings");
+      else openBookings(navigation);
+    }
+  }
+
+  return (
+    <>
+      <Pressable
+        onPress={() => {
+          setOpen(true);
+          void refresh();
+        }}
+        hitSlop={10}
+      >
+        <Ionicons name="notifications-outline" size={22} color="#111827" />
+        {unread > 0 ? (
+          <View
+            style={{
+              position: "absolute",
+              top: -5,
+              right: -7,
+              backgroundColor: "#E53935",
+              minWidth: 16,
+              height: 16,
+              borderRadius: 8,
+              alignItems: "center",
+              justifyContent: "center",
+              paddingHorizontal: 3,
+              borderWidth: 1.5,
+              borderColor: "#fff",
+            }}
+          >
+            <Text style={{ color: "#fff", fontSize: 9, fontWeight: "800" }}>{unread > 99 ? "99+" : unread}</Text>
+          </View>
+        ) : null}
+      </Pressable>
+      <Modal visible={open} animationType="fade" transparent onRequestClose={() => setOpen(false)}>
+        <Pressable style={{ flex: 1, backgroundColor: "rgba(15,23,42,0.35)" }} onPress={() => setOpen(false)}>
+          <Pressable
+            onPress={() => undefined}
+            style={{
+              marginTop: insets.top + 48,
+              marginHorizontal: 12,
+              backgroundColor: "#fff",
+              borderRadius: 18,
+              maxHeight: 420,
+              overflow: "hidden",
+              ...shadow.card,
+            }}
+          >
+            <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 14, paddingVertical: 12 }}>
+              <Text style={{ flex: 1, fontWeight: "800", fontSize: 16 }}>Notifications</Text>
+              {unread ? (
+                <Pressable onPress={() => void markAll()}>
+                  <Text style={{ color: GREEN, fontWeight: "800", fontSize: 12 }}>Mark all read</Text>
+                </Pressable>
+              ) : null}
+            </View>
+            {items.length ? (
+              <ScrollView style={{ maxHeight: 360 }}>
+              {items.map((item) => (
+                <Pressable
+                  key={item.id}
+                  onPress={() => go(item)}
+                  style={{ paddingHorizontal: 14, paddingVertical: 10, backgroundColor: item.is_read ? "#fff" : "#F0FDF4", borderTopWidth: 1, borderTopColor: "#F3F4F6" }}
+                >
+                  <Text style={{ fontWeight: "800", color: "#111827" }}>{item.title}</Text>
+                  {item.body ? <Text style={{ color: "#6B7280", fontSize: 12, marginTop: 3 }} numberOfLines={2}>{item.body}</Text> : null}
+                  <Pressable
+                    onPress={() => void mark(item.id, !item.is_read)}
+                    hitSlop={8}
+                    style={{ marginTop: 6, alignSelf: "flex-start" }}
+                  >
+                    <Text style={{ color: GREEN, fontSize: 11, fontWeight: "800" }}>{item.is_read ? "Mark unread" : "Mark read"}</Text>
+                  </Pressable>
+                </Pressable>
+              ))}
+              </ScrollView>
+            ) : (
+              <Text style={{ padding: 16, color: "#8A8F98" }}>No notifications yet.</Text>
+            )}
+          </Pressable>
+        </Pressable>
+      </Modal>
+    </>
   );
 }
 

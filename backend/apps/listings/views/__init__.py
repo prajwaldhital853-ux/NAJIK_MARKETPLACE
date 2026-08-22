@@ -54,7 +54,9 @@ class ListingFeedView(APIView):
     permission_classes = [AllowAny]
 
     def get(self, request):
-        items = listing_queryset().filter(status=Listing.STATUS_APPROVED)
+        items = listing_queryset().filter(status=Listing.STATUS_APPROVED).exclude(
+            Q(extras__sold=True) | Q(extras__sold="true")
+        )
         q = (request.query_params.get("q") or "").strip()
         if q:
             items = items.filter(listing_search_q(q))
@@ -178,7 +180,9 @@ class PublicSellerProfileView(APIView):
             email = app.email or seller.email or ""
             address = app.address or ""
             service_type = app.service_type or ""
-            listings = listing_queryset().filter(owner=seller, status=Listing.STATUS_APPROVED).order_by("-created_at")[:200]
+            listings = listing_queryset().filter(owner=seller, status=Listing.STATUS_APPROVED).exclude(
+                Q(extras__sold=True) | Q(extras__sold="true")
+            ).order_by("-created_at")[:200]
         return Response(
             {
                 "id": str(seller.id),
@@ -245,6 +249,41 @@ class ListingMineDetailView(APIView):
         listing = get_object_or_404(Listing, pk=pk, owner=request.user)
         listing.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class ListingSoldView(APIView):
+    authentication_classes = [AppJWTAuthentication]
+    permission_classes = [IsAppUser]
+
+    def post(self, request, pk):
+        listing = get_object_or_404(Listing, pk=pk, owner=request.user)
+        sold = bool(request.data.get("sold"))
+        extras = dict(listing.extras or {})
+        extras["sold"] = sold
+        listing.extras = extras
+        listing.save(update_fields=["extras", "updated_at"])
+        if sold:
+            from apps.chat.models import ChatThread
+            from apps.notifications.models import InboxNotice
+            from apps.notifications.services import notify_user
+
+            saver_ids = set(listing.saves.values_list("user_id", flat=True))
+            chat_ids = set(
+                ChatThread.objects.filter(listing=listing).values_list("buyer_id", flat=True)
+            ) | set(ChatThread.objects.filter(listing=listing).values_list("seller_id", flat=True))
+            notify_ids = (saver_ids | chat_ids) - {request.user.id}
+            users = AppUser.objects.filter(id__in=notify_ids)
+            for user in users:
+                notify_user(
+                    user,
+                    "Listing marked sold",
+                    f"{listing.title} is no longer available.",
+                    InboxNotice.KIND_LISTING,
+                    "listing",
+                    listing.id,
+                )
+        listing = listing_queryset().get(pk=listing.pk)
+        return Response(ListingSerializer(listing, context={"request": request}).data)
 
 
 class ListingPhotoFileView(APIView):

@@ -7,7 +7,7 @@ import { useAuth } from "../context/AuthContext";
 import type { CatalogKey } from "../data/catalog";
 import type { SellerPage } from "../data/sellerHub";
 import { isPendingProvider, isProvider, isRejectedProvider, isVerifiedProvider } from "../demo";
-import { openCategory, openMapSearch, openSellerPage } from "../navigation/browse";
+import { openBookings, openCategory, openMapSearch, openSellerPage } from "../navigation/browse";
 import { Avatar } from "./Avatar";
 import { NajikLogo } from "./NajikLogo";
 import { PressScale } from "./PressScale";
@@ -70,6 +70,7 @@ type BuyerItem = {
 
 const buyerPrimary: BuyerItem[] = [
   { icon: "home", title: "Home", sub: "Browse nearby", tab: "Home", color: "#1B7D2C", bg: "#E4F6EA" },
+  { icon: "calendar-outline", title: "Bookings", sub: "Request a visit", tab: "Bookings", color: "#1B7D2C", bg: "#E4F6EA" },
   { icon: "map", title: "Map Search", sub: "Nearby listings on the map", tab: "MapSearch", color: "#1B7D2C", bg: "#E4F6EA" },
   { icon: "home", title: "Property", sub: "Buy, Sell, Rent", tab: "Explore", catalog: "property", color: "#1B7D2C", bg: "#E4F6EA" },
   { icon: "car", title: "Vehicles", sub: "Cars, Bikes and more", tab: "Explore", catalog: "vehicles", color: "#2563EB", bg: "#E8F1FE" },
@@ -435,6 +436,11 @@ function BuyerDrawer({ navigation }: { navigation: DrawerContentComponentProps["
               onPress={() => {
                 if (item.tab === "MapSearch") {
                   openMapSearch(navigation);
+                  navigation.closeDrawer();
+                  return;
+                }
+                if (item.tab === "Bookings") {
+                  openBookings(navigation);
                   navigation.closeDrawer();
                   return;
                 }

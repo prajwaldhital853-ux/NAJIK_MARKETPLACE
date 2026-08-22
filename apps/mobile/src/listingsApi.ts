@@ -158,6 +158,18 @@ export async function updateListing(id: string, payload: ListingWritePayload) {
   return row;
 }
 
+export async function setListingSold(id: string, sold: boolean) {
+  const row = await withAppAuth((token) =>
+    api<ApiListing>(`/api/listings/me/${id}/sold/`, {
+      method: "POST",
+      token,
+      body: JSON.stringify({ sold }),
+    }),
+  );
+  emitListingsChanged();
+  return row;
+}
+
 export async function postListingComment(id: string, text: string) {
   return withAppAuth((token) =>
     api<ApiListing>(`/api/listings/${id}/comments/`, {

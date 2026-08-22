@@ -153,6 +153,17 @@ class ChatMessageCreateView(APIView):
             msg.voice = data["voice_file"]
         msg.save()
         thread.save(update_fields=["updated_at"])
+        preview = (data.get("text") or "").strip() or "New message"
+        if data["kind"] == ChatMessage.KIND_IMAGE:
+            preview = "Sent a photo"
+        elif data["kind"] == ChatMessage.KIND_VOICE:
+            preview = "Sent a voice note"
+        elif data["kind"] == ChatMessage.KIND_LOCATION:
+            preview = "Shared a location"
+        from apps.notifications.models import InboxNotice
+        from apps.notifications.services import notify_user
+
+        notify_user(other, "New message", preview[:160], InboxNotice.KIND_MESSAGE, "chat", thread.id)
         return Response(ChatMessageSerializer(msg, context={"request": request}).data, status=status.HTTP_201_CREATED)
 
 

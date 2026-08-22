@@ -22,6 +22,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { friendlyError } from "../api";
 import { AuthImage } from "../components/AuthImage";
 import { PressScale } from "../components/PressScale";
+import { BookingFormModal } from "../components/BookingFormModal";
 import { ReportComplaintModal } from "../components/ReportComplaintModal";
 import {
   blockChatThread,
@@ -63,6 +64,7 @@ export function ChatThreadScreen() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState("");
   const [placeOpen, setPlaceOpen] = useState(false);
+  const [bookOpen, setBookOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
   const [placeQ, setPlaceQ] = useState("");
   const [hits, setHits] = useState<PlaceHit[]>([]);
@@ -360,6 +362,7 @@ export function ChatThreadScreen() {
           onOpenPendingPhoto={() => pendingImage && setPhotoUri(pendingImage)}
           onVoice={() => void toggleRecord()}
           onPlace={() => setPlaceOpen(true)}
+          onBook={() => setBookOpen(true)}
           onClearAttach={() => {
             setPendingImage(null);
             setPendingVoice(null);
@@ -382,6 +385,18 @@ export function ChatThreadScreen() {
           </Pressable>
         </Pressable>
       </Modal>
+
+      {thread?.listing_id ? (
+        <BookingFormModal
+          visible={bookOpen}
+          onClose={() => setBookOpen(false)}
+          listingId={thread.listing_id}
+          listingTitle={thread.listing_title}
+          listingLocation={thread.listing_location}
+          buyerId={thread.i_am_buyer ? undefined : thread.other.id}
+          onSent={() => void load(false)}
+        />
+      ) : null}
 
       <ReportComplaintModal
         visible={reportOpen}
@@ -456,6 +471,7 @@ function ComposerBar({
   onOpenPendingPhoto,
   onVoice,
   onPlace,
+  onBook,
   onClearAttach,
   onFocusInput,
 }: {
@@ -473,6 +489,7 @@ function ComposerBar({
   onOpenPendingPhoto: () => void;
   onVoice: () => void;
   onPlace: () => void;
+  onBook: () => void;
   onClearAttach: () => void;
   onFocusInput: () => void;
 }) {
@@ -528,6 +545,9 @@ function ComposerBar({
         </PressScale>
         <PressScale onPress={onPlace} style={{ padding: 8 }}>
           <Ionicons name="location-outline" size={22} color={GREEN} />
+        </PressScale>
+        <PressScale onPress={onBook} style={{ padding: 8 }}>
+          <Ionicons name="calendar-outline" size={22} color={GREEN} />
         </PressScale>
         <PressScale onPress={onVoice} style={{ padding: 8 }}>
           <Ionicons name={recording ? "stop-circle" : "mic-outline"} size={22} color={recording ? "#E53935" : GREEN} />
@@ -645,10 +665,35 @@ function Bubble({ msg, onOpenPhoto }: { msg: ChatMessage; onOpenPhoto: (uri: str
             <Text style={{ color: mine ? "#D1FAE5" : "#6B7280", fontSize: 11 }}>Open map</Text>
           </PressScale>
         ) : null}
+        {msg.kind === "booking" ? <BookingBubble text={msg.text} mine={mine} /> : null}
         {msg.text && msg.kind === "text" ? (
           <Text style={{ color: mine ? "#fff" : "#111827", fontSize: 15, lineHeight: 20 }}>{msg.text}</Text>
         ) : null}
       </View>
+    </View>
+  );
+}
+
+function BookingBubble({ text, mine }: { text: string; mine: boolean }) {
+  let data: { status?: string; item?: string; when?: string; where?: string } = {};
+  try {
+    data = JSON.parse(text || "{}");
+  } catch {
+    data = {};
+  }
+  return (
+    <View style={{ minWidth: 180 }}>
+      <Text style={{ color: mine ? "#fff" : GREEN, fontWeight: "800", fontSize: 12 }}>BOOKING</Text>
+      <Text style={{ color: mine ? "#fff" : "#111827", fontWeight: "800", marginTop: 4 }}>{data.item || "Visit"}</Text>
+      {data.when ? (
+        <Text style={{ color: mine ? "#D1FAE5" : "#6B7280", fontSize: 11, marginTop: 2 }}>
+          {new Date(data.when).toLocaleString()}
+        </Text>
+      ) : null}
+      {data.where ? <Text style={{ color: mine ? "#D1FAE5" : "#6B7280", fontSize: 11 }}>{data.where}</Text> : null}
+      <Text style={{ color: mine ? "#fff" : "#146B32", fontWeight: "800", fontSize: 11, marginTop: 6, textTransform: "capitalize" }}>
+        {data.status || "pending"}
+      </Text>
     </View>
   );
 }

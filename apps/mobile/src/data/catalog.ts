@@ -25,6 +25,9 @@ export type CatalogItem = {
   lat?: number | null;
   lng?: number | null;
   rating?: number;
+  reviewCount?: number;
+  originalPrice?: string;
+  discountPercent?: number;
   verified?: boolean;
   available?: boolean;
   distanceKm?: number;

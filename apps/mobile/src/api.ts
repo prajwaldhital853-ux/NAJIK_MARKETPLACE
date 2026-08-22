@@ -87,8 +87,12 @@ export async function api<T>(
         : typeof nested === "number"
           ? nested
           : undefined;
+    let message = firstError(data);
+    if (response.status === 404 && /bookings|inbox|sold/i.test(path)) {
+      message = "This feature needs a server update. Ask admin to deploy the latest NAJIK API.";
+    }
     const err = new ApiError(
-      firstError(data),
+      message,
       response.status,
       retryAfter,
       typeof (data as { code?: unknown }).code === "string" ? (data as { code: string }).code : undefined,

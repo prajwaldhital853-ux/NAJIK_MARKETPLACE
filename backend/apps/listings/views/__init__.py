@@ -128,12 +128,14 @@ class ListingFeedView(APIView):
         except (TypeError, ValueError):
             geo_q = None
         place_q = listing_place_q(place)
+        no_coords = Q(lat__isnull=True) | Q(lng__isnull=True)
         if place and geo_q is not None:
-            items = items.filter(place_q | geo_q)
+            items = items.filter(place_q | geo_q | (no_coords & place_q))
         elif place:
             items = items.filter(place_q)
         elif geo_q is not None:
-            items = items.filter(geo_q)
+            # Listings without map coordinates still appear nationally until coords are set.
+            items = items.filter(geo_q | no_coords)
         sort = request.query_params.get("sort") or "new"
         if sort == "popular":
             items = items.order_by("-view_count", "-is_promoted", "-created_at")

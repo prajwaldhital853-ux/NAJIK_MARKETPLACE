@@ -1,4 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
+import { useEffect, useState } from "react";
+import { fetchSellerEarningsSummary } from "../earningsApi";
 import type { DrawerContentComponentProps } from "@react-navigation/drawer";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import Svg, { Path } from "react-native-svg";
@@ -54,6 +56,7 @@ const sellerMenu: Item[] = [
   { icon: "settings-outline", title: "Settings", page: "settings" },
   { icon: "headset-outline", title: "Help & Support", page: "help" },
   { icon: "wallet-outline", title: "Payments", page: "payments" },
+  { icon: "gift-outline", title: "Invite & Earn", page: "invite" },
 ];
 
 type BuyerItem = {
@@ -102,6 +105,14 @@ export function DrawerContent({ navigation }: DrawerContentComponentProps) {
   const rejected = isRejectedProvider(user);
   const photo = user?.photo_uri || "";
   const menu = sellerMenu;
+  const [balances, setBalances] = useState<Awaited<ReturnType<typeof fetchSellerEarningsSummary>> | null>(null);
+
+  useEffect(() => {
+    if (!provider) return;
+    void fetchSellerEarningsSummary()
+      .then(setBalances)
+      .catch(() => setBalances(null));
+  }, [provider]);
 
   if (!provider) {
     return <BuyerDrawer navigation={navigation} />;
@@ -184,6 +195,33 @@ export function DrawerContent({ navigation }: DrawerContentComponentProps) {
           <Text style={{ color: "#fff", fontWeight: "700", fontSize: k(9) }}>View Profile</Text>
           <Ionicons name="chevron-forward" size={k(9)} color="#fff" />
         </PressScale>
+
+        {balances ? (
+          <View
+            style={{
+              marginTop: k(10),
+              backgroundColor: "rgba(255,255,255,0.12)",
+              borderRadius: k(10),
+              padding: k(10),
+            }}
+          >
+            <Text style={{ color: "#E8F8EE", fontSize: k(8), fontWeight: "700" }}>Your balances</Text>
+            <View style={{ flexDirection: "row", marginTop: k(6), gap: k(6) }}>
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: "#CFE9DA", fontSize: k(7.5) }}>Loaded</Text>
+                <Text style={{ color: "#fff", fontWeight: "800", fontSize: k(10), marginTop: 2 }}>{balances.loaded_balance_label}</Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: "#CFE9DA", fontSize: k(7.5) }}>Refer & Earn</Text>
+                <Text style={{ color: "#fff", fontWeight: "800", fontSize: k(10), marginTop: 2 }}>{balances.referrer_balance_label}</Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: "#CFE9DA", fontSize: k(7.5) }}>Combined</Text>
+                <Text style={{ color: "#fff", fontWeight: "800", fontSize: k(10), marginTop: 2 }}>{balances.combined_balance_label}</Text>
+              </View>
+            </View>
+          </View>
+        ) : null}
       </View>
 
       <ScrollView contentContainerStyle={{ paddingTop: k(8), paddingBottom: k(16) }} showsVerticalScrollIndicator={false}>

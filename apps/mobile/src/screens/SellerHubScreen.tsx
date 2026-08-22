@@ -26,7 +26,9 @@ import {
 import { ChatInboxList } from "./ChatInboxScreen";
 import { choosePhoto } from "../pickPhoto";
 import { openChatThread, openListing } from "../navigation/browse";
+import { fetchSellerEarningsSummary } from "../earningsApi";
 import { createSellerLoadRequest, fetchSellerPaymentsMe } from "../paymentsApi";
+import { fetchReferEarnMe } from "../referralsApi";
 import { colors, shadow } from "../theme";
 
 const GREEN = "#1B7D2C";
@@ -43,6 +45,7 @@ const PAGES: SellerPage[] = [
   "settings",
   "help",
   "payments",
+  "invite",
 ];
 
 export function SellerHubScreen() {
@@ -111,6 +114,7 @@ function PageBody({ page }: { page: SellerPage }) {
   if (page === "messages") return <MessagesBody />;
   if (page === "settings") return <SettingsBody />;
   if (page === "help") return <HelpBody />;
+  if (page === "invite") return <InviteBody />;
   return <PaymentsBody />;
 }
 
@@ -236,39 +240,111 @@ function ReviewsBody() {
 
 function EarningsBody() {
   const navigation = useNavigation<any>();
-  const [balance, setBalance] = useState("—");
-  const [feeLabel, setFeeLabel] = useState("");
+  const [summary, setSummary] = useState<Awaited<ReturnType<typeof fetchSellerEarningsSummary>> | null>(null);
 
   useEffect(() => {
-    void fetchSellerPaymentsMe()
-      .then((data) => {
-        setBalance(data.balance_label);
-        setFeeLabel(data.config.listing_fee_label);
-      })
-      .catch(() => setBalance("—"));
+    void fetchSellerEarningsSummary()
+      .then(setSummary)
+      .catch(() => setSummary(null));
   }, []);
 
   return (
     <>
       <StatStrip
         items={[
-          { n: balance, l: "Listing balance" },
-          { n: feeLabel || "—", l: "Per live listing" },
-          { n: "Offline", l: "Payout type" },
+          { n: summary?.loaded_balance_label ?? "—", l: "Loaded balance" },
+          { n: summary?.referrer_balance_label ?? "—", l: "Refer & Earn" },
+          { n: summary?.combined_balance_label ?? "—", l: "Combined" },
         ]}
       />
       <View style={{ marginHorizontal: 16, marginTop: 12, backgroundColor: "#fff", borderRadius: 16, padding: 14, ...shadow.card }}>
-        <Text style={{ fontWeight: "800", fontSize: 14 }}>Pay to post listings</Text>
+        <Text style={{ fontWeight: "800", fontSize: 14 }}>Listing fee: {summary?.listing_fee_label ?? "—"} per live post</Text>
         <Text style={{ color: "#6B7280", marginTop: 6, fontSize: 12, lineHeight: 18 }}>
-          Your balance is used when you publish a live listing. Drafts are free. Add funds via bank transfer and wait for admin approval.
+          Loaded balance pays listing fees. Refer & Earn credits when friends join and publish. Offline payout only.
         </Text>
-        <PressScale
-          onPress={() => navigation.navigate("SellerHub", { page: "payments" })}
-          style={{ marginTop: 12, backgroundColor: GREEN, paddingVertical: 10, borderRadius: 10, alignItems: "center" }}
-        >
-          <Text style={{ color: "#fff", fontWeight: "800" }}>Add funds & payments</Text>
-        </PressScale>
+        <View style={{ flexDirection: "row", gap: 8, marginTop: 12 }}>
+          <PressScale
+            onPress={() => navigation.navigate("SellerHub", { page: "payments" })}
+            style={{ flex: 1, backgroundColor: GREEN, paddingVertical: 10, borderRadius: 10, alignItems: "center" }}
+          >
+            <Text style={{ color: "#fff", fontWeight: "800", fontSize: 12 }}>Add funds</Text>
+          </PressScale>
+          <PressScale
+            onPress={() => navigation.navigate("SellerHub", { page: "invite" })}
+            style={{ flex: 1, backgroundColor: "#E7F6EC", paddingVertical: 10, borderRadius: 10, alignItems: "center" }}
+          >
+            <Text style={{ color: GREEN, fontWeight: "800", fontSize: 12 }}>Invite & Earn</Text>
+          </PressScale>
+        </View>
       </View>
+    </>
+  );
+}
+
+function InviteBody() {
+  const [data, setData] = useState<Awaited<ReturnType<typeof fetchReferEarnMe>> | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    void fetchReferEarnMe()
+      .then(setData)
+      .catch(() => setData(null))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const code = data?.invite_code || "—";
+  const description = data?.description || "Share your code. You earn when friends register and publish their first live listing.";
+  const stats = data?.stats;
+  const friends = data?.recent || [];
+
+  return (
+    <>
+      <StatStrip
+        items={[
+          { n: String(stats?.invites_sent ?? 0), l: "Invites sent" },
+          { n: String(stats?.joined ?? 0), l: "Joined" },
+          { n: stats?.earned_total_label ?? "Rs. 0", l: "Refer earnings" },
+        ]}
+      />
+      <View style={{ marginHorizontal: 16, marginTop: 12, backgroundColor: "#fff", borderRadius: 16, padding: 14, ...shadow.card }}>
+        <Text style={{ color: "#6B7280", fontWeight: "700", fontSize: 12 }}>Your invite code</Text>
+        <View style={{ flexDirection: "row", alignItems: "center", marginTop: 6 }}>
+          <Text style={{ flex: 1, fontSize: 22, fontWeight: "800", letterSpacing: 1 }}>{loading ? "…" : code}</Text>
+          <PressScale onPress={() => Alert.alert("Copied", code)} style={{ backgroundColor: GREEN, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10 }}>
+            <Text style={{ color: "#fff", fontWeight: "800", fontSize: 12 }}>Copy</Text>
+          </PressScale>
+        </View>
+        <Text style={{ color: "#6B7280", marginTop: 8, fontSize: 12, lineHeight: 18 }}>{description}</Text>
+      </View>
+      <QuickRow
+        items={[
+          { icon: "copy-outline", label: "Copy", onPress: () => Alert.alert("Copied", code) },
+          {
+            icon: "logo-whatsapp",
+            label: "WhatsApp",
+            onPress: () => void Share.share({ message: `Join NAJIK as a service provider with my code ${code}` }),
+          },
+          { icon: "chatbubble-outline", label: "SMS", onPress: () => Alert.alert("SMS", "Share your invite code with friends.") },
+        ]}
+      />
+      <Text style={{ fontWeight: "800", marginHorizontal: 16, marginTop: 18 }}>Recent invites</Text>
+      {!loading && friends.length === 0 ? (
+        <Text style={{ color: "#6B7280", marginHorizontal: 16, marginTop: 10, fontSize: 13 }}>No invites yet — share your code to start earning.</Text>
+      ) : null}
+      {friends.map((row) => (
+        <View key={row.id} style={{ marginHorizontal: 16, marginTop: 10, backgroundColor: "#fff", borderRadius: 14, padding: 12, flexDirection: "row", alignItems: "center", ...shadow.card }}>
+          <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: "#E7F6EC", alignItems: "center", justifyContent: "center" }}>
+            <Text style={{ fontWeight: "800", color: GREEN }}>{row.name[0] || "?"}</Text>
+          </View>
+          <View style={{ flex: 1, marginLeft: 10 }}>
+            <Text style={{ fontWeight: "800", fontSize: 13 }}>{row.name}</Text>
+            <Text style={{ color: "#6B7280", fontSize: 11, marginTop: 2 }}>{row.status_label}</Text>
+          </View>
+          <Text style={{ color: GREEN, fontWeight: "800", fontSize: 12 }}>
+            {row.status === "earned" ? row.reward_label : "—"}
+          </Text>
+        </View>
+      ))}
     </>
   );
 }

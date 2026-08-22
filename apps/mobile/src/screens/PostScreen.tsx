@@ -28,6 +28,7 @@ import {
 } from "../data/listingVertical";
 import { canPostServices, isProvider } from "../demo";
 import { createListing, fetchMyListings, updateListing } from "../listingsApi";
+import { fetchSellerPaymentsMe } from "../paymentsApi";
 import { colors, shadow } from "../theme";
 
 const GREEN = "#1B7D2C";
@@ -393,6 +394,18 @@ export function PostScreen() {
     setError("");
     setErrorField(null);
     try {
+      if (publish) {
+        const pay = await fetchSellerPaymentsMe().catch(() => null);
+        const fee = pay?.config?.listing_fee_rupees ?? 0;
+        const balance = pay?.balance_paisa ?? 0;
+        if (fee > 0 && balance < fee * 100) {
+          const msg = `Insufficient balance (${pay?.balance_label ?? "Rs. 0"}). Each live listing costs ${pay?.config?.listing_fee_label ?? `Rs. ${fee}`}. Add funds in Payments first, or save as draft.`;
+          setError(msg);
+          showToast(msg);
+          setBusy(false);
+          return;
+        }
+      }
       const row = listingId ? await updateListing(listingId, payload(publish)) : await createListing(payload(publish));
       Alert.alert(
         publish ? "Listing published" : "Draft saved",

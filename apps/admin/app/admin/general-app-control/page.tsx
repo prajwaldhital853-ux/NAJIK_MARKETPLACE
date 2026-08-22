@@ -8,6 +8,7 @@ import { useAdmin } from "@/lib/store";
 import { UrgentSellAdminPanel } from "@/components/admin/urgent-sell-admin-panel";
 import { PromotionRequestsPanel } from "@/components/admin/promotion-requests-panel";
 import { ProviderPlansPanel } from "@/components/admin/provider-plans-panel";
+import { ReferEarnAdminPanel } from "@/components/admin/refer-earn-admin-panel";
 import {
   SellerLoadRequestsPanel,
   SellerPaymentsConfigPanel,
@@ -215,6 +216,7 @@ export default function GeneralAppControlPage() {
       <SellerPaymentsConfigPanel />
       <SellerLoadRequestsPanel />
       <SellerWalletsPanel />
+      <ReferEarnAdminPanel />
     </div>
   );
 }

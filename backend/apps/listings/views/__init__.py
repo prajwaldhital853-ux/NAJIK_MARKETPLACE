@@ -49,14 +49,17 @@ def listing_queryset():
     )
 
 
+def exclude_sold_listings(queryset):
+    """Postgres JSONField bool lookups are unreliable; match explicit sold flags only."""
+    return queryset.exclude(Q(extras__contains={"sold": True}) | Q(extras__contains={"sold": "true"}))
+
+
 class ListingFeedView(APIView):
     authentication_classes = []
     permission_classes = [AllowAny]
 
     def get(self, request):
-        items = listing_queryset().filter(status=Listing.STATUS_APPROVED).exclude(
-            Q(extras__sold=True) | Q(extras__sold="true")
-        )
+        items = exclude_sold_listings(listing_queryset().filter(status=Listing.STATUS_APPROVED))
         q = (request.query_params.get("q") or "").strip()
         if q:
             items = items.filter(listing_search_q(q))
@@ -180,8 +183,8 @@ class PublicSellerProfileView(APIView):
             email = app.email or seller.email or ""
             address = app.address or ""
             service_type = app.service_type or ""
-            listings = listing_queryset().filter(owner=seller, status=Listing.STATUS_APPROVED).exclude(
-                Q(extras__sold=True) | Q(extras__sold="true")
+            listings = exclude_sold_listings(
+                listing_queryset().filter(owner=seller, status=Listing.STATUS_APPROVED)
             ).order_by("-created_at")[:200]
         return Response(
             {

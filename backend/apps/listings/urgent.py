@@ -9,11 +9,11 @@ def is_sold_extras(extras: dict | None) -> bool:
 
 
 def exclude_sold_listings(queryset):
+    # Use JSON contains only — extras__sold=True is unreliable on SQLite/PostgreSQL
+    # and can hide active listings that never set a sold flag.
     return queryset.exclude(
         Q(extras__contains={"sold": True})
         | Q(extras__contains={"sold": "true"})
-        | Q(extras__sold=True)
-        | Q(extras__sold="true")
     )
 
 

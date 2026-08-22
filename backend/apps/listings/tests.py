@@ -5,6 +5,7 @@ from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
 
 from apps.core.test_helpers import disable_api_throttles
+from apps.core.models import SellerPaymentConfig
 from apps.listings.models import Listing
 from apps.staff.models import StaffUser
 
@@ -63,6 +64,7 @@ class ListingModerationTests(TestCase):
                 "service_type": "Real Estate",
                 "nagrita_uri": PIXEL_PNG,
                 "nagrita_back_uri": PIXEL_PNG,
+                "nation_card_uri": PIXEL_PNG,
                 "photo_uri": PIXEL_PNG,
             },
             format="json",
@@ -70,6 +72,9 @@ class ListingModerationTests(TestCase):
         self.assertEqual(apply.status_code, 201, apply.data)
         staff = self.staff_client()
         staff.patch(f"/api/admin/verification/applications/{apply.data['id']}/", {"status": "verified"}, format="json")
+        cfg = SellerPaymentConfig.get_solo()
+        cfg.is_active = False
+        cfg.save(update_fields=["is_active", "updated_at"])
         return res, p, addr
 
     def staff_client(self):
@@ -250,7 +255,35 @@ class ListingModerationTests(TestCase):
         self.assertEqual(saved.data["save_count"], 1)
         self.assertTrue(saved.data["saved_by_me"])
 
-    def test_staff_can_delete_listing(self):
+    def test_feed_includes_listings_without_sold_flag_in_extras(self):
+        """extras__sold=True DB lookup wrongly hid listings; feed must show normal extras."""
+        _, p, _ = self.verified_provider()
+        for title in ("House A", "House B", "House C"):
+            posted = self.client.post(
+                "/api/listings/me/",
+                {
+                    **self.payload(p),
+                    "title": title,
+                    "extras": {"dealType": "Used", "features": ["Verified"]},
+                },
+                format="json",
+            )
+            self.assertEqual(posted.status_code, 201, posted.data)
+        feed = APIClient().get("/api/listings/feed/")
+        self.assertEqual(feed.status_code, 200)
+        titles = {row["title"] for row in feed.data}
+        self.assertTrue({"House A", "House B", "House C"}.issubset(titles))
+
+    def test_feed_hides_marked_sold_listings(self):
+        _, p, _ = self.verified_provider()
+        posted = self.client.post("/api/listings/me/", self.payload(p), format="json")
+        self.assertEqual(posted.status_code, 201, posted.data)
+        listing_id = posted.data["id"]
+        sold = self.client.post(f"/api/listings/me/{listing_id}/sold/", {"sold": True}, format="json")
+        self.assertEqual(sold.status_code, 200, sold.data)
+        feed = APIClient().get("/api/listings/feed/")
+        self.assertEqual(feed.data, [])
+
         _, p, _ = self.verified_provider()
         posted = self.client.post("/api/listings/me/", self.payload(p), format="json")
         self.assertEqual(posted.status_code, 201, posted.data)

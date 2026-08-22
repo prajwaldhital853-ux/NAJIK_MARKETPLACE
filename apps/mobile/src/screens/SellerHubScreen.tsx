@@ -2,7 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute, useFocusEffect } from "@react-navigation/native";
 import * as Clipboard from "expo-clipboard";
 import { useCallback, useEffect, useState } from "react";
-import { Alert, AppState, Image, Linking, Pressable, ScrollView, Share, Switch, Text, TextInput, View } from "react-native";
+import { Alert, AppState, Image, Linking, Modal, Pressable, ScrollView, Share, StyleSheet, Switch, Text, TextInput, View } from "react-native";
 import QRCode from "react-native-qrcode-svg";
 import { AppHeader } from "../components/AppHeader";
 import { KeyboardScreen, useKeyboardScroll } from "../components/KeyboardScreen";
@@ -290,6 +290,7 @@ function InviteBody() {
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
   const [showQr, setShowQr] = useState(false);
+  const [howOpen, setHowOpen] = useState(false);
 
   const reload = useCallback(() => {
     void fetchReferEarnMe()
@@ -326,24 +327,55 @@ function InviteBody() {
 
   return (
     <>
-      <View style={{ marginHorizontal: 16, marginTop: 12, backgroundColor: "#E8F1FE", borderRadius: 16, padding: 14, ...shadow.card }}>
-        <Text style={{ fontWeight: "800", fontSize: 15, color: "#1D4ED8" }}>How Refer & Earn works</Text>
-        <Text style={{ color: "#4B5563", fontSize: 12, lineHeight: 18, marginTop: 8 }}>
-          You earn <Text style={{ fontWeight: "800" }}>{reward}</Text> in Payments when a friend completes all steps below. Each invite code works for{" "}
-          <Text style={{ fontWeight: "800" }}>one friend only</Text> — a new code appears after someone joins.
-        </Text>
-        {steps.map((step) => (
-          <View key={step.step} style={{ flexDirection: "row", marginTop: 10, gap: 10 }}>
-            <View style={{ width: 22, height: 22, borderRadius: 11, backgroundColor: "#2563EB", alignItems: "center", justifyContent: "center" }}>
-              <Text style={{ color: "#fff", fontWeight: "800", fontSize: 11 }}>{step.step}</Text>
+      <PressScale
+        onPress={() => setHowOpen(true)}
+        style={{
+          marginHorizontal: 16,
+          marginTop: 12,
+          alignSelf: "flex-start",
+          flexDirection: "row",
+          alignItems: "center",
+          gap: 6,
+          paddingHorizontal: 12,
+          paddingVertical: 8,
+          borderRadius: 999,
+          backgroundColor: "#E8F1FE",
+        }}
+      >
+        <Ionicons name="information-circle-outline" size={16} color="#2563EB" />
+        <Text style={{ color: "#2563EB", fontWeight: "800", fontSize: 12 }}>See how this works</Text>
+      </PressScale>
+
+      <Modal visible={howOpen} transparent animationType="fade" onRequestClose={() => setHowOpen(false)}>
+        <View style={{ flex: 1, justifyContent: "center", padding: 20 }}>
+          <Pressable style={{ ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.45)" }} onPress={() => setHowOpen(false)} />
+          <View style={{ backgroundColor: "#fff", borderRadius: 18, padding: 16, maxHeight: "78%", ...shadow.card }}>
+            <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 10 }}>
+              <Text style={{ flex: 1, fontWeight: "800", fontSize: 17, color: "#111827" }}>How Refer & Earn works</Text>
+              <Pressable onPress={() => setHowOpen(false)} hitSlop={12}>
+                <Ionicons name="close" size={22} color="#6B7280" />
+              </Pressable>
             </View>
-            <View style={{ flex: 1 }}>
-              <Text style={{ fontWeight: "800", fontSize: 12, color: "#111827" }}>{step.title}</Text>
-              <Text style={{ color: "#6B7280", fontSize: 11, lineHeight: 16, marginTop: 2 }}>{step.body}</Text>
-            </View>
+            <ScrollView showsVerticalScrollIndicator={false}>
+              <Text style={{ color: "#4B5563", fontSize: 13, lineHeight: 20, marginBottom: 12 }}>
+                You earn <Text style={{ fontWeight: "800" }}>{reward}</Text> in Payments when a friend completes all steps. Each code works for{" "}
+                <Text style={{ fontWeight: "800" }}>one friend only</Text> — a new code is generated after someone joins.
+              </Text>
+              {steps.map((step) => (
+                <View key={step.step} style={{ flexDirection: "row", marginBottom: 12, gap: 10 }}>
+                  <View style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: "#2563EB", alignItems: "center", justifyContent: "center" }}>
+                    <Text style={{ color: "#fff", fontWeight: "800", fontSize: 11 }}>{step.step}</Text>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontWeight: "800", fontSize: 13, color: "#111827" }}>{step.title}</Text>
+                    <Text style={{ color: "#6B7280", fontSize: 12, lineHeight: 18, marginTop: 3 }}>{step.body}</Text>
+                  </View>
+                </View>
+              ))}
+            </ScrollView>
           </View>
-        ))}
-      </View>
+        </View>
+      </Modal>
 
       <StatStrip
         items={[
@@ -483,6 +515,10 @@ function PaymentsBody() {
   const referEarnTxs = transactions.filter((row) => row.kind === "referral_reward");
   const otherTxs = transactions.filter((row) => row.kind !== "referral_reward");
 
+  const loadedLabel = data?.loaded_balance_label ?? data?.balance_label ?? "Rs. 0";
+  const referLabel = data?.refer_earn_total_label ?? "Rs. 0";
+  const totalLabel = data?.balance_label ?? "Rs. 0";
+
   function txTitle(row: { kind: string; kind_label?: string }) {
     return row.kind_label || row.kind.replace(/_/g, " ");
   }
@@ -491,16 +527,21 @@ function PaymentsBody() {
     <>
       <View style={{ marginHorizontal: 16, marginTop: 12, borderRadius: 18, overflow: "hidden", backgroundColor: GREEN, ...shadow.card }}>
         <View style={{ padding: 16 }}>
-          <Text style={{ color: "rgba(255,255,255,0.85)", fontSize: 12, fontWeight: "700" }}>Listing balance</Text>
-          <Text style={{ color: "#fff", fontSize: 28, fontWeight: "900", marginTop: 4 }}>{loading ? "…" : data?.balance_label ?? "Rs. 0"}</Text>
-          <Text style={{ color: "rgba(255,255,255,0.9)", fontSize: 12, marginTop: 6 }}>
+          <Text style={{ color: "rgba(255,255,255,0.85)", fontSize: 12, fontWeight: "700" }}>Total balance</Text>
+          <Text style={{ color: "#fff", fontSize: 28, fontWeight: "900", marginTop: 4 }}>{loading ? "…" : totalLabel}</Text>
+          <View style={{ flexDirection: "row", marginTop: 12, gap: 8 }}>
+            <View style={{ flex: 1, backgroundColor: "rgba(255,255,255,0.12)", borderRadius: 10, padding: 10 }}>
+              <Text style={{ color: "rgba(255,255,255,0.8)", fontSize: 10, fontWeight: "700" }}>Loaded</Text>
+              <Text style={{ color: "#fff", fontWeight: "800", fontSize: 14, marginTop: 4 }}>{loading ? "…" : loadedLabel}</Text>
+            </View>
+            <View style={{ flex: 1, backgroundColor: "rgba(255,255,255,0.12)", borderRadius: 10, padding: 10 }}>
+              <Text style={{ color: "rgba(255,255,255,0.8)", fontSize: 10, fontWeight: "700" }}>Invite & Earn</Text>
+              <Text style={{ color: "#fff", fontWeight: "800", fontSize: 14, marginTop: 4 }}>{loading ? "…" : referLabel}</Text>
+            </View>
+          </View>
+          <Text style={{ color: "rgba(255,255,255,0.9)", fontSize: 12, marginTop: 10 }}>
             {cfg?.listing_fee_label ?? "Per listing"} · ≈ {balanceListings} live post{balanceListings === 1 ? "" : "s"} left
           </Text>
-          {!loading && (data?.refer_earn_total_paisa ?? 0) > 0 ? (
-            <Text style={{ color: "rgba(255,255,255,0.9)", fontSize: 11, marginTop: 6 }}>
-              Includes {data?.refer_earn_total_label ?? "Rs. 0"} from Invite & Earn
-            </Text>
-          ) : null}
         </View>
       </View>
 

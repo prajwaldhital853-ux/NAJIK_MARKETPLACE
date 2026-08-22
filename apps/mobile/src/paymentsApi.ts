@@ -45,6 +45,8 @@ export type SellerLoadRequest = {
 export type SellerPaymentsMe = {
   balance_paisa: number;
   balance_label: string;
+  loaded_balance_paisa?: number;
+  loaded_balance_label?: string;
   refer_earn_total_paisa?: number;
   refer_earn_total_label?: string;
   config: SellerPaymentConfig;

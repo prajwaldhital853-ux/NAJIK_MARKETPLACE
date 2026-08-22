@@ -9,6 +9,7 @@ from apps.accounts.models import AppUser
 from apps.accounts.models.referral import (
     ReferEarnConfig,
     Referral,
+    ensure_fresh_invite_code,
     generate_referral_code,
     referral_status_detail,
 )
@@ -84,15 +85,16 @@ class ReferEarnMeView(APIView):
         user = request.user
         if user.account_type != AppUser.ACCOUNT_PROVIDER:
             return Response({"detail": "Refer & Earn is for service providers."}, status=status.HTTP_403_FORBIDDEN)
-        from apps.accounts.models.referral import _referrer_is_eligible, sync_joined_referral_earnings
+        from apps.accounts.models.referral import _referrer_is_eligible, ensure_fresh_invite_code, sync_joined_referral_earnings
 
         if not _referrer_is_eligible(user):
             return Response(
                 {"detail": "Complete verification to unlock your invite code and earn rewards."},
                 status=status.HTTP_403_FORBIDDEN,
             )
+        user = AppUser.objects.get(pk=user.pk)
         sync_joined_referral_earnings(user)
-        code = generate_referral_code(user)
+        code = ensure_fresh_invite_code(user)
         cfg = ReferEarnConfig.get_solo()
         rows = list(Referral.objects.filter(referrer=user).select_related("referred").order_by("-joined_at")[:50])
         earned_total = (

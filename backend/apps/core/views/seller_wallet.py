@@ -133,6 +133,9 @@ class SellerPaymentsMeView(APIView):
         user = request.user
         if user.account_type != AppUser.ACCOUNT_PROVIDER:
             return Response({"detail": "Payments are for service providers."}, status=status.HTTP_403_FORBIDDEN)
+        from apps.accounts.models.referral import sync_joined_referral_earnings
+
+        sync_joined_referral_earnings(user)
         cfg = SellerPaymentConfig.get_solo()
         wallet = get_or_create_wallet(user)
         pending = SellerLoadRequest.objects.filter(
@@ -152,10 +155,13 @@ class SellerPaymentsMeView(APIView):
             ).aggregate(total=Sum("amount_paisa"))["total"]
             or 0
         )
+        loaded_paisa = max(0, wallet.balance_paisa - refer_earn_paisa)
         return Response(
             {
                 "balance_paisa": wallet.balance_paisa,
                 "balance_label": paisa_to_label(wallet.balance_paisa),
+                "loaded_balance_paisa": loaded_paisa,
+                "loaded_balance_label": paisa_to_label(loaded_paisa),
                 "refer_earn_total_paisa": refer_earn_paisa,
                 "refer_earn_total_label": paisa_to_label(refer_earn_paisa),
                 "config": payment_config_payload(request, cfg),

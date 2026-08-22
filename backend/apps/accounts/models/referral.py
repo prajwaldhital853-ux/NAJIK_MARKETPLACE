@@ -176,9 +176,24 @@ def generate_referral_code(user, force_new: bool = False) -> str:
     return code
 
 
+@transaction.atomic
 def rotate_referral_code(user) -> str:
     """Invalidate the current code and issue a new one (after a successful invite)."""
-    return generate_referral_code(user, force_new=True)
+    from apps.accounts.models import AppUser
+
+    locked = AppUser.objects.select_for_update().get(pk=user.pk)
+    return generate_referral_code(locked, force_new=True)
+
+
+@transaction.atomic
+def ensure_fresh_invite_code(user) -> str:
+    """Return active code; rotate automatically if the current one was already used."""
+    from apps.accounts.models import AppUser
+
+    locked = AppUser.objects.select_for_update().get(pk=user.pk)
+    if locked.referral_code and Referral.objects.filter(invite_code__iexact=locked.referral_code).exists():
+        return generate_referral_code(locked, force_new=True)
+    return generate_referral_code(locked)
 
 
 @transaction.atomic
@@ -196,6 +211,9 @@ def apply_referral_code(referred_user, raw_code: str):
     referrer = lookup_referrer(code)
     if not referrer or referrer.pk == referred_user.pk:
         return None
+    from apps.accounts.models import AppUser
+
+    referrer = AppUser.objects.select_for_update().get(pk=referrer.pk)
     phone = (referred_user.phone or "").strip()
     email = (referred_user.email or "").lower().strip()
     cfg = ReferEarnConfig.get_solo()

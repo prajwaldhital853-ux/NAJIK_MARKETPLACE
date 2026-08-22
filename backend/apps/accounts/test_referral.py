@@ -7,6 +7,7 @@ from apps.accounts.models.referral import (
     Referral,
     ReferralConsumedIdentity,
     apply_referral_code,
+    ensure_fresh_invite_code,
     generate_referral_code,
     lookup_referrer,
     qualify_referral_for_listing,
@@ -129,6 +130,18 @@ class ReferralLogicTests(TestCase):
         self.assertIsNone(lookup_referrer(old_code))
         with self.assertRaises(ValidationError):
             validate_invite_code_for_registration(old_code, _phone(), _email("second"))
+
+    def test_ensure_fresh_rotates_consumed_code(self):
+        referrer = _verified_provider()
+        old_code = referrer.referral_code
+        referred = _referred_provider()
+        apply_referral_code(referred, old_code)
+        referrer.referral_code = old_code
+        referrer.save(update_fields=["referral_code"])
+        new_code = ensure_fresh_invite_code(referrer)
+        self.assertNotEqual(new_code, old_code)
+        referrer.refresh_from_db()
+        self.assertEqual(referrer.referral_code, new_code)
 
     def test_self_referral_blocked(self):
         referrer = _verified_provider()

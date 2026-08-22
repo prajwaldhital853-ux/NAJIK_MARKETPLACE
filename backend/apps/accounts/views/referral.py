@@ -94,6 +94,9 @@ class ReferEarnMeView(APIView):
             )
         user = AppUser.objects.get(pk=user.pk)
         sync_joined_referral_earnings(user)
+        from apps.core.seller_wallet_service import sync_referral_wallet_credits
+
+        sync_referral_wallet_credits(user)
         code = ensure_fresh_invite_code(user)
         cfg = ReferEarnConfig.get_solo()
         rows = list(Referral.objects.filter(referrer=user).select_related("referred").order_by("-joined_at")[:50])

@@ -215,12 +215,13 @@ def credit_referral_reward(referral):
     referrer = referral.referrer
     referrer_name = referrer.full_name or referrer.phone or "Your friend"
     amount_label = paisa_to_label(amount_paisa)
-    note = f"Invite & Earn · {referred_name}"
+    ref_tag = f"ref:{referral.pk}"
+    note = f"Invite & Earn · {ref_tag} · {referred_name}"
     wallet = SellerWallet.objects.select_for_update().get_or_create(provider=referral.referrer)[0]
     if SellerWalletTransaction.objects.filter(
         wallet=wallet,
         kind=SellerWalletTransaction.KIND_REFERRAL_REWARD,
-        note=note,
+        note__contains=ref_tag,
     ).exists():
         return None
     wallet.balance_paisa += amount_paisa
@@ -254,6 +255,17 @@ def credit_referral_reward(referral):
         sender_name=referrer_name[:120],
     )
     return tx
+
+
+def sync_referral_wallet_credits(referrer=None):
+    """Credit wallet for earned referrals that were not paid yet (backfill / recovery)."""
+    from apps.accounts.models.referral import Referral
+
+    qs = Referral.objects.filter(status=Referral.STATUS_EARNED).select_related("referrer", "referred")
+    if referrer is not None:
+        qs = qs.filter(referrer=referrer)
+    for ref in qs:
+        credit_referral_reward(ref)
 
 
 @transaction.atomic

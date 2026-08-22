@@ -131,6 +131,22 @@ class ReferralLogicTests(TestCase):
         with self.assertRaises(ValidationError):
             validate_invite_code_for_registration(old_code, _phone(), _email("second"))
 
+    def test_sync_credits_wallet_when_earned_without_payment(self):
+        from apps.core.models.seller_wallet import SellerWallet
+        from apps.core.seller_wallet_service import sync_referral_wallet_credits
+        from django.utils import timezone
+
+        referrer = _verified_provider()
+        referred = _referred_provider()
+        apply_referral_code(referred, referrer.referral_code)
+        ref = Referral.objects.get(referred=referred)
+        ref.status = Referral.STATUS_EARNED
+        ref.earned_at = timezone.now()
+        ref.save(update_fields=["status", "earned_at"])
+        sync_referral_wallet_credits(referrer)
+        wallet = SellerWallet.objects.get(provider=referrer)
+        self.assertEqual(wallet.balance_paisa, 20000)
+
     def test_ensure_fresh_rotates_consumed_code(self):
         referrer = _verified_provider()
         old_code = referrer.referral_code

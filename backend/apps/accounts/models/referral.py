@@ -296,7 +296,15 @@ def _first_qualifying_listing_for_referred(referred):
 
 def referral_status_detail(row: Referral) -> str:
     if row.status == Referral.STATUS_EARNED:
-        return f"Rs. {row.reward_amount} was added to your Payments balance."
+        from apps.core.models.seller_wallet import SellerWalletTransaction
+
+        ref_tag = f"ref:{row.pk}"
+        if SellerWalletTransaction.objects.filter(
+            kind=SellerWalletTransaction.KIND_REFERRAL_REWARD,
+            note__contains=ref_tag,
+        ).exists():
+            return f"Rs. {row.reward_amount} was added to your Payments balance."
+        return f"Rs. {row.reward_amount} earned — open Payments to refresh your balance."
     cfg = ReferEarnConfig.get_solo()
     referred = row.referred
     try:

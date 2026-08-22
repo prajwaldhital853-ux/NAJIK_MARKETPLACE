@@ -66,7 +66,11 @@ def transaction_payload(tx: SellerWalletTransaction) -> dict:
         listing_title = tx.listing.title if tx.listing else ""
     elif tx.kind == SellerWalletTransaction.KIND_REFERRAL_REWARD and tx.note:
         if tx.note.startswith("Invite & Earn · "):
-            listing_title = tx.note.replace("Invite & Earn · ", "", 1).strip()
+            rest = tx.note.replace("Invite & Earn · ", "", 1).strip()
+            if " · " in rest:
+                listing_title = rest.split(" · ", 1)[1].strip()
+            else:
+                listing_title = rest
         else:
             listing_title = ""
     sign = "+" if tx.amount_paisa >= 0 else "-"
@@ -134,8 +138,10 @@ class SellerPaymentsMeView(APIView):
         if user.account_type != AppUser.ACCOUNT_PROVIDER:
             return Response({"detail": "Payments are for service providers."}, status=status.HTTP_403_FORBIDDEN)
         from apps.accounts.models.referral import sync_joined_referral_earnings
+        from apps.core.seller_wallet_service import sync_referral_wallet_credits
 
         sync_joined_referral_earnings(user)
+        sync_referral_wallet_credits(user)
         cfg = SellerPaymentConfig.get_solo()
         wallet = get_or_create_wallet(user)
         pending = SellerLoadRequest.objects.filter(

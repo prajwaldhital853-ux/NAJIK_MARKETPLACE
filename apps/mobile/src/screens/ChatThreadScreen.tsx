@@ -270,7 +270,13 @@ export function ChatThreadScreen() {
           </Pressable>
           <View style={{ flex: 1 }}>
             <Pressable
-              onPress={() => thread?.other.id && openSellerProfile(navigation, thread.other.id)}
+              onPress={() =>
+                thread?.other.id &&
+                openSellerProfile(navigation, thread.other.id, {
+                  full_name: thread.other.full_name,
+                  account_type: thread.other.account_type,
+                })
+              }
               style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
             >
               <Text style={{ fontWeight: "800", fontSize: 16, flexShrink: 1 }} numberOfLines={1}>

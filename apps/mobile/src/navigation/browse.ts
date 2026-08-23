@@ -63,8 +63,12 @@ export function openChatThread(navigation: { navigate: (...args: any[]) => void 
   navigateNamed(navigation, "ChatThread", { id });
 }
 
-export function openSellerProfile(navigation: { navigate: (...args: any[]) => void }, userId: string) {
-  navigateNamed(navigation, "SellerProfile", { userId });
+export function openSellerProfile(
+  navigation: { navigate: (...args: any[]) => void },
+  userId: string,
+  preview?: { full_name?: string; account_type?: "user" | "provider" },
+) {
+  navigateNamed(navigation, "SellerProfile", { userId, ...preview });
 }
 
 export function openProviderIdCard(navigation: { navigate: (...args: any[]) => void }) {

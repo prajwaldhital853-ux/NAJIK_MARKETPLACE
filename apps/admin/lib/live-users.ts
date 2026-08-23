@@ -48,5 +48,6 @@ export function mapDirectoryActivity(row: AppDirectoryUser): Activity {
     location: row.address || "Nepal",
     time: relativeTime(row.date_joined),
     status: !row.is_active ? "Blocked" : kyc === "none" ? "Active" : kyc.replace(/^\w/, (c) => c.toUpperCase()),
+    at: Date.parse(row.date_joined) || 0,
   };
 }

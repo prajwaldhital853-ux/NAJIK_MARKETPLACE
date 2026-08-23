@@ -283,6 +283,8 @@ export type Activity = {
   location: string;
   time: string;
   status: string;
+  /** Epoch ms for sorting and date filters */
+  at?: number;
 };
 
 export const ACTIVITY: Activity[] = [];

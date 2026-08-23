@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -13,56 +13,146 @@ import {
   Store,
   Users,
   Wrench,
+  X,
 } from "lucide-react";
-import { REVENUE_BARS, type Activity, type User } from "@/lib/demo-data";
+import { type Activity, type User } from "@/lib/demo-data";
 import { compact, npr } from "@/lib/format";
 import { useAdmin } from "@/lib/store";
 import { useSession } from "@/lib/session";
-import { CategoryDonut, LineGrowth, RevenueBars } from "@/components/admin/charts";
+import { getStaffPaymentsSummary } from "@/lib/staff-api";
+import { CategoryDonut, LineGrowth, RevenueOverview } from "@/components/admin/charts";
 import { LiveSellerQueue } from "@/components/admin/live-seller-queue";
 import { Avatar, KpiCard, MiniStat, StatusBadge } from "@/components/admin/ui";
-import { DataTable, TypeChip, type Column } from "@/components/admin/table";
+import { DataTable, TypeChip, type Column, type RowMenuAction } from "@/components/admin/table";
 import { UserDetailDrawer } from "@/components/admin/user-detail-drawer";
 import { staffListingDetailHref } from "@/lib/staff-listing-nav";
 
 const RANGES = [
-  "Jul 17, 2026 – Aug 17, 2026",
-  "Last 7 days",
-  "Last 30 days",
-  "This quarter",
-  "Year to date",
-];
+  { label: "Last 7 days", days: 7 },
+  { label: "Last 30 days", days: 30 },
+  { label: "This quarter", days: 90 },
+  { label: "Year to date", days: -1 },
+] as const;
 
 const TABLE_TABS = ["All", "Users", "Properties", "Jobs", "Electronics", "Reports", "Services"];
+const STATUS_FILTERS = ["All statuses", "Pending", "Active", "Approved", "Blocked", "Verified"];
+
+function activityInRange(row: Activity, rangeDays: number): boolean {
+  const at = row.at || 0;
+  if (!at) return true;
+  if (rangeDays === -1) {
+    const start = new Date(new Date().getFullYear(), 0, 1).getTime();
+    return at >= start;
+  }
+  const since = Date.now() - rangeDays * 24 * 60 * 60 * 1000;
+  return at >= since;
+}
 
 export default function DashboardPage() {
   const router = useRouter();
   const { staff } = useSession();
-  const { kpis: k, growth, categories, activity, liveListings, users } = useAdmin();
-  const [range, setRange] = useState(RANGES[0]);
+  const { kpis: k, growth, categories, activity, liveListings, users, paymentsSummary } = useAdmin();
+  const [rangeDays, setRangeDays] = useState(30);
+  const [rangeLabel, setRangeLabel] = useState("Last 30 days");
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [statusFilter, setStatusFilter] = useState("All statuses");
   const [openUser, setOpenUser] = useState<User | null>(null);
   const chartKeys = Object.keys(growth) as (keyof typeof growth)[];
   const [chartTab, setChartTab] = useState<(keyof typeof growth)>("Users");
   const [tableTab, setTableTab] = useState("All");
+  const [revenuePeriod, setRevenuePeriod] = useState("month");
+  const [revenueSeries, setRevenueSeries] = useState<{ label: string; v: number }[]>([]);
+  const [revenueLoading, setRevenueLoading] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    setRevenueLoading(true);
+    void getStaffPaymentsSummary(revenuePeriod)
+      .then((data) => {
+        if (!alive) return;
+        setRevenueSeries(data.admin_credit_series.map((row) => ({ label: row.label, v: row.v })));
+      })
+      .catch(() => {
+        if (!alive) return;
+        setRevenueSeries([]);
+      })
+      .finally(() => {
+        if (alive) setRevenueLoading(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [revenuePeriod]);
+
+  const filteredActivity = useMemo(() => {
+    return activity.filter((row) => activityInRange(row, rangeDays));
+  }, [activity, rangeDays]);
 
   const rows = useMemo(() => {
-    if (tableTab === "All") return activity;
-    const map: Record<string, string> = {
-      Users: "New User",
-      Properties: "New Property",
-      Jobs: "New Job",
-      Electronics: "Electronics",
-      Reports: "Report",
-      Services: "Service",
-    };
-    const type = map[tableTab];
-    return activity.filter(
-      (a) =>
-        a.type === type ||
-        (tableTab === "Users" && (a.type === "New User" || a.type === "KYC")) ||
-        (tableTab === "Properties" && (a.type === "New Property" || a.type === "Edit request")),
-    );
-  }, [tableTab, activity]);
+    let list = filteredActivity;
+    if (tableTab !== "All") {
+      const map: Record<string, string> = {
+        Users: "New User",
+        Properties: "New Property",
+        Jobs: "New Job",
+        Electronics: "Electronics",
+        Reports: "Report",
+        Services: "Service",
+      };
+      const type = map[tableTab];
+      list = list.filter(
+        (a) =>
+          a.type === type ||
+          (tableTab === "Users" && (a.type === "New User" || a.type === "KYC")) ||
+          (tableTab === "Properties" && (a.type === "New Property" || a.type === "Edit request")),
+      );
+    }
+    if (statusFilter !== "All statuses") {
+      const needle = statusFilter.toLowerCase();
+      list = list.filter((a) => a.status.toLowerCase().includes(needle));
+    }
+    return list;
+  }, [tableTab, filteredActivity, statusFilter]);
+
+  function openActivityRow(row: Activity) {
+    if (row.id.startsWith("live-")) {
+      const userId = row.id.replace("live-", "");
+      const user = users.find((u) => u.id === userId);
+      if (user) setOpenUser(user);
+      return;
+    }
+    if (row.id.startsWith("listing-")) {
+      const listingId = row.id.replace(/^listing-/, "").replace(/-edit$/, "");
+      const listing = liveListings.find((item) => item.id === listingId);
+      if (listing) router.push(staffListingDetailHref(listing));
+    }
+  }
+
+  const rowActions: RowMenuAction<Activity>[] = [
+    { label: "View details", onClick: (row) => openActivityRow(row) },
+    {
+      label: "Open user profile",
+      onClick: (row) => {
+        if (!row.id.startsWith("live-")) {
+          const listingId = row.id.replace(/^listing-/, "").replace(/-edit$/, "");
+          const listing = liveListings.find((item) => item.id === listingId);
+          if (listing?.owner_id) router.push(`/admin/users?id=${listing.owner_id}`);
+          return;
+        }
+        const userId = row.id.replace("live-", "");
+        router.push(`/admin/users?id=${userId}`);
+      },
+    },
+    {
+      label: "Open listing",
+      onClick: (row) => {
+        if (!row.id.startsWith("listing-")) return;
+        const listingId = row.id.replace(/^listing-/, "").replace(/-edit$/, "");
+        const listing = liveListings.find((item) => item.id === listingId);
+        if (listing) router.push(staffListingDetailHref(listing));
+      },
+    },
+  ];
 
   const columns: Column<Activity>[] = [
     {
@@ -83,9 +173,16 @@ export default function DashboardPage() {
     { key: "by", label: "By / Owner" },
     { key: "category", label: "Category" },
     { key: "location", label: "Location" },
-    { key: "time", label: "Time" },
+    {
+      key: "time",
+      label: "Time",
+      sortValue: (r) => r.at || 0,
+    },
     { key: "status", label: "Status", render: (r) => <StatusBadge status={r.status} /> },
   ];
+
+  const revenueTotalLabel =
+    paymentsSummary?.admin_credit_total_label || npr(k.revenue);
 
   return (
     <div>
@@ -99,23 +196,65 @@ export default function DashboardPage() {
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
           <label className="flex items-center gap-1.5 rounded border border-line bg-card px-2 py-1.5 text-[12px] text-ink">
-            <CalendarDays size={13} className="text-muted" />
+            <CalendarDays size={13} className="shrink-0 text-muted" />
             <select
-              value={range}
-              onChange={(e) => setRange(e.target.value)}
-              className="bg-transparent text-[12px] outline-none"
+              value={rangeLabel}
+              onChange={(e) => {
+                const match = RANGES.find((r) => r.label === e.target.value);
+                if (match) {
+                  setRangeLabel(match.label);
+                  setRangeDays(match.days);
+                }
+              }}
+              className="min-w-0 cursor-pointer bg-card text-[12px] text-ink outline-none [&>option]:bg-card [&>option]:text-ink"
             >
               {RANGES.map((r) => (
-                <option key={r}>{r}</option>
+                <option key={r.label} value={r.label}>{r.label}</option>
               ))}
             </select>
           </label>
-          <button type="button" className="flex items-center gap-1.5 rounded border border-line bg-card px-2 py-1.5 text-[12px] text-ink">
+          <button
+            type="button"
+            onClick={() => setFiltersOpen((v) => !v)}
+            className={`flex items-center gap-1.5 rounded border px-2 py-1.5 text-[12px] ${
+              filtersOpen || statusFilter !== "All statuses"
+                ? "border-brand bg-brand/10 text-brand"
+                : "border-line bg-card text-ink"
+            }`}
+          >
             <Filter size={13} />
             Filters
           </button>
         </div>
       </div>
+
+      {filtersOpen ? (
+        <div className="mb-3 flex flex-wrap items-end gap-3 rounded border border-line bg-card p-3">
+          <label className="block text-[11px] text-muted">
+            Status
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="mt-1 block w-full min-w-[160px] rounded border border-line bg-elevated px-2 py-1.5 text-[12px] text-ink outline-none [&>option]:bg-card [&>option]:text-ink"
+            >
+              {STATUS_FILTERS.map((s) => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </select>
+          </label>
+          <button
+            type="button"
+            onClick={() => {
+              setStatusFilter("All statuses");
+              setFiltersOpen(false);
+            }}
+            className="flex items-center gap-1 rounded border border-line px-2 py-1.5 text-[12px] text-muted hover:bg-elevated"
+          >
+            <X size={13} />
+            Clear
+          </button>
+        </div>
+      ) : null}
 
       <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
         <KpiCard label="Total Users" value={compact(k.totalUsers)} tone="brand" icon={<Users size={13} />} />
@@ -153,7 +292,7 @@ export default function DashboardPage() {
           <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
             <div>
               <h2 className="text-[13px] font-semibold text-ink">Platform Overview</h2>
-              <p className="text-[10px] text-muted">New records · {range}</p>
+              <p className="text-[10px] text-muted">New records · {rangeLabel}</p>
             </div>
             <div className="flex flex-wrap gap-0.5">
               {chartKeys.map((t) => (
@@ -172,17 +311,14 @@ export default function DashboardPage() {
         </section>
 
         <section className="min-w-0 rounded border border-line bg-card p-3 xl:col-span-4">
-          <div className="mb-1 flex items-start justify-between gap-2">
-            <div>
-              <h2 className="text-[13px] font-semibold text-ink">Revenue Overview</h2>
-              <p className="text-[10px] text-muted">Daily GMV in NPR</p>
-            </div>
-            <div className="text-right">
-              <p className="text-[12px] font-semibold text-ink">{npr(k.revenue)}</p>
-              {k.revenueDelta ? <p className="text-[10px] text-green">+{k.revenueDelta}%</p> : null}
-            </div>
-          </div>
-          <RevenueBars data={REVENUE_BARS} />
+          <h2 className="mb-1 text-[13px] font-semibold text-ink">Revenue Overview</h2>
+          <RevenueOverview
+            totalLabel={revenueTotalLabel}
+            series={revenueSeries}
+            period={revenuePeriod}
+            onPeriod={setRevenuePeriod}
+            loading={revenueLoading}
+          />
         </section>
 
         <section className="min-w-0 rounded border border-line bg-card p-3 xl:col-span-3">
@@ -204,19 +340,8 @@ export default function DashboardPage() {
           tabs={TABLE_TABS}
           tab={tableTab}
           onTab={setTableTab}
-          onRow={(row) => {
-            if (row.id.startsWith("live-")) {
-              const userId = row.id.replace("live-", "");
-              const user = users.find((u) => u.id === userId);
-              if (user) setOpenUser(user);
-              return;
-            }
-            if (row.id.startsWith("listing-")) {
-              const listingId = row.id.replace(/^listing-/, "").replace(/-edit$/, "");
-              const listing = liveListings.find((item) => item.id === listingId);
-              if (listing) router.push(staffListingDetailHref(listing));
-            }
-          }}
+          onRow={openActivityRow}
+          rowActions={rowActions}
         />
       </div>
       <UserDetailDrawer user={openUser} onClose={() => setOpenUser(null)} />

@@ -60,6 +60,7 @@ export function mapStaffListingActivity(row: StaffListing): Activity {
     location: row.location,
     time: relativeTime(row.created_at),
     status: edit ? "Edit pending" : row.status.replace(/^\w/, (c) => c.toUpperCase()),
+    at: Date.parse(row.created_at) || 0,
   };
 }
 

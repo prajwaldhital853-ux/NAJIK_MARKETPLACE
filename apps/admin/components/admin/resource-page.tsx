@@ -8,6 +8,17 @@ import { DetailKv, DetailOverlay } from "./detail-overlay";
 import { Avatar, Btn, Field, StatusBadge, inputClass } from "./ui";
 import { useAdmin } from "@/lib/store";
 
+function rowTimestamp(row: Record<string, unknown>): number {
+  for (const key of ["joinedAt", "created_at", "posted", "date_joined", "at"]) {
+    const value = row[key];
+    if (value === undefined || value === null) continue;
+    if (typeof value === "number") return value;
+    const parsed = Date.parse(String(value));
+    if (parsed) return parsed;
+  }
+  return 0;
+}
+
 function tabFromStatus(status: string | null, tabs: string[]) {
   if (!status) return tabs[0] || "All";
   const match = tabs.find((t) => t.toLowerCase().replace(/\s+/g, "_") === status.toLowerCase().replace(/\s+/g, "_"));
@@ -137,41 +148,13 @@ export function ResourcePage<T extends { id: string; status?: string; staff_warn
     return list;
   }, [rows, params, tab, tabKey]);
 
-  const orderedIdsKey = `najik-admin-order:${storeKey || pathname}`;
-  const [orderIds, setOrderIds] = useState<string[]>(() => {
-    if (typeof window === "undefined") return [];
-    try {
-      return JSON.parse(localStorage.getItem(orderedIdsKey) || "[]") as string[];
-    } catch {
-      return [];
-    }
-  });
-
   const orderedRows = useMemo(() => {
-    if (!orderIds.length) return filtered;
-    const rank = new Map(orderIds.map((id, i) => [id, i]));
     return [...filtered].sort((a, b) => {
-      const ai = rank.has(a.id) ? rank.get(a.id)! : Number.MAX_SAFE_INTEGER;
-      const bi = rank.has(b.id) ? rank.get(b.id)! : Number.MAX_SAFE_INTEGER;
-      if (ai !== bi) return ai - bi;
-      return 0;
+      const at = rowTimestamp(a as Record<string, unknown>);
+      const bt = rowTimestamp(b as Record<string, unknown>);
+      return bt - at;
     });
-  }, [filtered, orderIds]);
-
-  function moveRow(row: T, direction: -1 | 1) {
-    const ids = orderedRows.map((r) => r.id);
-    const idx = ids.indexOf(row.id);
-    const swap = idx + direction;
-    if (idx < 0 || swap < 0 || swap >= ids.length) return;
-    const next = [...ids];
-    [next[idx], next[swap]] = [next[swap], next[idx]];
-    setOrderIds(next);
-    try {
-      localStorage.setItem(orderedIdsKey, JSON.stringify(next));
-    } catch {
-      /* ignore */
-    }
-  }
+  }, [filtered]);
 
   const rowActions: RowMenuAction<T>[] = [
     {
@@ -206,14 +189,6 @@ export function ResourcePage<T extends { id: string; status?: string; staff_warn
           .then(() => admin.toast("Blocked."))
           .catch((err: unknown) => admin.toast(err instanceof Error ? err.message : "Could not block."));
       },
-    },
-    {
-      label: "Move up",
-      onClick: (row) => moveRow(row, -1),
-    },
-    {
-      label: "Move down",
-      onClick: (row) => moveRow(row, 1),
     },
   ];
 
@@ -278,48 +253,48 @@ export function ResourcePage<T extends { id: string; status?: string; staff_warn
                       }
                     />
                   </Field>
-                  {allowSendNote && storeKey ? (
-                    <div className="flex flex-wrap gap-2">
-                      <Btn
-                        kind="primary"
-                        onClick={() => {
-                          if (!note.trim()) {
-                            admin.toast("Write a note before sending.");
-                            return;
-                          }
-                          void admin
-                            .patch(storeKey, open.id, { staff_warning: note.trim(), notes: note.trim() })
-                            .then(() => {
-                              admin.toast("Note sent to user.");
-                              setOpen({ ...open, staff_warning: note.trim() } as T);
-                            })
-                            .catch((err: unknown) => {
-                              admin.toast(err instanceof Error ? err.message : "Could not send note.");
-                            });
-                        }}
-                      >
-                        Send note to user
-                      </Btn>
-                      <Btn
-                        kind="ghost"
-                        onClick={() => {
-                          void admin
-                            .patch(storeKey, open.id, { staff_warning: "", notes: "" })
-                            .then(() => {
-                              admin.toast("Note cleared.");
-                              setNote("");
-                              setOpen({ ...open, staff_warning: "" } as T);
-                            })
-                            .catch((err: unknown) => {
-                              admin.toast(err instanceof Error ? err.message : "Could not clear note.");
-                            });
-                        }}
-                      >
-                        Clear note
-                      </Btn>
-                    </div>
-                  ) : null}
-                  <div className="flex flex-wrap gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    {allowSendNote && storeKey ? (
+                      <>
+                        <Btn
+                          kind="primary"
+                          onClick={() => {
+                            if (!note.trim()) {
+                              admin.toast("Write a note before sending.");
+                              return;
+                            }
+                            void admin
+                              .patch(storeKey, open.id, { staff_warning: note.trim(), notes: note.trim() })
+                              .then(() => {
+                                admin.toast("Note sent to user.");
+                                setOpen({ ...open, staff_warning: note.trim() } as T);
+                              })
+                              .catch((err: unknown) => {
+                                admin.toast(err instanceof Error ? err.message : "Could not send note.");
+                              });
+                          }}
+                        >
+                          Send note
+                        </Btn>
+                        <Btn
+                          kind="ghost"
+                          onClick={() => {
+                            void admin
+                              .patch(storeKey, open.id, { staff_warning: "", notes: "" })
+                              .then(() => {
+                                admin.toast("Note cleared.");
+                                setNote("");
+                                setOpen({ ...open, staff_warning: "" } as T);
+                              })
+                              .catch((err: unknown) => {
+                                admin.toast(err instanceof Error ? err.message : "Could not clear note.");
+                              });
+                          }}
+                        >
+                          Clear note
+                        </Btn>
+                      </>
+                    ) : null}
                     {statusActions.map((s) => (
                       <Btn
                         key={s}
@@ -371,10 +346,30 @@ export function ResourcePage<T extends { id: string; status?: string; staff_warn
                         {s === "pending" ? "Reactivate" : s === "rejected" ? "Reject with note" : s}
                       </Btn>
                     ))}
+                    {allowDelete ? (
+                      <Btn
+                        kind="danger"
+                        onClick={() => {
+                          const message = deleteConfirm || "Delete this record permanently? This cannot be undone.";
+                          if (!window.confirm(message)) return;
+                          void admin
+                            .remove(storeKey!, open.id)
+                            .then(() => {
+                              admin.toast("Deleted.");
+                              closeDrawer();
+                            })
+                            .catch((err: unknown) => {
+                              admin.toast(err instanceof Error ? err.message : "Could not delete.");
+                            });
+                        }}
+                      >
+                        Delete
+                      </Btn>
+                    ) : null}
                   </div>
                 </div>
               ) : null}
-              {storeKey && allowDelete ? (
+              {storeKey && allowDelete && !statusActions?.length ? (
                 <Btn
                   kind="danger"
                   onClick={() => {

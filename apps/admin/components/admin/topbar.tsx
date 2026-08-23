@@ -5,7 +5,6 @@ import {
   Bell,
   Maximize,
   Menu,
-  MessageSquare,
   Minimize,
   Moon,
   Plus,
@@ -29,7 +28,6 @@ export function Topbar({ onMenu }: { onMenu?: () => void }) {
   const [cmd, setCmd] = useState(false);
   const [add, setAdd] = useState(false);
   const [bell, setBell] = useState(false);
-  const [mail, setMail] = useState(false);
   const [menu, setMenu] = useState(false);
   const [full, setFull] = useState(false);
 
@@ -95,15 +93,11 @@ export function Topbar({ onMenu }: { onMenu?: () => void }) {
         <IconBtn
           onClick={() => {
             setBell((v) => !v);
-            setMail(false);
             setMenu(false);
           }}
           badge={inboxCount}
         >
           <Bell size={15} />
-        </IconBtn>
-        <IconBtn onClick={() => setMail((v) => !v)}>
-          <MessageSquare size={15} />
         </IconBtn>
         <IconBtn onClick={() => void toggleFull()}>{full ? <Minimize size={15} /> : <Maximize size={15} />}</IconBtn>
         <IconBtn onClick={toggle}>{theme === "dark" ? <Sun size={15} /> : <Moon size={15} />}</IconBtn>
@@ -123,12 +117,6 @@ export function Topbar({ onMenu }: { onMenu?: () => void }) {
           <Link href="/admin/notifications" onClick={() => setBell(false)} className="block border-t border-line px-4 py-2.5 text-center text-[12px] font-semibold text-brand">
             Open notifications
           </Link>
-        </Panel>
-      ) : null}
-
-      {mail ? (
-        <Panel title="Messages" onClose={() => setMail(false)}>
-          <p className="px-4 py-6 text-sm text-muted">No messages.</p>
         </Panel>
       ) : null}
 

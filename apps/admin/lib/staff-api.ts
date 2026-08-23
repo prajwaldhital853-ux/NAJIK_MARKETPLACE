@@ -443,12 +443,18 @@ export type StaffPaymentsSummary = {
   referral_earned_label: string;
   referral_credited_paisa: number;
   referral_credited_label: string;
+  admin_credit_total_paisa: number;
+  admin_credit_total_label: string;
+  admin_credit_total_rupees: number;
+  revenue_period: string;
+  admin_credit_series: { label: string; v: number; amount_paisa: number }[];
   listing_fee_label: string;
   listing_fee_rupees: number;
 };
 
-export async function getStaffPaymentsSummary() {
-  return staffRequest<StaffPaymentsSummary>("/api/admin/app-control/payments-summary/");
+export async function getStaffPaymentsSummary(revenuePeriod?: string) {
+  const suffix = revenuePeriod ? `?revenue_period=${encodeURIComponent(revenuePeriod)}` : "";
+  return staffRequest<StaffPaymentsSummary>(`/api/admin/app-control/payments-summary/${suffix}`);
 }
 
 export async function patchSellerPaymentConfig(payload: Record<string, unknown>) {

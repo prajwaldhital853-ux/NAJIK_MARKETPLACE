@@ -50,19 +50,85 @@ export function LineGrowth({ data }: { data: { m: string; v: number }[] }) {
 
 export function RevenueBars({ data }: { data: { d: string; v: number }[] }) {
   const c = useChartColors();
+  const chartData = data.map((row) => ({ label: row.d, v: row.v }));
   return (
     <ResponsiveContainer width="100%" height={168}>
-      <BarChart data={data} margin={{ top: 8, right: 2, left: 0, bottom: 0 }}>
+      <BarChart data={chartData} margin={{ top: 8, right: 2, left: 0, bottom: 0 }}>
         <CartesianGrid stroke={c.grid} vertical={false} />
-        <XAxis dataKey="d" stroke={c.tick} fontSize={9} tickLine={false} axisLine={false} interval={4} />
+        <XAxis dataKey="label" stroke={c.tick} fontSize={9} tickLine={false} axisLine={false} interval="preserveStartEnd" />
         <YAxis hide />
         <Tooltip
           contentStyle={{ background: c.tooltipBg, border: `1px solid ${c.tooltipBorder}`, borderRadius: 4, fontSize: 12 }}
-          formatter={(v) => [`NPR ${Number(v).toLocaleString()}`, "Revenue"]}
+          formatter={(v) => [`NPR ${Number(v).toLocaleString()}`, "Credits"]}
         />
         <Bar dataKey="v" fill="#1b7d2c" radius={[2, 2, 0, 0]} />
       </BarChart>
     </ResponsiveContainer>
+  );
+}
+
+const REVENUE_PERIODS = [
+  { id: "day", label: "Daily" },
+  { id: "month", label: "Monthly" },
+  { id: "year", label: "Yearly" },
+  { id: "all", label: "All time" },
+] as const;
+
+export function RevenueOverview({
+  totalLabel,
+  series,
+  period,
+  onPeriod,
+  loading,
+}: {
+  totalLabel: string;
+  series: { label: string; v: number }[];
+  period: string;
+  onPeriod: (id: string) => void;
+  loading?: boolean;
+}) {
+  const c = useChartColors();
+  const chartData = series.length ? series : [{ label: "—", v: 0 }];
+  const periodTotal = series.reduce((sum, row) => sum + row.v, 0);
+
+  return (
+    <div>
+      <div className="mb-2 flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <p className="text-[11px] text-muted">Admin credits to seller wallets</p>
+          <p className="text-[12px] font-semibold text-ink">{totalLabel}</p>
+          <p className="text-[10px] text-muted">
+            {loading ? "Loading…" : `NPR ${periodTotal.toLocaleString()} in this view`}
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-0.5">
+          {REVENUE_PERIODS.map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              onClick={() => onPeriod(p.id)}
+              className={`rounded px-1.5 py-0.5 text-[10px] ${
+                period === p.id ? "bg-brand text-white" : "text-muted hover:bg-elevated"
+              }`}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      <ResponsiveContainer width="100%" height={168}>
+        <BarChart data={chartData} margin={{ top: 8, right: 2, left: 0, bottom: 0 }}>
+          <CartesianGrid stroke={c.grid} vertical={false} />
+          <XAxis dataKey="label" stroke={c.tick} fontSize={9} tickLine={false} axisLine={false} interval="preserveStartEnd" />
+          <YAxis stroke={c.tick} fontSize={9} width={40} tickLine={false} axisLine={false} />
+          <Tooltip
+            contentStyle={{ background: c.tooltipBg, border: `1px solid ${c.tooltipBorder}`, borderRadius: 4, fontSize: 12 }}
+            formatter={(v) => [`NPR ${Number(v).toLocaleString()}`, "Admin credit"]}
+          />
+          <Bar dataKey="v" fill="#1b7d2c" radius={[2, 2, 0, 0]} />
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
   );
 }
 

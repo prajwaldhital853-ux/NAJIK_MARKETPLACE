@@ -46,10 +46,12 @@ import {
   listStaffLoadRequests,
   listComplaints,
   patchAppUser,
+  getStaffPaymentsSummary,
   type ProviderApplication,
   type StaffListing,
   type ComplaintTicket,
   type SellerLoadRequestRow,
+  type StaffPaymentsSummary,
 } from "./staff-api";
 import { ADMIN_POLL_MS, buildInbox, navBadges, readSeenInbox, writeSeenInbox, type InboxItem } from "./live-inbox";
 import { useSession } from "./session";
@@ -103,6 +105,7 @@ type Store = {
   inboxReady: boolean;
   badges: Record<string, number>;
   liveListings: StaffListing[];
+  paymentsSummary: StaffPaymentsSummary | null;
   patch: (key: StoreKey, id: string, data: Record<string, unknown>) => Promise<void>;
   add: (key: StoreKey, row: unknown) => void;
   remove: (key: StoreKey, id: string) => Promise<void>;
@@ -137,6 +140,7 @@ export function AdminStoreProvider({ children }: { children: React.ReactNode }) 
   const [liveApplications, setLiveApplications] = useState<ProviderApplication[]>([]);
   const [liveReports, setLiveReports] = useState<ComplaintTicket[]>([]);
   const [liveLoadRequests, setLiveLoadRequests] = useState<SellerLoadRequestRow[]>([]);
+  const [paymentsSummary, setPaymentsSummary] = useState<StaffPaymentsSummary | null>(null);
   const [inboxReady, setInboxReady] = useState(false);
   const [properties, setProperties] = useState(PROPERTIES);
   const [jobs, setJobs] = useState(JOBS);
@@ -173,24 +177,33 @@ export function AdminStoreProvider({ children }: { children: React.ReactNode }) 
         setLiveApplications([]);
         setLiveReports([]);
         setLiveLoadRequests([]);
+        setPaymentsSummary(null);
         setInboxReady(false);
         return;
       }
       try {
-        const [rows, listings, applications, complaints, loads] = await Promise.all([
+        const [rows, listings, applications, complaints, loads, payments] = await Promise.all([
           listAppUsers(),
           listStaffListings(),
           listProviderApplications(),
           listComplaints().catch(() => [] as ComplaintTicket[]),
           listStaffLoadRequests().catch(() => [] as SellerLoadRequestRow[]),
+          getStaffPaymentsSummary("month").catch(() => null),
         ]);
         if (!alive) return;
-        setLiveUsers(rows.map(mapDirectoryUser));
-        setLiveActivity(rows.map(mapDirectoryActivity));
-        setLiveListings(listings);
+        const sortedListings = [...listings].sort(
+          (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+        );
+        const sortedUsers = [...rows].sort(
+          (a, b) => new Date(b.date_joined).getTime() - new Date(a.date_joined).getTime(),
+        );
+        setLiveUsers(sortedUsers.map(mapDirectoryUser));
+        setLiveActivity(sortedUsers.map(mapDirectoryActivity));
+        setLiveListings(sortedListings);
         setLiveApplications(applications);
         setLiveReports(complaints);
         setLiveLoadRequests(loads);
+        setPaymentsSummary(payments);
       } catch {
         // Keep the last successful snapshot so a blip does not empty the inbox.
       } finally {
@@ -355,7 +368,12 @@ export function AdminStoreProvider({ children }: { children: React.ReactNode }) 
     liveListings.forEach((row) => counts.set(row.owner_id, (counts.get(row.owner_id) || 0) + 1));
     const ids = new Set(liveUsers.map((u) => u.id));
     const withCounts = liveUsers.map((u) => ({ ...u, listings: counts.get(u.id) || 0 }));
-    return [...withCounts, ...users.filter((u) => !ids.has(u.id))];
+    const merged = [...withCounts, ...users.filter((u) => !ids.has(u.id))];
+    return merged.sort((a, b) => {
+      const at = Date.parse(a.joinedAt || "") || 0;
+      const bt = Date.parse(b.joinedAt || "") || 0;
+      return bt - at;
+    });
   }, [liveUsers, users, liveListings]);
 
   const listingCount = (category: string) => liveListings.filter((row) => row.category === category).length;
@@ -382,10 +400,10 @@ export function AdminStoreProvider({ children }: { children: React.ReactNode }) 
       usedItems: listingCount("marketplace"),
       electronics: listingCount("marketplace"),
       shops: listingCount("business"),
-      revenue: 0,
+      revenue: paymentsSummary?.admin_credit_total_rupees ?? 0,
       revenueDelta: 0,
     }),
-    [mergedUsers, liveListings],
+    [mergedUsers, liveListings, paymentsSummary],
   );
 
   const growth = useMemo(() => {
@@ -421,7 +439,10 @@ export function AdminStoreProvider({ children }: { children: React.ReactNode }) 
   }, [liveListings]);
 
   const listingActivity = useMemo(() => liveListings.map(mapStaffListingActivity), [liveListings]);
-  const activity = useMemo(() => [...listingActivity, ...liveActivity], [listingActivity, liveActivity]);
+  const activity = useMemo(() => {
+    const merged = [...listingActivity, ...liveActivity];
+    return merged.sort((a, b) => (b.at || 0) - (a.at || 0));
+  }, [listingActivity, liveActivity]);
 
   const displayProperties = useMemo(
     () => liveListings.filter((row) => row.category === "property").map(mapStaffListingToProperty),
@@ -465,6 +486,7 @@ export function AdminStoreProvider({ children }: { children: React.ReactNode }) 
       inboxReady,
       badges,
       liveListings,
+      paymentsSummary,
       patch,
       add,
       remove,
@@ -496,6 +518,8 @@ export function AdminStoreProvider({ children }: { children: React.ReactNode }) 
       inbox,
       inboxReady,
       badges,
+      liveListings,
+      paymentsSummary,
       patch,
       add,
       remove,

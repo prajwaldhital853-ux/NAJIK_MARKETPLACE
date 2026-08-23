@@ -1,7 +1,11 @@
 import mimetypes
 
 from django.core.exceptions import ValidationError as DjangoValidationError
+from datetime import timedelta
+
 from django.db.models import Count, Sum
+from django.db.models.functions import TruncDate, TruncMonth, TruncYear
+from django.utils import timezone
 from django.http import FileResponse, HttpResponse
 from rest_framework import serializers, status
 from rest_framework.permissions import AllowAny
@@ -325,6 +329,73 @@ class StaffLoadRequestProofView(APIView):
         return FileResponse(load.proof_image.open("rb"), content_type=content_type or "image/jpeg")
 
 
+def _admin_credit_revenue_series(period: str) -> list[dict]:
+    """Aggregate admin wallet credits (staff top-ups) for dashboard revenue charts."""
+    base = SellerWalletTransaction.objects.filter(kind=SellerWalletTransaction.KIND_ADMIN_CREDIT)
+    now = timezone.now()
+    period = (period or "month").lower()
+    series: list[dict] = []
+
+    if period == "day":
+        since = now - timedelta(days=29)
+        rows = (
+            base.filter(created_at__gte=since)
+            .annotate(bucket=TruncDate("created_at"))
+            .values("bucket")
+            .annotate(total=Sum("amount_paisa"))
+            .order_by("bucket")
+        )
+        for row in rows:
+            bucket = row["bucket"]
+            if not bucket:
+                continue
+            total = row["total"] or 0
+            series.append({"label": bucket.strftime("%d %b"), "v": total / 100, "amount_paisa": total})
+    elif period == "year":
+        rows = (
+            base.annotate(bucket=TruncYear("created_at"))
+            .values("bucket")
+            .annotate(total=Sum("amount_paisa"))
+            .order_by("bucket")
+        )
+        for row in rows:
+            bucket = row["bucket"]
+            if not bucket:
+                continue
+            total = row["total"] or 0
+            series.append({"label": str(bucket.year), "v": total / 100, "amount_paisa": total})
+    elif period == "all":
+        rows = (
+            base.annotate(bucket=TruncMonth("created_at"))
+            .values("bucket")
+            .annotate(total=Sum("amount_paisa"))
+            .order_by("bucket")
+        )
+        for row in rows:
+            bucket = row["bucket"]
+            if not bucket:
+                continue
+            total = row["total"] or 0
+            series.append({"label": bucket.strftime("%b %Y"), "v": total / 100, "amount_paisa": total})
+    else:
+        since = now - timedelta(days=365)
+        rows = (
+            base.filter(created_at__gte=since)
+            .annotate(bucket=TruncMonth("created_at"))
+            .values("bucket")
+            .annotate(total=Sum("amount_paisa"))
+            .order_by("bucket")
+        )
+        for row in rows:
+            bucket = row["bucket"]
+            if not bucket:
+                continue
+            total = row["total"] or 0
+            series.append({"label": bucket.strftime("%b"), "v": total / 100, "amount_paisa": total})
+
+    return series
+
+
 class StaffPaymentsSummaryView(APIView):
     authentication_classes = [StaffJWTAuthentication]
     permission_classes = [IsStaffUser]
@@ -342,6 +413,12 @@ class StaffPaymentsSummaryView(APIView):
         referral_earned_rupees = (
             Referral.objects.filter(status=Referral.STATUS_EARNED).aggregate(total=Sum("reward_amount"))["total"] or 0
         )
+        admin_credit_paisa = (
+            SellerWalletTransaction.objects.filter(kind=SellerWalletTransaction.KIND_ADMIN_CREDIT)
+            .aggregate(total=Sum("amount_paisa"))["total"]
+            or 0
+        )
+        revenue_period = (request.query_params.get("revenue_period") or "month").strip().lower()
         cfg = SellerPaymentConfig.get_solo()
         wallet_count = wallet_agg["count"] or 0
         total_balance_paisa = wallet_agg["total_paisa"] or 0
@@ -355,6 +432,11 @@ class StaffPaymentsSummaryView(APIView):
                 "referral_earned_label": f"Rs. {referral_earned_rupees:,}",
                 "referral_credited_paisa": referral_credited_paisa,
                 "referral_credited_label": paisa_to_label(referral_credited_paisa),
+                "admin_credit_total_paisa": admin_credit_paisa,
+                "admin_credit_total_label": paisa_to_label(admin_credit_paisa),
+                "admin_credit_total_rupees": admin_credit_paisa / 100,
+                "revenue_period": revenue_period,
+                "admin_credit_series": _admin_credit_revenue_series(revenue_period),
                 "listing_fee_label": cfg.listing_fee_label,
                 "listing_fee_rupees": cfg.listing_fee_rupees,
             }

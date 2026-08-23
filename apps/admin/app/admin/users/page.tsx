@@ -33,7 +33,12 @@ export default function UsersPage() {
     { key: "listings", label: "Listings" },
     { key: "kyc", label: "KYC", render: (u) => <StatusBadge status={u.kyc} /> },
     { key: "status", label: "Status", render: (u) => <StatusBadge status={u.status} /> },
-    { key: "lastActive", label: "Last active" },
+    {
+      key: "lastActive",
+      label: "Joined",
+      sortValue: (u) => Date.parse(u.joinedAt || "") || 0,
+      render: (u) => <span className="text-muted">{u.joined}</span>,
+    },
   ];
 
   return (

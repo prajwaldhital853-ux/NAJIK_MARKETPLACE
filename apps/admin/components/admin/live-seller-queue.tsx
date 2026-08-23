@@ -27,17 +27,29 @@ export function LiveSellerQueue() {
         <p className="text-[12px] text-muted">No seller applications yet.</p>
       ) : (
         <ul className="max-h-56 divide-y divide-line overflow-y-auto pr-1">
-          {latest.map((item) => (
-            <li key={item.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
-              <div>
-                <p className="text-[12px] font-medium text-ink">{item.full_name}</p>
-                <p className="text-[11px] text-muted">
-                  {item.service_type} · {formatNptDateTime(item.created_at)}
-                </p>
-              </div>
-              <StatusBadge status={item.status} />
-            </li>
-          ))}
+          {latest.map((item) => {
+            const userHref = item.owner_id ? `/admin/users?id=${encodeURIComponent(item.owner_id)}` : null;
+            return (
+              <li key={item.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
+                <div>
+                  {userHref ? (
+                    <Link
+                      href={userHref}
+                      className="text-[12px] font-medium text-brand hover:underline"
+                    >
+                      {item.full_name}
+                    </Link>
+                  ) : (
+                    <p className="text-[12px] font-medium text-ink">{item.full_name}</p>
+                  )}
+                  <p className="text-[11px] text-muted">
+                    {item.service_type} · {formatNptDateTime(item.created_at)}
+                  </p>
+                </div>
+                <StatusBadge status={item.status} />
+              </li>
+            );
+          })}
         </ul>
       )}
     </section>

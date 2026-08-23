@@ -82,7 +82,7 @@ export function UserDetailDrawer({
         documents={user && isProvider ? userDocuments(user) : []}
         footer={
           user ? (
-            <div className="space-y-4 text-sm">
+            <div className="space-y-3 text-sm">
               {isProvider ? (
                 <Btn kind="primary" onClick={() => setListingsOpen(true)}>
                   See all listings of this user
@@ -99,7 +99,7 @@ export function UserDetailDrawer({
                     placeholder="Write a note the user will see on Home and Profile"
                   />
                 </Field>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <Btn
                     kind="primary"
                     loading={loading === "note"}
@@ -131,8 +131,6 @@ export function UserDetailDrawer({
                   >
                     Clear note
                   </Btn>
-                </div>
-                <div className="grid grid-cols-3 gap-2">
                   {(["active", "deactivated", "blocked"] as const).map((s) => (
                     <Btn
                       key={s}
@@ -158,23 +156,23 @@ export function UserDetailDrawer({
                       {s}
                     </Btn>
                   ))}
+                  <Btn
+                    kind="danger"
+                    loading={loading === "delete"}
+                    loadingLabel="Deleting…"
+                    onClick={() => {
+                      if (!window.confirm("Delete this account and all of their listings? This cannot be undone.")) return;
+                      void runAction("delete", async () => {
+                        await admin.remove("users", user.id);
+                        admin.toast("Deleted.");
+                        onClose();
+                      });
+                    }}
+                  >
+                    Delete
+                  </Btn>
                 </div>
               </div>
-              <Btn
-                kind="danger"
-                loading={loading === "delete"}
-                loadingLabel="Deleting…"
-                onClick={() => {
-                  if (!window.confirm("Delete this account and all of their listings? This cannot be undone.")) return;
-                  void runAction("delete", async () => {
-                    await admin.remove("users", user.id);
-                    admin.toast("Deleted.");
-                    onClose();
-                  });
-                }}
-              >
-                Delete account
-              </Btn>
             </div>
           ) : null
         }

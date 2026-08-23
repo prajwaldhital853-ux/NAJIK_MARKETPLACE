@@ -107,6 +107,7 @@ function MainDrawer() {
       <Drawer.Screen name="ChatThread" component={ChatThreadScreen} options={{ swipeEnabled: false }} />
       <Drawer.Screen name="BuyerReviewsGiven" component={BuyerReviewsGivenScreen} />
       <Drawer.Screen name="BuyerRecentViews" component={BuyerRecentViewsScreen} />
+      <Drawer.Screen name="SellerProfile" component={SellerProfileScreen} />
       <Drawer.Screen name="ProviderIdCard" component={ProviderIdCardScreen} />
     </Drawer.Navigator>
   );

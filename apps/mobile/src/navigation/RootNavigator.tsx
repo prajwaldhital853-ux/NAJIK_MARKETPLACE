@@ -40,6 +40,7 @@ import { SellerHubScreen } from "../screens/SellerHubScreen";
 import { UrgentSellListScreen } from "../screens/UrgentSellListScreen";
 import { colors } from "../theme";
 import { createInstantTabNavigator } from "./InstantTabs";
+import { navigationRef } from "./navigationRef";
 
 const Stack = createNativeStackNavigator();
 const Tabs = createInstantTabNavigator();
@@ -153,7 +154,7 @@ export function RootNavigator() {
   }
 
   return (
-    <NavigationContainer theme={LightTheme}>
+    <NavigationContainer ref={navigationRef} theme={LightTheme}>
       <Stack.Navigator screenOptions={{ headerShown: false, animation: "none" }}>
         {gate === "main" ? <Stack.Screen name="Main" component={MainDrawer} /> : null}
         {gate === "otp" ? <Stack.Screen name="Otp" component={OtpScreen} /> : null}

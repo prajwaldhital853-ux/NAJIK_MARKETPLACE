@@ -8,6 +8,7 @@ import { SavedListingsProvider } from "./src/context/SavedListings";
 import { InboxProvider } from "./src/context/InboxContext";
 import { forceLightMode, subscribeForceLightMode } from "./src/forceLightMode";
 import { StaffWarningBanner } from "./src/components/StaffWarningBanner";
+import { PushNotificationsBridge } from "./src/components/PushNotificationsBridge";
 import { RootNavigator } from "./src/navigation/RootNavigator";
 
 forceLightMode();
@@ -22,6 +23,7 @@ export default function App() {
           <BuyerLocationProvider>
           <SavedListingsProvider>
             <InboxProvider>
+            <PushNotificationsBridge />
             <StatusBar style="dark" />
             <RootNavigator />
             <StaffWarningBanner />

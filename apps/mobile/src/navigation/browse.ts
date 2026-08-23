@@ -2,6 +2,8 @@ import type { CatalogKey } from "../data/catalog";
 import type { SellerPage } from "../data/sellerHub";
 import { dismissInboxTargetOnVisit, normTargetId, uuidFromNorm } from "../inboxBridge";
 import { prefetchListing } from "../listingsApi";
+import { isProvider } from "../demo";
+import type { AppUser } from "../types";
 
 export function openCategory(
   navigation: { navigate: (...args: any[]) => void },
@@ -83,6 +85,27 @@ export function openSellerProfile(
 
 export function openProviderIdCard(navigation: { navigate: (...args: any[]) => void }) {
   navigateNamed(navigation, "ProviderIdCard");
+}
+
+export function openInboxNoticeTarget(
+  navigation: { navigate: (...args: any[]) => void },
+  item: { kind?: string; target?: string; target_id?: string },
+  user?: AppUser | null,
+) {
+  if (item.target === "chat" && item.target_id) {
+    openChatThread(navigation, item.target_id);
+    return;
+  }
+  if (item.target === "listing" && item.target_id) {
+    openListing(navigation, item.target_id);
+    return;
+  }
+  if (item.target === "booking" || item.kind === "booking") {
+    if (isProvider(user)) openSellerPage(navigation, "bookings", { bookingId: item.target_id });
+    else openBookings(navigation, item.target_id);
+    return;
+  }
+  if (isProvider(user)) openSellerPage(navigation, "notifications");
 }
 
 export function openBuyerReviewsGiven(navigation: { navigate: (...args: any[]) => void }) {

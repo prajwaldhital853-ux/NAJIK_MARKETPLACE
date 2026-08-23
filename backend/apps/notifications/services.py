@@ -2,6 +2,7 @@ from django.db.models import Q
 from django.utils import timezone
 
 from apps.notifications.models.inbox import InboxNotice
+from apps.notifications.push_service import send_push_to_user
 
 
 def normalize_target_id(value: str) -> str:
@@ -22,7 +23,7 @@ def notify_user(
     who = (sender_name or "").strip()
     if not who:
         who = "Someone"
-    return InboxNotice.objects.create(
+    notice = InboxNotice.objects.create(
         user=user,
         title=(title or "Notification")[:160],
         body=body[:2000],
@@ -31,6 +32,19 @@ def notify_user(
         target_id=normalize_target_id(target_id),
         sender_name=who[:120],
     )
+    try:
+        send_push_to_user(
+            user,
+            title=notice.title,
+            body=notice.body,
+            kind=kind,
+            target=target,
+            target_id=target_id,
+            sender_name=who,
+        )
+    except Exception:
+        pass
+    return notice
 
 
 def notify_chat_message(user, sender_name: str, thread_id: str, preview: str):
@@ -64,9 +78,21 @@ def notify_chat_message(user, sender_name: str, thread_id: str, preview: str):
         existing.target_id = raw_tid[:64]
         existing.created_at = now
         existing.save(update_fields=["title", "body", "sender_name", "is_read", "target_id", "created_at"])
+        try:
+            send_push_to_user(
+                user,
+                title=who,
+                body=preview_text,
+                kind=InboxNotice.KIND_MESSAGE,
+                target="chat",
+                target_id=raw_tid,
+                sender_name=who,
+            )
+        except Exception:
+            pass
         return existing
 
-    return InboxNotice.objects.create(
+    notice = InboxNotice.objects.create(
         user=user,
         title=who[:160],
         body=preview_text,
@@ -75,6 +101,19 @@ def notify_chat_message(user, sender_name: str, thread_id: str, preview: str):
         target_id=raw_tid[:64],
         sender_name=who[:120],
     )
+    try:
+        send_push_to_user(
+            user,
+            title=who,
+            body=preview_text,
+            kind=InboxNotice.KIND_MESSAGE,
+            target="chat",
+            target_id=raw_tid,
+            sender_name=who,
+        )
+    except Exception:
+        pass
+    return notice
 
 
 def notify_listing_activity(user, listing, title: str, body: str, sender_name: str = ""):
@@ -104,8 +143,20 @@ def notify_listing_activity(user, listing, title: str, body: str, sender_name: s
         existing.target_id = raw_id[:64]
         existing.created_at = now
         existing.save(update_fields=["title", "body", "sender_name", "is_read", "target_id", "created_at"])
+        try:
+            send_push_to_user(
+                user,
+                title=headline,
+                body=preview,
+                kind=InboxNotice.KIND_LISTING,
+                target="listing",
+                target_id=raw_id,
+                sender_name=who,
+            )
+        except Exception:
+            pass
         return existing
-    return InboxNotice.objects.create(
+    notice = InboxNotice.objects.create(
         user=user,
         title=headline,
         body=preview,
@@ -114,3 +165,16 @@ def notify_listing_activity(user, listing, title: str, body: str, sender_name: s
         target_id=raw_id[:64],
         sender_name=who[:120],
     )
+    try:
+        send_push_to_user(
+            user,
+            title=headline,
+            body=preview,
+            kind=InboxNotice.KIND_LISTING,
+            target="listing",
+            target_id=raw_id,
+            sender_name=who,
+        )
+    except Exception:
+        pass
+    return notice

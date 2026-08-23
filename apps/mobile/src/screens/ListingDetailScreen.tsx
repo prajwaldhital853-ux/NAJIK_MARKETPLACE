@@ -20,6 +20,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AppHeader } from "../components/AppHeader";
 import { AuthImage } from "../components/AuthImage";
+import { Avatar } from "../components/Avatar";
 import { classifiedMore, ConditionPill, LINE, ListingGrid, listingTags, postedLabel, SalePrice, splitPrice } from "../components/ClassifiedCard";
 import { OsmWebMap } from "../components/OsmWebMap";
 import { KeyboardScreen, useKeyboardScroll } from "../components/KeyboardScreen";
@@ -34,7 +35,7 @@ import { apiCategoryForKey, liveListingById, listingsToCatalog, listingToCatalog
 import { rankSimilarListings, relatedKeywordsFor } from "../data/similarListings";
 import { fetchListing, fetchListingFeed, postListingComment, postListingReview, toggleListingSave, type ApiListing } from "../listingsApi";
 import { emitListingsChanged, subscribeListingsChanged } from "../listingsRefresh";
-import { openCategory, openChatThread, openMapSearch } from "../navigation/browse";
+import { openCategory, openChatThread, openMapSearch, openSellerProfile } from "../navigation/browse";
 import { richFor, type Review } from "../data/listingDetails";
 import { friendlyError } from "../api";
 import { startListingChat } from "../chatApi";
@@ -323,20 +324,22 @@ function ListingBody({
       </View>
 
       <View style={{ marginHorizontal: 16, marginTop: 8, borderWidth: 1, borderColor: LINE, padding: 14 }}>
-        <View style={{ flexDirection: "row", alignItems: "center" }}>
-          <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: "#F3F4F6", alignItems: "center", justifyContent: "center" }}>
-            <Ionicons name="person" size={22} color="#6B7280" />
-          </View>
+        <Pressable
+          onPress={() => rich.seller.ownerId && openSellerProfile(navigation, rich.seller.ownerId)}
+          style={{ flexDirection: "row", alignItems: "center" }}
+        >
+          <Avatar name={rich.seller.name} uri={rich.seller.photoUrl} size={44} />
           <View style={{ flex: 1, marginLeft: 10 }}>
             <Text style={{ fontWeight: "700", fontSize: 14, color: "#111" }}>{rich.seller.name}</Text>
+            <Text style={{ color: "#6B7280", fontSize: 12, marginTop: 2 }}>{rich.seller.role}</Text>
             <Pressable onPress={callSeller}>
-              <Text style={{ color: GREEN, fontSize: 13, marginTop: 2 }}>{rich.seller.phone}</Text>
+              <Text style={{ color: GREEN, fontSize: 13, marginTop: 4 }}>{rich.seller.phone}</Text>
             </Pressable>
           </View>
           <View style={{ backgroundColor: "#EFEFEF", paddingHorizontal: 10, paddingVertical: 5, borderRadius: 4 }}>
-            <Text style={{ fontWeight: "700", fontSize: 12, color: "#374151" }}>{rich.seller.ads} ads</Text>
+            <Text style={{ fontWeight: "700", fontSize: 12, color: "#374151" }}>{live?.review_count || rich.reviewCount} reviews</Text>
           </View>
-        </View>
+        </Pressable>
         <View style={{ flexDirection: "row", alignItems: "center", marginTop: 10, gap: 3 }}>
           {[1, 2, 3, 4, 5].map((n) => (
             <Ionicons key={n} name={n <= Math.round(Number(rich.seller.rating)) ? "star" : "star-outline"} size={16} color="#F5C518" />
@@ -458,7 +461,7 @@ function ListingBody({
       <View style={{ flexDirection: "row", alignItems: "flex-end", marginTop: 16, paddingHorizontal: 8, borderBottomWidth: 1, borderBottomColor: LINE }}>
         {(["description", "comments", "location"] as TabKey[]).map((key) => {
           const on = tab === key;
-          const label = key === "description" ? "Description" : key === "comments" ? `Comments (${live?.comment_count || rich.reviews.length})` : "Location";
+          const label = key === "description" ? "Description" : key === "comments" ? `Comments (${(live?.comment_count || 0) + (live?.review_count || rich.reviewCount || 0)})` : "Location";
           return (
             <Pressable key={key} onPress={() => setTab(key)} style={{ paddingHorizontal: 12, paddingTop: 10 }}>
               <Text style={{ fontWeight: on ? "700" : "600", fontSize: 14, color: on ? "#111" : "#9AA0A6" }}>{label}</Text>
@@ -541,14 +544,14 @@ function ListingBody({
               .finally(() => setBusy(false));
           }}
           onReview={() => {
-            if (!live || !reviewText.trim() || busy) return;
+            if (!live || busy) return;
             setBusy(true);
             void postListingReview(live.id, rating, reviewText.trim())
               .then((row) => {
                 onSaved(row);
                 setReviewText("");
               })
-              .catch((err) => Alert.alert("Review", err instanceof Error ? err.message : "Sign in to review."))
+              .catch((err) => Alert.alert("Review", err instanceof Error ? err.message : "Sign in to rate this seller."))
               .finally(() => setBusy(false));
           }}
         />
@@ -832,7 +835,7 @@ function CommentsTab({
       </View>
       {canReview ? (
         <View style={{ marginTop: 16 }}>
-          <Text style={{ fontWeight: "800", marginBottom: 8 }}>Leave a review</Text>
+          <Text style={{ fontWeight: "800", marginBottom: 8 }}>Rate this seller</Text>
           <View style={{ flexDirection: "row", gap: 4, marginBottom: 8 }}>
             {[1, 2, 3, 4, 5].map((n) => (
               <Pressable key={n} onPress={() => setRating(n)}>
@@ -844,13 +847,13 @@ function CommentsTab({
             value={reviewText}
             onChangeText={setReviewText}
             onFocus={onInputFocus}
-            placeholder="How was this listing?"
+            placeholder="Optional note about this seller"
             placeholderTextColor="#9AA0A6"
             style={{ borderWidth: 1, borderColor: LINE, borderRadius: 6, minHeight: 70, paddingHorizontal: 12, paddingVertical: 10, fontSize: 13, textAlignVertical: "top" }}
             multiline
           />
           <PressScale onPress={onReview} style={{ marginTop: 8, backgroundColor: GREEN, height: 44, borderRadius: 6, alignItems: "center", justifyContent: "center" }}>
-            <Text style={{ color: "#fff", fontWeight: "800" }}>Submit review</Text>
+            <Text style={{ color: "#fff", fontWeight: "800" }}>Submit rating</Text>
           </PressScale>
         </View>
       ) : null}

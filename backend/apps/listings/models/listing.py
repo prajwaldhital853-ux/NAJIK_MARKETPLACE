@@ -109,6 +109,7 @@ class ListingComment(models.Model):
     listing = models.ForeignKey(Listing, on_delete=models.CASCADE, related_name="comments")
     author = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="listing_comments")
     text = models.TextField()
+    is_hidden = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -116,17 +117,53 @@ class ListingComment(models.Model):
 
 
 class ListingReview(models.Model):
+    """Legacy per-listing review rows (kept for existing data)."""
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     listing = models.ForeignKey(Listing, on_delete=models.CASCADE, related_name="reviews")
     author = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="listing_reviews")
     rating = models.PositiveSmallIntegerField()
-    text = models.TextField()
+    text = models.TextField(blank=True, default="")
+    is_hidden = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         ordering = ["-created_at"]
         constraints = [
             models.UniqueConstraint(fields=("listing", "author"), name="uniq_listing_review_author"),
+        ]
+
+
+class SellerReview(models.Model):
+    """Buyer rates a seller (one review per buyer per seller)."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    seller = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="seller_reviews_received",
+    )
+    author = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="seller_reviews_given",
+    )
+    listing = models.ForeignKey(
+        Listing,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="seller_reviews_from",
+    )
+    rating = models.PositiveSmallIntegerField()
+    text = models.TextField(blank=True, default="")
+    is_hidden = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(fields=("seller", "author"), name="uniq_seller_review_author"),
         ]
 
 

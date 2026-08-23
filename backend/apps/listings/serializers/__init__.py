@@ -8,7 +8,7 @@ from django.db import transaction
 from django.utils import timezone
 from rest_framework import serializers
 
-from apps.listings.models import Listing, ListingComment, ListingPhoto, ListingReview, ListingSave
+from apps.listings.models import Listing, ListingComment, ListingPhoto, ListingReview, ListingSave, SellerReview
 
 MAX_IMAGE_BYTES = 4 * 1024 * 1024
 MAX_PHOTOS = 8
@@ -52,9 +52,22 @@ def viewer_flags(serializer):
     request = serializer.context.get("request")
     listing = serializer.instance if isinstance(serializer.instance, Listing) else None
     user = getattr(request, "user", None) if request else None
-    is_owner = bool(listing and user and getattr(user, "is_authenticated", False) and getattr(user, "id", None) == listing.owner_id)
+    is_owner = bool(
+        listing and user and getattr(user, "is_authenticated", False) and getattr(user, "id", None) == listing.owner_id
+    )
     is_staff = bool(request and request.path.startswith("/api/admin/"))
     return request, user, is_owner, is_staff
+
+
+def engagement_visible(qs, is_staff: bool):
+    if is_staff:
+        return qs
+    return qs.filter(is_hidden=False)
+
+
+def seller_reviews_for_owner(owner_id, is_staff: bool = False):
+    qs = SellerReview.objects.filter(seller_id=owner_id).select_related("author")
+    return engagement_visible(qs, is_staff).order_by("-created_at")
 
 
 class ListingPhotoSerializer(serializers.ModelSerializer):
@@ -79,7 +92,7 @@ class ListingCommentSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = ListingComment
-        fields = ("id", "author_id", "author_name", "text", "created_at")
+        fields = ("id", "author_id", "author_name", "text", "created_at", "is_hidden")
         read_only_fields = fields
 
 
@@ -89,7 +102,17 @@ class ListingReviewSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = ListingReview
-        fields = ("id", "author_id", "author_name", "rating", "text", "created_at")
+        fields = ("id", "author_id", "author_name", "rating", "text", "created_at", "is_hidden")
+        read_only_fields = fields
+
+
+class SellerReviewSerializer(serializers.ModelSerializer):
+    author_name = serializers.CharField(source="author.full_name", read_only=True)
+    author_id = serializers.UUIDField(source="author.id", read_only=True)
+
+    class Meta:
+        model = SellerReview
+        fields = ("id", "author_id", "author_name", "rating", "text", "created_at", "is_hidden", "listing")
         read_only_fields = fields
 
 
@@ -97,11 +120,12 @@ class ListingSerializer(serializers.ModelSerializer):
     photos = serializers.SerializerMethodField()
     owner_name = serializers.CharField(source="owner.full_name", read_only=True)
     owner_id = serializers.UUIDField(source="owner.id", read_only=True)
-    comments = ListingCommentSerializer(many=True, read_only=True)
-    reviews = ListingReviewSerializer(many=True, read_only=True)
+    owner_photo_url = serializers.SerializerMethodField()
+    comments = serializers.SerializerMethodField()
+    reviews = serializers.SerializerMethodField()
     save_count = serializers.IntegerField(source="saves.count", read_only=True)
-    comment_count = serializers.IntegerField(source="comments.count", read_only=True)
-    review_count = serializers.IntegerField(source="reviews.count", read_only=True)
+    comment_count = serializers.SerializerMethodField()
+    review_count = serializers.SerializerMethodField()
     rating_avg = serializers.SerializerMethodField()
     seller_verified = serializers.SerializerMethodField()
     has_pending_edit = serializers.SerializerMethodField()
@@ -142,6 +166,7 @@ class ListingSerializer(serializers.ModelSerializer):
             "photos",
             "owner_name",
             "owner_id",
+            "owner_photo_url",
             "view_count",
             "save_count",
             "comment_count",
@@ -156,11 +181,47 @@ class ListingSerializer(serializers.ModelSerializer):
         )
         read_only_fields = fields
 
+    def get_owner_photo_url(self, obj):
+        request = self.context.get("request")
+        if not request:
+            return None
+        owner = obj.owner
+        app = getattr(owner, "provider_application", None)
+        photo = (app.photo if app and app.photo else None) or owner.avatar
+        if not photo:
+            return None
+        return request.build_absolute_uri(f"/api/listings/sellers/{owner.id}/photo/")
+
+    def get_comments(self, obj):
+        _, _, _, is_staff = viewer_flags(self)
+        qs = obj.comments.all()
+        if not is_staff:
+            qs = qs.filter(is_hidden=False)
+        return ListingCommentSerializer(qs, many=True, context=self.context).data
+
+    def get_reviews(self, obj):
+        _, _, _, is_staff = viewer_flags(self)
+        rows = seller_reviews_for_owner(obj.owner_id, is_staff=is_staff)[:100]
+        return SellerReviewSerializer(rows, many=True, context=self.context).data
+
+    def get_comment_count(self, obj):
+        _, _, _, is_staff = viewer_flags(self)
+        qs = obj.comments.all()
+        if not is_staff:
+            qs = qs.filter(is_hidden=False)
+        return qs.count()
+
+    def get_review_count(self, obj):
+        _, _, _, is_staff = viewer_flags(self)
+        return seller_reviews_for_owner(obj.owner_id, is_staff=is_staff).count()
+
     def get_rating_avg(self, obj):
-        ratings = [row.rating for row in obj.reviews.all()]
-        if not ratings:
-            return 0
-        return round(sum(ratings) / len(ratings), 1)
+        _, _, _, is_staff = viewer_flags(self)
+        rows = seller_reviews_for_owner(obj.owner_id, is_staff=is_staff)
+        from django.db.models import Avg
+
+        agg = rows.aggregate(a=Avg("rating"))
+        return round(agg["a"] or 0, 1)
 
     def get_seller_verified(self, obj):
         try:
@@ -399,4 +460,4 @@ class ListingCommentWriteSerializer(serializers.Serializer):
 
 class ListingReviewWriteSerializer(serializers.Serializer):
     rating = serializers.IntegerField(min_value=1, max_value=5)
-    text = serializers.CharField(min_length=1, max_length=1000)
+    text = serializers.CharField(required=False, allow_blank=True, max_length=1000)

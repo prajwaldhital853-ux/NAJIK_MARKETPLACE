@@ -34,6 +34,7 @@ export type ApiListing = {
   photos: ApiListingPhoto[];
   owner_name: string;
   owner_id: string;
+  owner_photo_url?: string | null;
   view_count: number;
   save_count: number;
   comment_count: number;
@@ -94,12 +95,16 @@ export type FeedQuery = {
 export type SellerPublicProfile = {
   id: string;
   full_name: string;
+  business_name?: string;
   account_type: "user" | "provider";
   phone: string;
   email: string;
   address: string;
   service_type: string;
   photo_url: string | null;
+  rating_avg?: number;
+  review_count?: number;
+  reviews?: { id: string; author_name: string; rating: number; text: string; created_at: string }[];
   listings: ApiListing[];
 };
 
@@ -183,12 +188,12 @@ export async function postListingComment(id: string, text: string) {
   );
 }
 
-export async function postListingReview(id: string, rating: number, text: string) {
+export async function postListingReview(id: string, rating: number, text?: string) {
   return withAppAuth((token) =>
     api<ApiListing>(`/api/listings/${id}/reviews/`, {
       method: "POST",
       token,
-      body: JSON.stringify({ rating, text }),
+      body: JSON.stringify({ rating, text: text?.trim() || "" }),
     }),
   );
 }

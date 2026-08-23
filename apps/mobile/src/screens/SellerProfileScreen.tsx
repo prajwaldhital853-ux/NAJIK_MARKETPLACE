@@ -77,7 +77,25 @@ export function SellerProfileScreen() {
         <View style={{ backgroundColor: colors.white, borderRadius: 16, padding: 16, alignItems: "center", borderWidth: 1, borderColor: colors.border }}>
           <Avatar name={profile?.full_name} uri={profile?.photo_url} size={88} />
           <Text style={{ fontWeight: "800", fontSize: 18, marginTop: 12 }}>{profile?.full_name || "…"}</Text>
+          {profile?.business_name && profile.business_name !== profile?.full_name ? (
+            <Text style={{ color: colors.muted, marginTop: 4 }}>{profile.business_name}</Text>
+          ) : null}
           {profile?.service_type ? <Text style={{ color: GREEN, fontWeight: "700", marginTop: 4 }}>{profile.service_type}</Text> : null}
+          {(profile?.rating_avg ?? 0) > 0 ? (
+            <View style={{ flexDirection: "row", alignItems: "center", marginTop: 8, gap: 4 }}>
+              {[1, 2, 3, 4, 5].map((n) => (
+                <Ionicons
+                  key={n}
+                  name={n <= Math.round(profile?.rating_avg || 0) ? "star" : "star-outline"}
+                  size={16}
+                  color="#F5C518"
+                />
+              ))}
+              <Text style={{ color: colors.muted, fontSize: 12, marginLeft: 4 }}>
+                {profile?.rating_avg?.toFixed(1)} ({profile?.review_count ?? 0})
+              </Text>
+            </View>
+          ) : null}
           {profile?.account_type === "user" ? (
             <Text style={{ color: colors.muted, marginTop: 6 }}>Buyer on NAJIK</Text>
           ) : null}
@@ -103,6 +121,30 @@ export function SellerProfileScreen() {
               </View>
             ) : null}
           </View>
+        ) : null}
+        {(profile?.reviews?.length ?? 0) > 0 ? (
+          <>
+            <Text style={{ fontWeight: "800", fontSize: 15, marginTop: 18, marginBottom: 8 }}>Reviews</Text>
+            {profile!.reviews!.map((row) => (
+              <View
+                key={row.id}
+                style={{
+                  backgroundColor: colors.white,
+                  borderRadius: 14,
+                  padding: 12,
+                  marginBottom: 8,
+                  borderWidth: 1,
+                  borderColor: colors.border,
+                }}
+              >
+                <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                  <Text style={{ fontWeight: "700" }}>{row.author_name}</Text>
+                  <Text style={{ fontWeight: "800", color: GREEN }}>{row.rating} ★</Text>
+                </View>
+                {row.text ? <Text style={{ color: colors.muted, marginTop: 6, lineHeight: 20 }}>{row.text}</Text> : null}
+              </View>
+            ))}
+          </>
         ) : null}
         <Text style={{ fontWeight: "800", fontSize: 15, marginTop: 18, marginBottom: 8 }}>Listings</Text>
         {items.length ? (

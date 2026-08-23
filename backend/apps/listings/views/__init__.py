@@ -15,7 +15,7 @@ from apps.accounts.models import AppUser
 from apps.accounts.authentication import AppJWTAuthentication, OptionalAppJWTAuthentication
 from apps.accounts.models import AppUser
 from apps.accounts.permissions import IsAppUser
-from apps.listings.models import Listing, ListingComment, ListingPhoto, ListingReview, ListingSave
+from apps.listings.models import Listing, ListingComment, ListingPhoto, ListingReview, ListingSave, SellerReview
 from apps.listings.search import listing_place_q, listing_search_q
 from apps.listings.serializers import (
     ListingCommentWriteSerializer,
@@ -188,25 +188,43 @@ class PublicSellerProfileView(APIView):
         photo = (app.photo if app and app.photo else None) or seller.avatar
         photo_url = request.build_absolute_uri(f"/api/listings/sellers/{seller.id}/photo/") if photo else None
         listings = []
-        phone = email = address = service_type = ""
+        phone = email = address = service_type = business_name = ""
         if is_provider and app:
             phone = app.phone or seller.phone or ""
             email = app.email or seller.email or ""
             address = app.address or ""
             service_type = app.service_type or ""
+            business_name = (app.full_name or "").strip()
             listings = exclude_sold_listings(
                 listing_queryset().filter(owner=seller, status=Listing.STATUS_APPROVED)
             ).order_by("-created_at")[:200]
+        else:
+            phone = seller.phone or ""
+            email = seller.email or ""
+            address = seller.address or ""
+        from apps.listings.serializers import SellerReviewSerializer, seller_reviews_for_owner
+        from django.db.models import Avg
+
+        review_rows = seller_reviews_for_owner(seller.id)
+        rating_agg = review_rows.aggregate(a=Avg("rating"))
+        rating_avg = round(rating_agg["a"] or 0, 1)
+        review_count = review_rows.count()
+        reviews = SellerReviewSerializer(review_rows[:50], many=True, context={"request": request}).data
+        display_name = business_name or (app.full_name if app else "") or seller.full_name or seller.phone or "NAJIK user"
         return Response(
             {
                 "id": str(seller.id),
-                "full_name": (app.full_name if app else "") or seller.full_name,
+                "full_name": display_name,
+                "business_name": business_name,
                 "account_type": seller.account_type,
                 "phone": phone,
                 "email": email,
                 "address": address,
                 "service_type": service_type,
                 "photo_url": photo_url,
+                "rating_avg": rating_avg,
+                "review_count": review_count,
+                "reviews": reviews,
                 "listings": ListingSerializer(listings, many=True, context={"request": request}).data,
             }
         )
@@ -354,10 +372,12 @@ class ListingReviewView(APIView):
             return Response({"detail": "You cannot review your own listing."}, status=status.HTTP_400_BAD_REQUEST)
         serializer = ListingReviewWriteSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        ListingReview.objects.update_or_create(
-            listing=listing,
+        text = (serializer.validated_data.get("text") or "").strip()
+        rating = serializer.validated_data["rating"]
+        SellerReview.objects.update_or_create(
+            seller_id=listing.owner_id,
             author=request.user,
-            defaults={"rating": serializer.validated_data["rating"], "text": serializer.validated_data["text"].strip()},
+            defaults={"rating": rating, "text": text, "listing": listing},
         )
         listing = listing_queryset().get(pk=listing.pk)
         return Response(ListingSerializer(listing, context={"request": request}).data)

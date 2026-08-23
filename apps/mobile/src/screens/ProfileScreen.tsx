@@ -11,7 +11,7 @@ import { SellerProfileEditModal } from "../components/SellerProfileEditModal";
 import { AccountStatusCard, ListingAdminNotesCard, StaffWarningCard } from "../components/StaffWarningBanner";
 import { useAuth } from "../context/AuthContext";
 import { isPendingProvider, isProvider, isRejectedProvider, isVerifiedProvider, isAccountRestricted } from "../demo";
-import { fetchMyListings, type ApiListing } from "../listingsApi";
+import { fetchMyListings, fetchSellerProfile, type ApiListing } from "../listingsApi";
 import { subscribeListingsChanged } from "../listingsRefresh";
 import { openProviderIdCard, openSellerPage } from "../navigation/browse";
 import { choosePhoto } from "../pickPhoto";
@@ -88,6 +88,7 @@ export function ProfileScreen() {
   const [activeCount, setActiveCount] = useState(0);
   const [pendingCount, setPendingCount] = useState(0);
   const [myListings, setMyListings] = useState<ApiListing[]>([]);
+  const [sellerRating, setSellerRating] = useState<{ avg: number; count: number }>({ avg: 0, count: 0 });
   const name = user?.full_name || "Account";
   const pending = isPendingProvider(user);
   const verified = isVerifiedProvider(user);
@@ -109,6 +110,11 @@ export function ProfileScreen() {
           setPendingCount(rows.filter((row) => row.status === "pending").length);
         })
         .catch(() => {});
+      if (user?.id) {
+        void fetchSellerProfile(user.id)
+          .then((profile) => setSellerRating({ avg: profile.rating_avg ?? 0, count: profile.review_count ?? 0 }))
+          .catch(() => setSellerRating({ avg: 0, count: 0 }));
+      }
     };
     load();
     return subscribeListingsChanged(load);
@@ -122,9 +128,9 @@ export function ProfileScreen() {
 
   const stats = [
     { icon: "home-outline" as const, value: String(activeCount), label: "Active Listings" },
-    { icon: "chatbubble-outline" as const, value: "0", label: "Total Inquiries" },
+    { icon: "star-outline" as const, value: sellerRating.avg > 0 ? sellerRating.avg.toFixed(1) : "—", label: `Rating (${sellerRating.count})` },
     { icon: "hourglass-outline" as const, value: String(pendingCount), label: "Pending" },
-    { icon: "eye-outline" as const, value: "0", label: "Profile Views" },
+    { icon: "chatbubble-outline" as const, value: "0", label: "Inquiries" },
   ];
   const services = servicesBase.map((item) => ({
     ...item,

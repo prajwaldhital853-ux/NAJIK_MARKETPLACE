@@ -48,7 +48,7 @@ export type ListingRich = {
   amenities: Amenity[];
   faqs: Faq[];
   reviews: Review[];
-  seller: { name: string; role: string; listed: string; response: string; rating: string; phone: string; ads: number };
+  seller: { name: string; role: string; listed: string; response: string; rating: string; phone: string; ads: number; ownerId?: string; photoUrl?: string | null };
   variants?: { label: string; options: string[] };
   cta: string;
 };
@@ -337,7 +337,7 @@ export function richFor(item: CatalogItem, live?: ApiListing | null): ListingRic
       time: new Date(review.created_at).toLocaleDateString("en-GB", { day: "2-digit", month: "short" }),
       helpful: 0,
     }));
-    const avg = reviews.length ? reviews.reduce((sum, row) => sum + row.rating, 0) / reviews.length : 0;
+    const avg = live.rating_avg || (reviews.length ? reviews.reduce((sum, row) => sum + row.rating, 0) / reviews.length : 0);
     const photos = live.photos || [];
     return {
       gallery: photos.map((photo) => ({ uri: photo.url })),
@@ -354,12 +354,14 @@ export function richFor(item: CatalogItem, live?: ApiListing | null): ListingRic
       reviews,
       seller: {
         name: live.owner_name || item.company || "NAJIK Seller",
-        role: "Listed on NAJIK",
+        role: live.seller_verified ? "Verified seller" : "Listed on NAJIK",
         listed: live.created_at ? new Date(live.created_at).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "",
         response: "Replies on NAJIK",
         rating: avg ? avg.toFixed(1) : "0",
         phone: live.contact_phone || "",
-        ads: 1,
+        ads: live.review_count || reviews.length || 1,
+        ownerId: live.owner_id,
+        photoUrl: live.owner_photo_url || null,
       },
       cta: "Contact seller",
     };

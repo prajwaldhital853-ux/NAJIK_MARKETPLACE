@@ -853,3 +853,55 @@ export async function patchHomeBannerSlide(
 export async function deleteHomeBannerSlide(id: string) {
   return staffRequest<void>(`/api/admin/app-control/home-banners/${id}/`, { method: "DELETE" });
 }
+
+export type EngagementSummary = {
+  comment_count: number;
+  review_count: number;
+  comment_hidden: number;
+  review_hidden: number;
+  rating_avg: number;
+  five_star: number;
+};
+
+export type EngagementRow = {
+  id: string;
+  kind: "comment" | "review";
+  listing_id: string;
+  listing_title: string;
+  listing_owner_id: string;
+  listing_owner_name: string;
+  listing_city: string;
+  author_id: string;
+  author_name: string;
+  rating: number | null;
+  text: string;
+  created_at: string;
+  is_hidden: boolean;
+};
+
+export async function getEngagementSummary() {
+  return staffRequest<EngagementSummary>("/api/admin/listings/engagement/summary/");
+}
+
+export async function listEngagement(params?: { kind?: "all" | "comment" | "review"; listing?: string; hidden?: boolean }) {
+  const qs = new URLSearchParams();
+  if (params?.kind && params.kind !== "all") qs.set("kind", params.kind);
+  if (params?.listing) qs.set("listing", params.listing);
+  if (params?.hidden) qs.set("hidden", "1");
+  const suffix = qs.toString() ? `?${qs.toString()}` : "";
+  return staffRequest<EngagementRow[]>(`/api/admin/listings/engagement/${suffix}`);
+}
+
+export async function patchEngagementComment(id: string, action: "hide" | "show" | "delete") {
+  return staffRequest<{ id: string; is_hidden: boolean }>(`/api/admin/listings/comments/${id}/`, {
+    method: "PATCH",
+    body: JSON.stringify({ action }),
+  });
+}
+
+export async function patchEngagementReview(id: string, action: "hide" | "show" | "delete") {
+  return staffRequest<{ id: string; is_hidden: boolean }>(`/api/admin/listings/seller-reviews/${id}/`, {
+    method: "PATCH",
+    body: JSON.stringify({ action }),
+  });
+}

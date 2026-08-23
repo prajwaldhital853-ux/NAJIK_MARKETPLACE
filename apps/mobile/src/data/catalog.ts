@@ -34,6 +34,7 @@ export type CatalogItem = {
   urgent?: boolean;
   urgentEndsAt?: string;
   distanceKm?: number;
+  viewCount?: number;
   apiCategory?: string;
 };
 

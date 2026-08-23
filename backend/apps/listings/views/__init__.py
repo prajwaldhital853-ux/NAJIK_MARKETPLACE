@@ -357,7 +357,16 @@ class ListingCommentView(APIView):
         listing = get_object_or_404(Listing, pk=pk, status=Listing.STATUS_APPROVED)
         serializer = ListingCommentWriteSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        ListingComment.objects.create(listing=listing, author=request.user, text=serializer.validated_data["text"].strip())
+        parent = None
+        parent_id = serializer.validated_data.get("parent_id")
+        if parent_id:
+            parent = get_object_or_404(ListingComment, pk=parent_id, listing=listing)
+        ListingComment.objects.create(
+            listing=listing,
+            author=request.user,
+            parent=parent,
+            text=serializer.validated_data["text"].strip(),
+        )
         listing = listing_queryset().get(pk=listing.pk)
         return Response(ListingSerializer(listing, context={"request": request}).data, status=status.HTTP_201_CREATED)
 
@@ -396,6 +405,43 @@ class ListingSaveView(APIView):
         return Response(ListingSerializer(listing, context={"request": request}).data)
 
 
+class SavedListingsView(APIView):
+    authentication_classes = [AppJWTAuthentication]
+    permission_classes = [IsAppUser]
+
+    def get(self, request):
+        ids = ListingSave.objects.filter(user=request.user).values_list("listing_id", flat=True)
+        items = exclude_sold_listings(
+            listing_queryset().filter(pk__in=ids, status=Listing.STATUS_APPROVED)
+        ).order_by("-created_at")[:200]
+        return Response(ListingSerializer(items, many=True, context={"request": request}).data)
+
+
+class MyReviewsGivenView(APIView):
+    authentication_classes = [AppJWTAuthentication]
+    permission_classes = [IsAppUser]
+
+    def get(self, request):
+        rows = SellerReview.objects.filter(author=request.user).select_related("seller", "listing").order_by("-created_at")[:100]
+        out = []
+        for row in rows:
+            seller = row.seller
+            listing = row.listing
+            out.append(
+                {
+                    "id": str(row.id),
+                    "rating": row.rating,
+                    "text": row.text,
+                    "created_at": row.created_at.isoformat(),
+                    "seller_id": str(seller.id),
+                    "seller_name": seller.full_name or seller.phone or "Seller",
+                    "listing_id": str(listing.id) if listing else "",
+                    "listing_title": listing.title if listing else "",
+                }
+            )
+        return Response(out)
+
+
 class StaffListingListView(APIView):
     authentication_classes = [StaffJWTAuthentication]
     permission_classes = [IsStaffUser]
@@ -414,6 +460,8 @@ class StaffListingListView(APIView):
         owner = (request.query_params.get("owner") or "").strip()
         if owner:
             items = items.filter(owner_id=owner)
+        if request.query_params.get("urgent") == "1":
+            items = items.filter(active_urgent_filter())
         return Response(ListingSerializer(items, many=True, context={"request": request}).data)
 
 

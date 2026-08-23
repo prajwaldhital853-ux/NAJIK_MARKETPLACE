@@ -102,6 +102,7 @@ export function listingToCatalog(row: ApiListing): CatalogItem {
     lng: row.lng,
     rating: row.rating_avg || 0,
     reviewCount: row.review_count || 0,
+    viewCount: row.view_count || 0,
     verified: Boolean(row.seller_verified),
     available: Boolean(extras.availability),
     sold: extras.sold === true || String(extras.sold || "") === "true",

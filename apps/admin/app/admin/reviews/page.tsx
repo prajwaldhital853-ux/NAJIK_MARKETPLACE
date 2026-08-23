@@ -128,8 +128,8 @@ export default function ReviewsPage() {
           </Btn>
         ))}
       </div>
-      <div className="overflow-hidden rounded-2xl border border-line bg-white">
-        <table className="w-full text-left text-sm">
+      <div className="overflow-hidden rounded-2xl border border-line bg-card">
+        <table className="w-full text-left text-sm text-ink">
           <thead className="bg-elevated text-xs uppercase tracking-wide text-muted">
             <tr>
               <th className="px-4 py-3">Listing</th>
@@ -145,7 +145,7 @@ export default function ReviewsPage() {
             {filtered.map((row) => (
               <tr
                 key={`${row.kind}-${row.id}`}
-                className="cursor-pointer border-t border-line hover:bg-elevated/60"
+                className="cursor-pointer border-t border-line hover:bg-elevated/60 text-ink"
                 onClick={() => {
                   setOpenId(row.id);
                   writeTab(tab, row.id);
@@ -171,7 +171,7 @@ export default function ReviewsPage() {
         </table>
       </div>
       {open ? (
-        <div className="rounded-2xl border border-line bg-white p-5 shadow-card">
+        <div className="rounded-2xl border border-line bg-card p-5 shadow-card">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <p className="text-xs font-bold uppercase tracking-wide text-muted">{open.kind}</p>

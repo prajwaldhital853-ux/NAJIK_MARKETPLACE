@@ -13,7 +13,7 @@ import { ADMIN_POLL_MS } from "@/lib/live-inbox";
 import { deleteStaffListing, listStaffListings, patchStaffListing, type StaffListing } from "@/lib/staff-api";
 import { UrgentListingControls } from "./urgent-listing-controls";
 
-const TABS = ["Pending", "All", "Approved", "Rejected", "Deactivated"] as const;
+const TABS = ["Pending", "All", "Approved", "Rejected", "Deactivated", "Urgent"] as const;
 
 function tabFromParam(raw: string | null): (typeof TABS)[number] {
   if (!raw) return "All";
@@ -165,7 +165,9 @@ export function ListingModeration({
         ? items
         : tab === "Pending"
           ? items.filter((i) => i.status === "pending" || i.has_pending_edit)
-          : items.filter((i) => i.status === tab.toLowerCase());
+          : tab === "Urgent"
+            ? items.filter((i) => i.is_urgent)
+            : items.filter((i) => i.status === tab.toLowerCase());
     if (featuredOnly) filtered = filtered.filter((i) => i.is_promoted || i.promote_requested);
     const typeFilter = params.get("type");
     if (typeFilter) {

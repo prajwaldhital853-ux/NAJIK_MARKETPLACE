@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useNavigation } from "@react-navigation/native";
-import { useEffect, useMemo, useState } from "react";
+import { useFocusEffect, useNavigation } from "@react-navigation/native";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Alert, Dimensions, Image, Modal, Pressable, ScrollView, Text, View } from "react-native";
 import { AppHeader } from "../components/AppHeader";
 import { Avatar } from "../components/Avatar";
@@ -11,9 +11,11 @@ import { SellerProfileEditModal } from "../components/SellerProfileEditModal";
 import { AccountStatusCard, ListingAdminNotesCard, StaffWarningCard } from "../components/StaffWarningBanner";
 import { useAuth } from "../context/AuthContext";
 import { isPendingProvider, isProvider, isRejectedProvider, isVerifiedProvider, isAccountRestricted } from "../demo";
-import { fetchMyListings, fetchSellerProfile, type ApiListing } from "../listingsApi";
+import { fetchMyListings, fetchMyReviewsGiven, fetchSavedListings, fetchSellerProfile, type ApiListing } from "../listingsApi";
+import { getRecentViewIds } from "../listingViews";
+import { listChatThreads } from "../chatApi";
 import { subscribeListingsChanged } from "../listingsRefresh";
-import { openProviderIdCard, openSellerPage } from "../navigation/browse";
+import { openBuyerRecentViews, openBuyerReviewsGiven, openProviderIdCard, openSellerPage } from "../navigation/browse";
 import { choosePhoto } from "../pickPhoto";
 import { colors, shadow } from "../theme";
 
@@ -386,19 +388,44 @@ function BuyerProfile() {
   const email = user?.email || "";
   const photo = user?.photo_uri || "";
   const location = user?.address || "";
+  const [savedCount, setSavedCount] = useState(0);
+  const [inquiriesCount, setInquiriesCount] = useState(0);
+  const [recentCount, setRecentCount] = useState(0);
+  const [reviewsCount, setReviewsCount] = useState(0);
+
+  const loadCounts = useCallback(() => {
+    void fetchSavedListings()
+      .then((rows) => setSavedCount(rows.length))
+      .catch(() => setSavedCount(0));
+    void listChatThreads()
+      .then((rows) => setInquiriesCount(rows.length))
+      .catch(() => setInquiriesCount(0));
+    void getRecentViewIds()
+      .then((ids) => setRecentCount(ids.length))
+      .catch(() => setRecentCount(0));
+    void fetchMyReviewsGiven()
+      .then((rows) => setReviewsCount(rows.length))
+      .catch(() => setReviewsCount(0));
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadCounts();
+    }, [loadCounts]),
+  );
 
   const stats = [
-    { icon: "heart" as const, color: GREEN, bg: "#E7F6EC", value: "0", label: "Saved Items", tab: "Saved" },
-    { icon: "chatbubble-ellipses" as const, color: "#7C3AED", bg: "#F1E9FF", value: "0", label: "Inquiries", tab: "Explore" },
-    { icon: "time" as const, color: "#2563EB", bg: "#E8F1FE", value: "0", label: "Recently Viewed", tab: "Explore" },
-    { icon: "star" as const, color: "#EA580C", bg: "#FFF1E0", value: "0", label: "Reviews Given", tab: "Explore" },
+    { icon: "heart" as const, color: GREEN, bg: "#E7F6EC", value: String(savedCount), label: "Saved Items", onPress: () => navigation.jumpTo("Saved") },
+    { icon: "chatbubble-ellipses" as const, color: "#7C3AED", bg: "#F1E9FF", value: String(inquiriesCount), label: "Inquiries", onPress: () => navigation.jumpTo("Messages") },
+    { icon: "time" as const, color: "#2563EB", bg: "#E8F1FE", value: String(recentCount), label: "Recently Viewed", onPress: () => openBuyerRecentViews(navigation) },
+    { icon: "star" as const, color: "#EA580C", bg: "#FFF1E0", value: String(reviewsCount), label: "Reviews Given", onPress: () => openBuyerReviewsGiven(navigation) },
   ];
 
   const activity = [
-    { icon: "bookmark" as const, color: GREEN, bg: "#E7F6EC", title: "Saved Items", sub: "View your saved listings.", tab: "Saved" },
-    { icon: "help-circle" as const, color: "#6D28D9", bg: "#F1E9FF", title: "My Inquiries", sub: "Track your inquiries.", tab: "Explore" },
-    { icon: "eye" as const, color: "#1D4ED8", bg: "#E8F1FE", title: "Recently Viewed", sub: "Listings you recently viewed.", tab: "Explore" },
-    { icon: "chatbubble" as const, color: "#C2410C", bg: "#FFF1E0", title: "My Reviews", sub: "Reviews you've shared.", tab: "Explore" },
+    { icon: "bookmark" as const, color: GREEN, bg: "#E7F6EC", title: "Saved Items", sub: "View your saved listings.", onPress: () => navigation.jumpTo("Saved") },
+    { icon: "help-circle" as const, color: "#6D28D9", bg: "#F1E9FF", title: "My Inquiries", sub: "Track your messages.", onPress: () => navigation.jumpTo("Messages") },
+    { icon: "eye" as const, color: "#1D4ED8", bg: "#E8F1FE", title: "Recently Viewed", sub: "Last 10 listings you opened.", onPress: () => openBuyerRecentViews(navigation) },
+    { icon: "chatbubble" as const, color: "#C2410C", bg: "#FFF1E0", title: "My Reviews", sub: "Ratings you've given sellers.", onPress: () => openBuyerReviewsGiven(navigation) },
   ];
 
   const details = [
@@ -485,7 +512,7 @@ function BuyerProfile() {
 
         <View style={{ marginTop: 12, backgroundColor: "#fff", borderRadius: 16, paddingVertical: 14, flexDirection: "row", ...shadow.card }}>
           {stats.map((item) => (
-            <PressScale key={item.label} onPress={() => navigation.jumpTo(item.tab)} style={{ flex: 1, alignItems: "center" }}>
+            <PressScale key={item.label} onPress={item.onPress} style={{ flex: 1, alignItems: "center" }}>
               <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: item.bg, alignItems: "center", justifyContent: "center" }}>
                 <Ionicons name={item.icon} size={18} color={item.color} />
               </View>
@@ -503,7 +530,7 @@ function BuyerProfile() {
           {activity.map((item) => (
             <PressScale
               key={item.title}
-              onPress={() => navigation.jumpTo(item.tab)}
+              onPress={item.onPress}
               style={{
                 width: (Dimensions.get("window").width - 16 * 2 - 10) / 2,
                 backgroundColor: item.bg,

@@ -34,6 +34,7 @@ export function BookingsBody({ showSellers = false }: { showSellers?: boolean })
   const route = useRoute<any>();
   const { dismissTarget } = useInbox();
   const [rows, setRows] = useState<ApiBooking[]>([]);
+  const [loading, setLoading] = useState(false);
   const [tab, setTab] = useState<"mine" | "sellers">(showSellers ? "sellers" : "mine");
   const [filter, setFilter] = useState("All");
   const [q, setQ] = useState("");
@@ -41,7 +42,11 @@ export function BookingsBody({ showSellers = false }: { showSellers?: boolean })
   const [sellers, setSellers] = useState<{ id: string; name: string; category: string; location: string; item: string; listingId: string; listingTitle: string; photo?: string }[]>([]);
 
   const load = useCallback(() => {
-    void fetchBookings().then(setRows).catch(() => setRows([]));
+    setLoading(true);
+    void fetchBookings()
+      .then(setRows)
+      .catch(() => setRows([]))
+      .finally(() => setLoading(false));
   }, []);
 
   useFocusEffect(
@@ -195,7 +200,9 @@ export function BookingsBody({ showSellers = false }: { showSellers?: boolean })
         ) : (
           <Text style={{ textAlign: "center", color: "#8A8F98", marginTop: 24 }}>No sellers match this filter.</Text>
         )
-      ) : (
+      ) : loading ? (
+        <Text style={{ textAlign: "center", color: "#8A8F98", marginTop: 24 }}>Loading bookings…</Text>
+      ) : list.length ? (
         list.map((row) => (
           <View
             key={row.id}
@@ -238,6 +245,8 @@ export function BookingsBody({ showSellers = false }: { showSellers?: boolean })
             </View>
           </View>
         ))
+      ) : (
+        <Text style={{ textAlign: "center", color: "#8A8F98", marginTop: 24 }}>No bookings in this filter.</Text>
       )}
 
       {form ? (

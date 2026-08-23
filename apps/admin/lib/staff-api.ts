@@ -248,11 +248,12 @@ export type StaffListing = {
   owner_id: string;
 };
 
-export async function listStaffListings(query?: { category?: string; status?: string; owner?: string }) {
+export async function listStaffListings(query?: { category?: string; status?: string; owner?: string; urgent?: boolean }) {
   const params = new URLSearchParams();
   if (query?.category) params.set("category", query.category);
   if (query?.status) params.set("status", query.status);
   if (query?.owner) params.set("owner", query.owner);
+  if (query?.urgent) params.set("urgent", "1");
   const suffix = params.toString() ? `?${params.toString()}` : "";
   return staffRequest<StaffListing[]>(`/api/admin/listings/${suffix}`);
 }
@@ -904,4 +905,30 @@ export async function patchEngagementReview(id: string, action: "hide" | "show" 
     method: "PATCH",
     body: JSON.stringify({ action }),
   });
+}
+
+export type StaffBooking = {
+  id: string;
+  listing: string;
+  listing_title: string;
+  listing_owner_name: string;
+  listing_owner_id: string;
+  requester: string;
+  requester_name: string;
+  recipient: string;
+  recipient_name: string;
+  scheduled_at: string;
+  location: string;
+  city: string;
+  item: string;
+  contact_name: string;
+  contact_phone: string;
+  note: string;
+  status: "pending" | "accepted" | "rejected" | "cancelled";
+  created_at: string;
+};
+
+export async function listStaffBookings(status?: string) {
+  const suffix = status ? `?status=${encodeURIComponent(status)}` : "";
+  return staffRequest<StaffBooking[]>(`/api/admin/listings/bookings/${suffix}`);
 }

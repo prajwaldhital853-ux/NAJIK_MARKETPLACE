@@ -41,7 +41,15 @@ export type ApiListing = {
   review_count: number;
   rating_avg: number;
   seller_verified: boolean;
-  comments: { id: string; author_name: string; text: string; created_at: string }[];
+  comments: {
+    id: string;
+    author_id?: string;
+    author_name: string;
+    text: string;
+    created_at: string;
+    parent?: string | null;
+    replies?: { id: string; author_id?: string; author_name: string; text: string; created_at: string; parent?: string | null }[];
+  }[];
   reviews: { id: string; author_name: string; rating: number; text: string; created_at: string }[];
   has_pending_edit: boolean;
   pending_edit: Record<string, unknown>;
@@ -178,12 +186,31 @@ export async function setListingSold(id: string, sold: boolean) {
   return row;
 }
 
-export async function postListingComment(id: string, text: string) {
+export async function fetchSavedListings() {
+  return withAppAuth((token) => api<ApiListing[]>("/api/listings/saved/", { token }));
+}
+
+export type MyReviewGiven = {
+  id: string;
+  rating: number;
+  text: string;
+  created_at: string;
+  seller_id: string;
+  seller_name: string;
+  listing_id: string;
+  listing_title: string;
+};
+
+export async function fetchMyReviewsGiven() {
+  return withAppAuth((token) => api<MyReviewGiven[]>("/api/listings/me/reviews-given/", { token }));
+}
+
+export async function postListingComment(id: string, text: string, parentId?: string) {
   return withAppAuth((token) =>
     api<ApiListing>(`/api/listings/${id}/comments/`, {
       method: "POST",
       token,
-      body: JSON.stringify({ text }),
+      body: JSON.stringify({ text, parent_id: parentId || undefined }),
     }),
   );
 }

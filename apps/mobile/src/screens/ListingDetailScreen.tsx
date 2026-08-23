@@ -3,6 +3,7 @@ import { useNavigation, useRoute, useFocusEffect } from "@react-navigation/nativ
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
+  ActivityIndicator,
   Dimensions,
   FlatList,
   Image,
@@ -34,6 +35,7 @@ import { catalogMeta, listingById, type CatalogItem } from "../data/catalog";
 import { apiCategoryForKey, liveListingById, listingsToCatalog, listingToCatalog } from "../data/liveListings";
 import { rankSimilarListings, relatedKeywordsFor } from "../data/similarListings";
 import { fetchListing, fetchListingFeed, postListingComment, postListingReview, toggleListingSave, type ApiListing } from "../listingsApi";
+import { recordListingView } from "../listingViews";
 import { emitListingsChanged, subscribeListingsChanged } from "../listingsRefresh";
 import { openCategory, openChatThread, openMapSearch, openSellerProfile } from "../navigation/browse";
 import { richFor, type Review } from "../data/listingDetails";
@@ -75,6 +77,7 @@ export function ListingDetailScreen() {
         .then((row) => {
           setLive(row);
           setItem(listingToCatalog(row));
+          void recordListingView(row.id);
         })
         .catch(() => {
           if (!cached) setItem(undefined);
@@ -101,7 +104,8 @@ export function ListingDetailScreen() {
     <View style={{ flex: 1, backgroundColor: "#fff" }}>
       <AppHeader onClose={() => navigation.goBack()} showPro={isOwner} />
       <KeyboardScreen
-        contentStyle={{ paddingBottom: 28 }}
+        adjustKeyboardInsets={true}
+        contentStyle={{ paddingBottom: 100 }}
         style={{ backgroundColor: "#fff" }}
         onRefresh={async () => {
           if (!/^[0-9a-f-]{36}$/i.test(id)) {
@@ -163,6 +167,9 @@ function ListingBody({
   const [reviewText, setReviewText] = useState("");
   const [rating, setRating] = useState(5);
   const [busy, setBusy] = useState(false);
+  const [commentBusy, setCommentBusy] = useState(false);
+  const [reviewBusy, setReviewBusy] = useState(false);
+  const [replyTo, setReplyTo] = useState<{ id: string; name: string } | null>(null);
   const [reportOpen, setReportOpen] = useState(false);
   const marketplace = item.key === "used" || item.key === "electronics";
 
@@ -524,7 +531,7 @@ function ListingBody({
       {tab === "comments" ? (
         <CommentsTab
           reviews={rich.reviews}
-          comments={(live?.comments || []).map((row) => ({ name: row.author_name || "Buyer", text: row.text, time: row.created_at }))}
+          comments={live?.comments || []}
           comment={comment}
           setComment={setComment}
           reviewText={reviewText}
@@ -532,27 +539,33 @@ function ListingBody({
           rating={rating}
           setRating={setRating}
           canReview={!isOwner && Boolean(live)}
+          replyTo={replyTo}
+          setReplyTo={setReplyTo}
+          commentBusy={commentBusy}
+          reviewBusy={reviewBusy}
+          isOwner={isOwner}
           onPost={() => {
-            if (!live || !comment.trim() || busy) return;
-            setBusy(true);
-            void postListingComment(live.id, comment.trim())
+            if (!live || !comment.trim() || commentBusy) return;
+            setCommentBusy(true);
+            void postListingComment(live.id, comment.trim(), replyTo?.id)
               .then((row) => {
                 onSaved(row);
                 setComment("");
+                setReplyTo(null);
               })
               .catch((err) => Alert.alert("Comment", err instanceof Error ? err.message : "Sign in to comment."))
-              .finally(() => setBusy(false));
+              .finally(() => setCommentBusy(false));
           }}
           onReview={() => {
-            if (!live || busy) return;
-            setBusy(true);
+            if (!live || reviewBusy) return;
+            setReviewBusy(true);
             void postListingReview(live.id, rating, reviewText.trim())
               .then((row) => {
                 onSaved(row);
                 setReviewText("");
               })
               .catch((err) => Alert.alert("Review", err instanceof Error ? err.message : "Sign in to rate this seller."))
-              .finally(() => setBusy(false));
+              .finally(() => setReviewBusy(false));
           }}
         />
       ) : null}
@@ -781,11 +794,16 @@ function CommentsTab({
   rating,
   setRating,
   canReview,
+  replyTo,
+  setReplyTo,
+  commentBusy,
+  reviewBusy,
+  isOwner,
   onPost,
   onReview,
 }: {
   reviews: Review[];
-  comments: { name: string; text: string; time: string }[];
+  comments: ApiListing["comments"];
   comment: string;
   setComment: (v: string) => void;
   reviewText: string;
@@ -793,44 +811,74 @@ function CommentsTab({
   rating: number;
   setRating: (v: number) => void;
   canReview: boolean;
+  replyTo: { id: string; name: string } | null;
+  setReplyTo: (v: { id: string; name: string } | null) => void;
+  commentBusy: boolean;
+  reviewBusy: boolean;
+  isOwner: boolean;
   onPost: () => void;
   onReview: () => void;
 }) {
-  const { onInputFocus } = useKeyboardScroll();
-  const total = reviews.length + comments.length;
+  const { onInputFocus, scrollAnchorIntoView } = useKeyboardScroll();
+  const formRef = useRef<View>(null);
+  const replyCount = comments.reduce((sum, row) => sum + (row.replies?.length || 0), 0);
+  const total = reviews.length + comments.length + replyCount;
+  const scrollable = total > 6;
+
+  function focusCommentField() {
+    onInputFocus();
+    scrollAnchorIntoView(formRef.current);
+  }
+
   return (
     <View style={{ paddingHorizontal: 16, paddingTop: 14 }}>
       {total === 0 ? (
         <Text style={{ color: "#6B7280", fontSize: 13, marginBottom: 12 }}>No comments or reviews yet.</Text>
       ) : (
-        <ScrollView
-          nestedScrollEnabled
-          showsVerticalScrollIndicator
-          style={{ maxHeight: 328 }}
-          contentContainerStyle={{ paddingBottom: 4 }}
-        >
+        <ScrollView nestedScrollEnabled showsVerticalScrollIndicator={scrollable} style={{ maxHeight: scrollable ? 360 : undefined }} contentContainerStyle={{ paddingBottom: 4 }}>
           {reviews.map((review) => (
             <CommentRow key={`${review.name}-${review.text}`} review={review} />
           ))}
-          {comments.map((row, i) => (
-            <View key={`${row.time}-${i}`} style={{ paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: LINE }}>
-              <Text style={{ fontWeight: "700", fontSize: 13 }}>{row.name}</Text>
+          {comments.map((row) => (
+            <View key={row.id} style={{ paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: LINE }}>
+              <Text style={{ fontWeight: "700", fontSize: 13 }}>{row.author_name || "User"}</Text>
               <Text style={{ color: "#4B5563", fontSize: 13, marginTop: 6, lineHeight: 20 }}>{row.text}</Text>
+              <Pressable onPress={() => setReplyTo({ id: row.id, name: row.author_name || "User" })} style={{ marginTop: 6 }}>
+                <Text style={{ color: GREEN, fontWeight: "700", fontSize: 12 }}>Reply</Text>
+              </Pressable>
+              {(row.replies || []).map((reply) => (
+                <View key={reply.id} style={{ marginTop: 10, marginLeft: 14, paddingLeft: 10, borderLeftWidth: 2, borderLeftColor: "#E5E7EB" }}>
+                  <Text style={{ fontWeight: "700", fontSize: 12 }}>{reply.author_name}</Text>
+                  <Text style={{ color: "#4B5563", fontSize: 12, marginTop: 4, lineHeight: 18 }}>{reply.text}</Text>
+                  <Pressable onPress={() => setReplyTo({ id: row.id, name: reply.author_name })} style={{ marginTop: 4 }}>
+                    <Text style={{ color: GREEN, fontWeight: "700", fontSize: 11 }}>Reply</Text>
+                  </Pressable>
+                </View>
+              ))}
             </View>
           ))}
         </ScrollView>
       )}
-      <View style={{ flexDirection: "row", alignItems: "center", marginTop: 14, gap: 8 }}>
+      {replyTo ? (
+        <Pressable onPress={() => setReplyTo(null)} style={{ marginTop: 10, flexDirection: "row", alignItems: "center", gap: 6 }}>
+          <Text style={{ color: "#6B7280", fontSize: 12 }}>Replying to {replyTo.name}</Text>
+          <Text style={{ color: GREEN, fontWeight: "700", fontSize: 12 }}>Cancel</Text>
+        </Pressable>
+      ) : null}
+      <View ref={formRef} collapsable={false} style={{ flexDirection: "row", alignItems: "center", marginTop: 14, gap: 8 }}>
         <TextInput
           value={comment}
           onChangeText={setComment}
-          onFocus={onInputFocus}
-          placeholder="Write a comment…"
+          onFocus={focusCommentField}
+          placeholder={isOwner ? "Reply to a buyer…" : "Write a comment…"}
           placeholderTextColor="#9AA0A6"
           style={{ flex: 1, borderWidth: 1, borderColor: LINE, borderRadius: 6, height: 44, paddingHorizontal: 12, fontSize: 13 }}
         />
-        <PressScale onPress={onPost} style={{ backgroundColor: GREEN, height: 44, paddingHorizontal: 14, borderRadius: 6, alignItems: "center", justifyContent: "center" }}>
-          <Text style={{ color: "#fff", fontWeight: "800", fontSize: 13 }}>Post</Text>
+        <PressScale
+          onPress={onPost}
+          style={{ backgroundColor: GREEN, height: 44, paddingHorizontal: 14, borderRadius: 6, alignItems: "center", justifyContent: "center", minWidth: 72, opacity: commentBusy ? 0.7 : 1 }}
+        >
+          {commentBusy ? <ActivityIndicator color="#fff" size="small" /> : <Text style={{ color: "#fff", fontWeight: "800", fontSize: 13 }}>Post</Text>}
         </PressScale>
       </View>
       {canReview ? (
@@ -846,14 +894,17 @@ function CommentsTab({
           <TextInput
             value={reviewText}
             onChangeText={setReviewText}
-            onFocus={onInputFocus}
+            onFocus={focusCommentField}
             placeholder="Optional note about this seller"
             placeholderTextColor="#9AA0A6"
             style={{ borderWidth: 1, borderColor: LINE, borderRadius: 6, minHeight: 70, paddingHorizontal: 12, paddingVertical: 10, fontSize: 13, textAlignVertical: "top" }}
             multiline
           />
-          <PressScale onPress={onReview} style={{ marginTop: 8, backgroundColor: GREEN, height: 44, borderRadius: 6, alignItems: "center", justifyContent: "center" }}>
-            <Text style={{ color: "#fff", fontWeight: "800" }}>Submit rating</Text>
+          <PressScale
+            onPress={onReview}
+            style={{ marginTop: 8, backgroundColor: GREEN, height: 44, borderRadius: 6, alignItems: "center", justifyContent: "center", opacity: reviewBusy ? 0.7 : 1 }}
+          >
+            {reviewBusy ? <ActivityIndicator color="#fff" /> : <Text style={{ color: "#fff", fontWeight: "800" }}>Submit rating</Text>}
           </PressScale>
         </View>
       ) : null}

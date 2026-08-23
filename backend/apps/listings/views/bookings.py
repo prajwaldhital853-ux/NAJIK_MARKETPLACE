@@ -14,7 +14,8 @@ from apps.chat.models import ChatMessage, ChatThread
 from apps.chat.presence import is_viewing_thread
 from apps.listings.models import Booking, Listing
 from apps.notifications.models import InboxNotice
-from apps.notifications.services import notify_user
+from apps.staff.authentication import StaffJWTAuthentication
+from apps.staff.permissions import IsStaffUser
 
 
 class BookingSerializer(serializers.ModelSerializer):
@@ -268,3 +269,47 @@ class BookingActionView(APIView):
             sender_name=actor,
         )
         return Response(BookingSerializer(booking, context={"request": request}).data)
+
+
+class StaffBookingSerializer(serializers.ModelSerializer):
+    listing_title = serializers.CharField(source="listing.title", read_only=True)
+    listing_owner_name = serializers.CharField(source="listing.owner.full_name", read_only=True)
+    listing_owner_id = serializers.UUIDField(source="listing.owner_id", read_only=True)
+    requester_name = serializers.CharField(source="requester.full_name", read_only=True)
+    recipient_name = serializers.CharField(source="recipient.full_name", read_only=True)
+    city = serializers.CharField(source="listing.city", read_only=True)
+
+    class Meta:
+        model = Booking
+        fields = (
+            "id",
+            "listing",
+            "listing_title",
+            "listing_owner_name",
+            "listing_owner_id",
+            "requester",
+            "requester_name",
+            "recipient",
+            "recipient_name",
+            "scheduled_at",
+            "location",
+            "city",
+            "item",
+            "contact_name",
+            "contact_phone",
+            "note",
+            "status",
+            "created_at",
+        )
+
+
+class StaffBookingListView(APIView):
+    authentication_classes = [StaffJWTAuthentication]
+    permission_classes = [IsStaffUser]
+
+    def get(self, request):
+        items = Booking.objects.select_related("listing", "listing__owner", "requester", "recipient").order_by("-created_at")[:500]
+        status_filter = (request.query_params.get("status") or "").strip()
+        if status_filter:
+            items = items.filter(status=status_filter)
+        return Response(StaffBookingSerializer(items, many=True).data)

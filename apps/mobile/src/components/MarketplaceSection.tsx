@@ -1,5 +1,4 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useRef } from "react";
 import { ScrollView, Text, View, type NativeScrollEvent, type NativeSyntheticEvent } from "react-native";
 import type { CatalogItem } from "../data/catalog";
 import { colors } from "../theme";
@@ -19,7 +18,10 @@ type Props = {
   activeChip?: string;
   onChip?: (key: string) => void;
   onViewMore?: () => void;
+  viewMoreLabel?: string;
+  viewMoreColor?: string;
   emptyText?: string;
+  limit?: number;
 };
 
 export function MarketplaceSection({
@@ -32,75 +34,27 @@ export function MarketplaceSection({
   activeChip,
   onChip,
   onViewMore,
+  viewMoreLabel = "View All ›",
+  viewMoreColor = BLUE,
   emptyText,
+  limit = 10,
 }: Props) {
-  const railRef = useRef<ScrollView>(null);
-  const offsetRef = useRef(0);
-  const maxOffsetRef = useRef(0);
-
   if (!items.length && !emptyText && !chips) return null;
 
-  const canScrollRail = mode === "rail" && items.length > 1;
-
-  function onRailScroll(e: NativeSyntheticEvent<NativeScrollEvent>) {
-    offsetRef.current = e.nativeEvent.contentOffset.x;
-    const { contentSize, layoutMeasurement } = e.nativeEvent;
-    maxOffsetRef.current = Math.max(0, contentSize.width - layoutMeasurement.width);
-  }
-
-  function scrollRail(dir: -1 | 1) {
-    if (!railRef.current) return;
-    const step = 180;
-    const next = Math.max(0, Math.min(maxOffsetRef.current || 9999, offsetRef.current + dir * step));
-    railRef.current.scrollTo({ x: next, animated: true });
-    offsetRef.current = next;
-  }
+  const displayItems = items.slice(0, limit);
 
   return (
     <View style={{ marginTop: 20 }}>
       <View style={{ flexDirection: "row", alignItems: "center", marginBottom: chips ? 12 : 14 }}>
         <Ionicons name={icon} size={22} color={iconColor} />
-        <Text
-          style={{
-            flex: 1,
-            marginLeft: 8,
-            fontSize: 20,
-            fontWeight: "900",
-            color: TITLE,
-            letterSpacing: -0.3,
-          }}
-          numberOfLines={1}
-        >
+        <Text style={{ flex: 1, marginLeft: 8, fontSize: 20, fontWeight: "900", color: TITLE, letterSpacing: -0.3 }} numberOfLines={1}>
           {title}
         </Text>
-
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-          {onViewMore ? (
-            <PressScale
-              onPress={onViewMore}
-              style={{
-                borderWidth: 1.5,
-                borderColor: BLUE,
-                borderRadius: 8,
-                paddingHorizontal: 12,
-                paddingVertical: 6,
-                backgroundColor: "#fff",
-              }}
-            >
-              <Text style={{ color: BLUE, fontWeight: "700", fontSize: 12 }}>View More</Text>
-            </PressScale>
-          ) : null}
-          {canScrollRail ? (
-            <>
-              <PressScale onPress={() => scrollRail(-1)} hitSlop={8} style={{ padding: 2 }}>
-                <Ionicons name="arrow-back" size={18} color="#6B7280" />
-              </PressScale>
-              <PressScale onPress={() => scrollRail(1)} hitSlop={8} style={{ padding: 2 }}>
-                <Ionicons name="arrow-forward" size={18} color="#6B7280" />
-              </PressScale>
-            </>
-          ) : null}
-        </View>
+        {onViewMore ? (
+          <PressScale onPress={onViewMore}>
+            <Text style={{ color: viewMoreColor, fontWeight: "800", fontSize: 13 }}>{viewMoreLabel}</Text>
+          </PressScale>
+        ) : null}
       </View>
 
       {chips?.length ? (
@@ -111,12 +65,7 @@ export function MarketplaceSection({
               <PressScale
                 key={chip.key}
                 onPress={() => onChip?.(chip.key)}
-                style={{
-                  paddingHorizontal: 14,
-                  paddingVertical: 8,
-                  borderRadius: 999,
-                  backgroundColor: on ? BLUE : "#EEF0F3",
-                }}
+                style={{ paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999, backgroundColor: on ? BLUE : "#EEF0F3" }}
               >
                 <Text style={{ fontWeight: "700", fontSize: 12, color: on ? "#fff" : "#374151" }}>{chip.label}</Text>
               </PressScale>
@@ -125,18 +74,18 @@ export function MarketplaceSection({
         </ScrollView>
       ) : null}
 
-      {!items.length ? (
+      {!displayItems.length ? (
         emptyText ? (
           <View style={{ backgroundColor: "#fff", borderRadius: 14, padding: 16 }}>
             <Text style={{ color: colors.muted, textAlign: "center", fontSize: 13 }}>{emptyText}</Text>
           </View>
         ) : null
       ) : mode === "grid" ? (
-        <ListingGrid items={items} />
+        <ListingGrid items={displayItems} />
       ) : mode === "list" ? (
-        <ListingList items={items} />
+        <ListingList items={displayItems} />
       ) : (
-        <ListingRail items={items} scrollRef={railRef} onScroll={onRailScroll} />
+        <ListingRail items={displayItems} />
       )}
     </View>
   );

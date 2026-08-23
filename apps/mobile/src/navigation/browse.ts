@@ -70,3 +70,11 @@ export function openSellerProfile(navigation: { navigate: (...args: any[]) => vo
 export function openProviderIdCard(navigation: { navigate: (...args: any[]) => void }) {
   navigateNamed(navigation, "ProviderIdCard");
 }
+
+export function openBuyerReviewsGiven(navigation: { navigate: (...args: any[]) => void }) {
+  navigateNamed(navigation, "BuyerReviewsGiven");
+}
+
+export function openBuyerRecentViews(navigation: { navigate: (...args: any[]) => void }) {
+  navigateNamed(navigation, "BuyerRecentViews");
+}

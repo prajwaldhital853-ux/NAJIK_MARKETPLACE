@@ -89,10 +89,29 @@ class ListingPhotoSerializer(serializers.ModelSerializer):
 class ListingCommentSerializer(serializers.ModelSerializer):
     author_name = serializers.CharField(source="author.full_name", read_only=True)
     author_id = serializers.UUIDField(source="author.id", read_only=True)
+    replies = serializers.SerializerMethodField()
 
     class Meta:
         model = ListingComment
-        fields = ("id", "author_id", "author_name", "text", "created_at", "is_hidden")
+        fields = ("id", "author_id", "author_name", "text", "created_at", "is_hidden", "parent", "replies")
+        read_only_fields = fields
+
+    def get_replies(self, obj):
+        request = self.context.get("request")
+        is_staff = bool(request and request.path.startswith("/api/admin/"))
+        qs = obj.replies.select_related("author").order_by("created_at")
+        if not is_staff:
+            qs = qs.filter(is_hidden=False)
+        return ListingCommentReplySerializer(qs, many=True, context=self.context).data
+
+
+class ListingCommentReplySerializer(serializers.ModelSerializer):
+    author_name = serializers.CharField(source="author.full_name", read_only=True)
+    author_id = serializers.UUIDField(source="author.id", read_only=True)
+
+    class Meta:
+        model = ListingComment
+        fields = ("id", "author_id", "author_name", "text", "created_at", "is_hidden", "parent")
         read_only_fields = fields
 
 
@@ -194,10 +213,10 @@ class ListingSerializer(serializers.ModelSerializer):
 
     def get_comments(self, obj):
         _, _, _, is_staff = viewer_flags(self)
-        qs = obj.comments.all()
+        qs = obj.comments.filter(parent__isnull=True).select_related("author").prefetch_related("replies", "replies__author")
         if not is_staff:
             qs = qs.filter(is_hidden=False)
-        return ListingCommentSerializer(qs, many=True, context=self.context).data
+        return ListingCommentSerializer(qs.order_by("-created_at"), many=True, context=self.context).data
 
     def get_reviews(self, obj):
         _, _, _, is_staff = viewer_flags(self)
@@ -456,6 +475,7 @@ class ListingStatusSerializer(serializers.Serializer):
 
 class ListingCommentWriteSerializer(serializers.Serializer):
     text = serializers.CharField(min_length=1, max_length=1000)
+    parent_id = serializers.UUIDField(required=False, allow_null=True)
 
 
 class ListingReviewWriteSerializer(serializers.Serializer):

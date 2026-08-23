@@ -34,7 +34,7 @@ import {
   type ChatMessage,
   type ChatThread,
 } from "../chatApi";
-import { normTargetId } from "../inboxBridge";
+import { normTargetId, uuidFromNorm } from "../inboxBridge";
 import { useAuth } from "../context/AuthContext";
 import { useInbox } from "../context/InboxContext";
 import { isProvider } from "../demo";
@@ -68,7 +68,7 @@ export function ChatThreadScreen() {
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const { dismissTarget, refresh } = useInbox();
-  const id = String(route.params?.id ?? "");
+  const id = uuidFromNorm(String(route.params?.id ?? ""));
   const idRef = useRef(id);
   const [thread, setThread] = useState<ChatThread | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);

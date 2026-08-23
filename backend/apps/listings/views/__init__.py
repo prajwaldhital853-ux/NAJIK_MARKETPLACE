@@ -206,14 +206,12 @@ class PublicSellerProfileView(APIView):
             phone = seller.phone or ""
             email = seller.email or ""
             address = seller.address or ""
-        from apps.listings.serializers import SellerReviewSerializer, seller_reviews_for_owner
-        from django.db.models import Avg
+        from apps.listings.serializers import merged_seller_reviews_payload
 
-        review_rows = seller_reviews_for_owner(seller.id)
-        rating_agg = review_rows.aggregate(a=Avg("rating"))
-        rating_avg = round(rating_agg["a"] or 0, 1)
-        review_count = review_rows.count()
-        reviews = SellerReviewSerializer(review_rows[:50], many=True, context={"request": request}).data
+        review_payload = merged_seller_reviews_payload(seller.id, {"request": request}, limit=50)
+        reviews = review_payload["reviews"]
+        rating_avg = review_payload["rating_avg"]
+        review_count = review_payload["review_count"]
         display_name = business_name or (app.full_name if app else "") or seller.full_name or seller.phone or "NAJIK user"
         return Response(
             {
@@ -449,6 +447,16 @@ class MyReviewsGivenView(APIView):
                 }
             )
         return Response(out)
+
+
+class MySellerReviewsView(APIView):
+    authentication_classes = [AppJWTAuthentication]
+    permission_classes = [IsAppUser]
+
+    def get(self, request):
+        from apps.listings.serializers import merged_seller_reviews_payload
+
+        return Response(merged_seller_reviews_payload(request.user.id, {"request": request}, limit=100))
 
 
 class StaffListingListView(APIView):

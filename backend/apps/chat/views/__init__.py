@@ -180,7 +180,10 @@ class ChatMessageCreateView(APIView):
         other_thread = ChatThread.objects.filter(pk=thread.pk).first()
         if not is_viewing_thread(other, other_thread):
             sender_name = (request.user.full_name or request.user.phone or "Someone").strip()
-            notify_chat_message(other, sender_name, str(thread.id), preview)
+            try:
+                notify_chat_message(other, sender_name, str(thread.id), preview)
+            except Exception:
+                pass
         return Response(ChatMessageSerializer(msg, context={"request": request}).data, status=status.HTTP_201_CREATED)
 
 

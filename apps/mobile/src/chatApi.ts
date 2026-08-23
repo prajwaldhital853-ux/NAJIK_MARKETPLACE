@@ -1,5 +1,6 @@
 import { api } from "./api";
 import { withAppAuth } from "./authApi";
+import { uuidFromNorm } from "./inboxBridge";
 
 export type ChatParty = {
   id: string;
@@ -46,11 +47,12 @@ export type ChatThread = {
 };
 
 export async function pingChatPresence(threadId?: string | null) {
+  const id = threadId ? uuidFromNorm(threadId) : "";
   return withAppAuth((token) =>
     api<{ ok: boolean }>("/api/chat/presence/", {
       method: "POST",
       token,
-      body: JSON.stringify({ thread_id: threadId || "" }),
+      body: JSON.stringify({ thread_id: id }),
     }),
   );
 }
@@ -70,8 +72,9 @@ export async function startListingChat(listingId: string) {
 }
 
 export async function fetchChatThread(id: string, since?: string) {
-  const suffix = since ? `?since=${encodeURIComponent(since)}` : "";
-  return withAppAuth((token) => api<ChatThread>(`/api/chat/threads/${id}/${suffix}`, { token }));
+  const threadId = uuidFromNorm(id);
+  const qs = since ? `?since=${encodeURIComponent(since)}` : "";
+  return withAppAuth((token) => api<ChatThread>(`/api/chat/threads/${threadId}/${qs}`, { token }));
 }
 
 export async function sendChatMessage(
@@ -86,8 +89,9 @@ export async function sendChatMessage(
     location_label?: string;
   },
 ) {
+  const id = uuidFromNorm(threadId);
   return withAppAuth((token) =>
-    api<ChatMessage>(`/api/chat/threads/${threadId}/messages/`, {
+    api<ChatMessage>(`/api/chat/threads/${id}/messages/`, {
       method: "POST",
       token,
       body: JSON.stringify(body),
@@ -96,14 +100,16 @@ export async function sendChatMessage(
 }
 
 export async function blockChatThread(threadId: string) {
+  const id = uuidFromNorm(threadId);
   return withAppAuth((token) =>
-    api<ChatThread>(`/api/chat/threads/${threadId}/block/`, { method: "POST", token, body: JSON.stringify({}) }),
+    api<ChatThread>(`/api/chat/threads/${id}/block/`, { method: "POST", token, body: JSON.stringify({}) }),
   );
 }
 
 export async function reportChatThread(threadId: string, reason: string, severity: "normal" | "high" = "normal") {
+  const id = uuidFromNorm(threadId);
   return withAppAuth((token) =>
-    api<{ id: string; status: string }>(`/api/chat/threads/${threadId}/report/`, {
+    api<{ id: string; status: string }>(`/api/chat/threads/${id}/report/`, {
       method: "POST",
       token,
       body: JSON.stringify({ reason, severity }),

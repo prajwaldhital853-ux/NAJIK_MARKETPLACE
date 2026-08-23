@@ -61,8 +61,9 @@ def notify_chat_message(user, sender_name: str, thread_id: str, preview: str):
         existing.body = preview_text
         existing.sender_name = who[:120]
         existing.is_read = False
+        existing.target_id = raw_tid[:64]
         existing.created_at = now
-        existing.save(update_fields=["title", "body", "sender_name", "is_read", "created_at"])
+        existing.save(update_fields=["title", "body", "sender_name", "is_read", "target_id", "created_at"])
         return existing
 
     return InboxNotice.objects.create(
@@ -71,6 +72,6 @@ def notify_chat_message(user, sender_name: str, thread_id: str, preview: str):
         body=preview_text,
         kind=InboxNotice.KIND_MESSAGE,
         target="chat",
-        target_id=tid,
+        target_id=raw_tid[:64],
         sender_name=who[:120],
     )

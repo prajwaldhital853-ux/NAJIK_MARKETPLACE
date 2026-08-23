@@ -12,14 +12,13 @@ import { PressScale } from "../components/PressScale";
 import { SellerProfileEditModal } from "../components/SellerProfileEditModal";
 import { updateProviderPrivacySettings, fetchSellerApplication } from "../authApi";
 import { useAuth } from "../context/AuthContext";
-import { useInbox } from "../context/InboxContext";
-import { isPendingProvider, isRejectedProvider, isVerifiedProvider } from "../demo";
+import { useInbox, noticeSenderLabel, noticeKindLabel } from "../context/InboxContext";
+import { isPendingProvider, isRejectedProvider, isVerifiedProvider, isProvider } from "../demo";
 import { BookingsBody } from "./BookingsScreen";
 import {
   helpFaqs,
   payouts,
   promoPacks,
-  sellerNotes,
   sellerPageMeta,
   sellerSaved,
   weekBars,
@@ -28,8 +27,9 @@ import {
 import { ChatInboxList } from "./ChatInboxScreen";
 import { choosePhoto } from "../pickPhoto";
 import { openChatThread, openListing, openSellerPage } from "../navigation/browse";
+import type { InboxNotice } from "../inboxApi";
 import { fetchSellerEarningsSummary } from "../earningsApi";
-import { fetchSellerProfile, fetchMyListings, updateListing, type ApiListing } from "../listingsApi";
+import { fetchMyListings, fetchMySellerReviews, updateListing, type ApiListing } from "../listingsApi";
 import { createSellerLoadRequest, fetchSellerPaymentsMe, resolvePaymentAssetUrl } from "../paymentsApi";
 import { fetchReferEarnMe } from "../referralsApi";
 import { colors, shadow } from "../theme";
@@ -205,7 +205,6 @@ function serviceListingLive(item: ApiListing) {
 }
 
 function ReviewsBody() {
-  const { user } = useAuth();
   const [filter, setFilter] = useState("All");
   const [loading, setLoading] = useState(true);
   const [reviews, setReviews] = useState<
@@ -213,12 +212,11 @@ function ReviewsBody() {
   >([]);
   const [avgRating, setAvgRating] = useState(0);
 
-  useEffect(() => {
-    if (!user?.id) return;
+  const load = useCallback(() => {
     setLoading(true);
-    void fetchSellerProfile(user.id)
-      .then((profile) => {
-        const rows = (profile.reviews || []).map((row) => ({
+    void fetchMySellerReviews()
+      .then((payload) => {
+        const rows = (payload.reviews || []).map((row) => ({
           id: row.id,
           name: row.author_name || "Buyer",
           rating: row.rating,
@@ -227,14 +225,20 @@ function ReviewsBody() {
           listing: row.listing_title || "Listing",
         }));
         setReviews(rows);
-        setAvgRating(profile.rating_avg ?? (rows.length ? rows.reduce((s, r) => s + r.rating, 0) / rows.length : 0));
+        setAvgRating(payload.rating_avg ?? (rows.length ? rows.reduce((s, r) => s + r.rating, 0) / rows.length : 0));
       })
       .catch(() => {
         setReviews([]);
         setAvgRating(0);
       })
       .finally(() => setLoading(false));
-  }, [user?.id]);
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      load();
+    }, [load]),
+  );
 
   const dist = ratingDistribution(reviews);
   const list = reviews.filter((row) => filter === "All" || (filter === "5★" ? row.rating >= 5 : row.rating >= 4 && row.rating < 5));
@@ -246,25 +250,7 @@ function ReviewsBody() {
           {
             icon: "refresh-outline",
             label: "Refresh",
-            onPress: () => {
-              if (!user?.id) return;
-              setLoading(true);
-              void fetchSellerProfile(user.id)
-                .then((profile) => {
-                  const rows = (profile.reviews || []).map((row) => ({
-                    id: row.id,
-                    name: row.author_name || "Buyer",
-                    rating: row.rating,
-                    text: row.text,
-                    time: formatReviewWhen(row.created_at),
-                    listing: row.listing_title || "Listing",
-                  }));
-                  setReviews(rows);
-                  setAvgRating(profile.rating_avg ?? (rows.length ? rows.reduce((s, r) => s + r.rating, 0) / rows.length : 0));
-                })
-                .catch(() => {})
-                .finally(() => setLoading(false));
-            },
+            onPress: load,
           },
           { icon: "share-social-outline", label: "Share", onPress: () => void Share.share({ message: `See my ${avgRating.toFixed(1)} rating on NAJIK` }) },
         ]}
@@ -1312,31 +1298,78 @@ function KycBody() {
 }
 
 function NotesBody() {
+  const navigation = useNavigation<any>();
+  const { user } = useAuth();
+  const { items, unread, refresh, markAll, dismiss, dismissTarget } = useInbox();
   const [q, setQ] = useState("");
   const [filter, setFilter] = useState("All");
-  const [read, setRead] = useState<string[]>([]);
-  const unreadCount = sellerNotes.filter((row) => row.unread && !read.includes(row.id)).length;
-  const list = sellerNotes.filter((row) => {
-    const unread = row.unread && !read.includes(row.id);
-    if (filter === "Unread" && !unread) return false;
-    return `${row.title} ${row.sub}`.toLowerCase().includes(q.trim().toLowerCase()) || !q.trim();
+
+  useFocusEffect(
+    useCallback(() => {
+      void refresh();
+    }, [refresh]),
+  );
+
+  const list = items.filter((row) => {
+    const label = `${noticeSenderLabel(row)} ${row.title} ${row.body}`.toLowerCase();
+    if (filter === "Unread" && row.is_read) return false;
+    return label.includes(q.trim().toLowerCase()) || !q.trim();
   });
+
+  async function openNotice(item: InboxNotice) {
+    await dismiss(item.id);
+    if (item.target === "chat" && item.target_id) {
+      await dismissTarget({ target: "chat", target_id: item.target_id, kind: "message" });
+      openChatThread(navigation, item.target_id);
+      return;
+    }
+    if (item.target === "listing" && item.target_id) {
+      await dismissTarget({ target: "listing", target_id: item.target_id });
+      openListing(navigation, item.target_id);
+      return;
+    }
+    if (item.target === "booking" || item.kind === "booking") {
+      await dismissTarget({ kind: "booking", target_id: item.target_id || undefined });
+      openSellerPage(navigation, "bookings", { bookingId: item.target_id });
+    }
+  }
+
+  function noticeIcon(item: InboxNotice): keyof typeof Ionicons.glyphMap {
+    if (item.kind === "message") return "chatbubble-outline";
+    if (item.kind === "booking") return "calendar-outline";
+    if (item.kind === "listing") return "home-outline";
+    return "notifications-outline";
+  }
+
+  function noticeWhen(created_at: string) {
+    const d = new Date(created_at);
+    if (Number.isNaN(d.getTime())) return "";
+    const ms = Date.now() - d.getTime();
+    const m = Math.round(ms / 60000);
+    if (m < 1) return "Just now";
+    if (m < 60) return `${m}m ago`;
+    const h = Math.round(m / 60);
+    if (h < 24) return `${h}h ago`;
+    return d.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+  }
 
   return (
     <>
       <QuickRow
         items={[
-          { icon: "checkmark-done-outline", label: "Read all", onPress: () => setRead(sellerNotes.map((n) => n.id)) },
-          { icon: "notifications-off-outline", label: "Mute", onPress: () => Alert.alert("Muted", "Demo: quiet hours 10pm–7am.") },
-          { icon: "settings-outline", label: "Alerts", onPress: () => Alert.alert("Alerts", "Leads, visits, reviews.") },
-          { icon: "trash-outline", label: "Clear", onPress: () => setRead(sellerNotes.map((n) => n.id)) },
+          { icon: "refresh-outline", label: "Refresh", onPress: () => void refresh() },
+          {
+            icon: "checkmark-done-outline",
+            label: "Read all",
+            onPress: () => void markAll(),
+          },
         ]}
       />
       <StatStrip
         items={[
-          { n: String(unreadCount), l: "Unread" },
-          { n: String(sellerNotes.length), l: "Today" },
-          { n: "On", l: "Push" },
+          { n: String(unread), l: "Unread" },
+          { n: String(items.length), l: "Total" },
+          { n: isProvider(user) ? "On" : "On", l: "Alerts" },
         ]}
       />
       <SearchBox value={q} onChange={setQ} placeholder="Search alerts..." />
@@ -1345,39 +1378,49 @@ function NotesBody() {
         <View style={{ margin: 16, backgroundColor: "#fff", borderRadius: 18, paddingVertical: 40, paddingHorizontal: 20, alignItems: "center", ...shadow.card }}>
           <Ionicons name="notifications-outline" size={28} color={GREEN} />
           <Text style={{ fontWeight: "800", fontSize: 16, marginTop: 12 }}>No notifications yet</Text>
-          <Text style={{ color: "#6B7280", fontSize: 13, textAlign: "center", marginTop: 6 }}>Leads and account alerts will appear here.</Text>
+          <Text style={{ color: "#6B7280", fontSize: 13, textAlign: "center", marginTop: 6 }}>Messages, bookings, and listing alerts will appear here.</Text>
         </View>
       ) : (
-      list.map((row) => {
-        const unread = row.unread && !read.includes(row.id);
-        return (
-          <PressScale
-            key={row.id}
-            onPress={() => setRead((p) => (p.includes(row.id) ? p : [...p, row.id]))}
-            style={{
-              marginHorizontal: 16,
-              marginTop: 10,
-              backgroundColor: unread ? "#F3FBF5" : "#fff",
-              borderRadius: 16,
-              padding: 14,
-              flexDirection: "row",
-              ...shadow.card,
-            }}
-          >
-            <View style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: "#E7F6EC", alignItems: "center", justifyContent: "center" }}>
-              <Ionicons name={row.icon as keyof typeof Ionicons.glyphMap} size={18} color={GREEN} />
-            </View>
-            <View style={{ flex: 1, marginLeft: 12 }}>
-              <Text style={{ fontWeight: "800", fontSize: 13 }}>{row.title}</Text>
-              <Text style={{ color: "#6B7280", fontSize: 12, marginTop: 3 }}>{row.sub}</Text>
-            </View>
-            <View style={{ alignItems: "flex-end" }}>
-              <Text style={{ color: "#9AA0A6", fontSize: 10 }}>{row.time}</Text>
-              {unread ? <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: GREEN, marginTop: 8 }} /> : null}
-            </View>
-          </PressScale>
-        );
-      })
+        list.map((row) => {
+          const unreadRow = !row.is_read;
+          return (
+            <PressScale
+              key={row.id}
+              onPress={() => void openNotice(row)}
+              style={{
+                marginHorizontal: 16,
+                marginTop: 10,
+                backgroundColor: unreadRow ? "#F3FBF5" : "#fff",
+                borderRadius: 16,
+                padding: 14,
+                flexDirection: "row",
+                ...shadow.card,
+              }}
+            >
+              <View style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: "#E7F6EC", alignItems: "center", justifyContent: "center" }}>
+                <Ionicons name={noticeIcon(row)} size={18} color={GREEN} />
+              </View>
+              <View style={{ flex: 1, marginLeft: 12 }}>
+                {row.kind === "message" ? (
+                  <>
+                    <Text style={{ fontWeight: "800", fontSize: 13 }}>{noticeSenderLabel(row)}</Text>
+                    {row.body ? <Text style={{ color: "#6B7280", fontSize: 12, marginTop: 3 }} numberOfLines={2}>{row.body}</Text> : null}
+                  </>
+                ) : (
+                  <>
+                    <Text style={{ color: GREEN, fontSize: 10, fontWeight: "800" }}>{noticeKindLabel(row.kind)}</Text>
+                    <Text style={{ fontWeight: "800", fontSize: 13, marginTop: 2 }}>{noticeSenderLabel(row)}</Text>
+                    {row.body ? <Text style={{ color: "#6B7280", fontSize: 12, marginTop: 3 }} numberOfLines={2}>{row.body}</Text> : null}
+                  </>
+                )}
+              </View>
+              <View style={{ alignItems: "flex-end" }}>
+                <Text style={{ color: "#9AA0A6", fontSize: 10 }}>{noticeWhen(row.created_at)}</Text>
+                {unreadRow ? <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: GREEN, marginTop: 8 }} /> : null}
+              </View>
+            </PressScale>
+          );
+        })
       )}
     </>
   );

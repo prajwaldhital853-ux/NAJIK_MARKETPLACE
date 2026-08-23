@@ -70,6 +70,40 @@ def seller_reviews_for_owner(owner_id, is_staff: bool = False):
     return engagement_visible(qs, is_staff).order_by("-created_at")
 
 
+def merged_seller_reviews_payload(owner_id, context, limit: int = 50):
+    from django.db.models import Avg
+
+    request = context.get("request")
+    is_staff = bool(request and getattr(request, "path", "").startswith("/api/admin/"))
+    seller_rows = seller_reviews_for_owner(owner_id, is_staff=is_staff)
+    seller_data = SellerReviewSerializer(seller_rows[:limit], many=True, context=context).data
+    legacy_qs = ListingReview.objects.filter(listing__owner_id=owner_id).select_related("author", "listing")
+    if not is_staff:
+        legacy_qs = legacy_qs.filter(is_hidden=False)
+    legacy_data = ListingReviewSerializer(legacy_qs.order_by("-created_at")[:limit], many=True, context=context).data
+    seen = {str(row["author_id"]) for row in seller_data}
+    merged = list(seller_data)
+    for row in legacy_data:
+        author_id = str(row["author_id"])
+        if author_id in seen:
+            continue
+        merged.append(
+            {
+                **row,
+                "listing": str(row.get("listing") or ""),
+                "listing_title": row.get("listing_title") or "",
+            }
+        )
+        seen.add(author_id)
+    ratings = [int(row["rating"]) for row in merged if row.get("rating")]
+    rating_avg = round(sum(ratings) / len(ratings), 1) if ratings else 0
+    return {
+        "reviews": merged[:limit],
+        "review_count": len(merged),
+        "rating_avg": rating_avg,
+    }
+
+
 class ListingPhotoSerializer(serializers.ModelSerializer):
     url = serializers.SerializerMethodField()
 
@@ -118,14 +152,28 @@ class ListingCommentReplySerializer(serializers.ModelSerializer):
 class ListingReviewSerializer(serializers.ModelSerializer):
     author_name = serializers.SerializerMethodField()
     author_id = serializers.UUIDField(source="author.id", read_only=True)
+    listing_title = serializers.SerializerMethodField()
 
     class Meta:
         model = ListingReview
-        fields = ("id", "author_id", "author_name", "rating", "text", "created_at", "is_hidden")
+        fields = (
+            "id",
+            "author_id",
+            "author_name",
+            "rating",
+            "text",
+            "created_at",
+            "is_hidden",
+            "listing",
+            "listing_title",
+        )
         read_only_fields = fields
 
     def get_author_name(self, obj):
         return (obj.author.full_name or obj.author.phone or "Buyer").strip()
+
+    def get_listing_title(self, obj):
+        return (obj.listing.title or "").strip() if obj.listing_id else ""
 
 
 class SellerReviewSerializer(serializers.ModelSerializer):

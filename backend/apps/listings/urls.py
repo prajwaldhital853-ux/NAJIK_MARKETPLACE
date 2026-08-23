@@ -14,6 +14,7 @@ from apps.listings.views import (
     PublicSellerProfileView,
     SavedListingsView,
     MyReviewsGivenView,
+    MySellerReviewsView,
 )
 from apps.listings.views.bookings import BookingActionView, BookingListCreateView
 
@@ -25,6 +26,7 @@ urlpatterns = [
     path("sellers/<uuid:pk>/", PublicSellerProfileView.as_view(), name="listing-seller-profile"),
     path("me/", ListingMineView.as_view(), name="listing-mine"),
     path("me/reviews-given/", MyReviewsGivenView.as_view(), name="listing-reviews-given"),
+    path("me/reviews-received/", MySellerReviewsView.as_view(), name="listing-reviews-received"),
     path("saved/", SavedListingsView.as_view(), name="listing-saved"),
     path("me/<uuid:pk>/sold/", ListingSoldView.as_view(), name="listing-sold"),
     path("me/<uuid:pk>/", ListingMineDetailView.as_view(), name="listing-mine-detail"),

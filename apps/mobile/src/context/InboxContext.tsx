@@ -115,10 +115,11 @@ export function InboxProvider({ children }: { children: ReactNode }) {
   );
 
   const markAll = useCallback(async () => {
-    setItems([]);
+    setItems((prev) => prev.map((item) => ({ ...item, is_read: true })));
     setUnread(0);
     try {
-      await markInboxReadAll(true);
+      const result = await markInboxReadAll(false);
+      setUnread(result.unread);
     } catch {
       await refresh();
     }

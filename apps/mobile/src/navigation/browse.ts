@@ -1,6 +1,6 @@
 import type { CatalogKey } from "../data/catalog";
 import type { SellerPage } from "../data/sellerHub";
-import { dismissInboxTargetOnVisit, normTargetId } from "../inboxBridge";
+import { dismissInboxTargetOnVisit, normTargetId, uuidFromNorm } from "../inboxBridge";
 import { prefetchListing } from "../listingsApi";
 
 export function openCategory(
@@ -60,9 +60,9 @@ function navigateNamed(navigation: any, name: string, params?: object) {
 }
 
 export function openChatThread(navigation: { navigate: (...args: any[]) => void }, id: string) {
-  const threadId = normTargetId(id);
+  const threadId = uuidFromNorm(id);
   dismissInboxTargetOnVisit({ target: "chat", target_id: threadId, kind: "message" });
-  navigateNamed(navigation, "ChatThread", { id });
+  navigateNamed(navigation, "ChatThread", { id: threadId });
 }
 
 export function openHomeSection(

@@ -244,9 +244,9 @@ function NotificationBell() {
           >
             <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 14, paddingVertical: 12 }}>
               <Text style={{ flex: 1, fontWeight: "800", fontSize: 16 }}>Notifications</Text>
-              {unread ? (
+              {items.length > 0 && unread > 0 ? (
                 <Pressable onPress={() => void markAll()}>
-                  <Text style={{ color: GREEN, fontWeight: "800", fontSize: 12 }}>Mark all read</Text>
+                  <Text style={{ color: GREEN, fontWeight: "800", fontSize: 12 }}>Mark all as read</Text>
                 </Pressable>
               ) : null}
             </View>

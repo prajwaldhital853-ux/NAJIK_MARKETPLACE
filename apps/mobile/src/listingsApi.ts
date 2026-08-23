@@ -227,6 +227,16 @@ export async function fetchMyReviewsGiven() {
   return withAppAuth((token) => api<MyReviewGiven[]>("/api/listings/me/reviews-given/", { token }));
 }
 
+export type MySellerReviewsPayload = {
+  reviews: NonNullable<SellerPublicProfile["reviews"]>;
+  review_count: number;
+  rating_avg: number;
+};
+
+export async function fetchMySellerReviews() {
+  return withAppAuth((token) => api<MySellerReviewsPayload>("/api/listings/me/reviews-received/", { token }));
+}
+
 export async function postListingComment(id: string, text: string, parentId?: string) {
   return withAppAuth((token) =>
     api<ApiListing>(`/api/listings/${id}/comments/`, {

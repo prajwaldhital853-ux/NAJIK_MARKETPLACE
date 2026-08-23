@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute, useFocusEffect } from "@react-navigation/native";
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   ActivityIndicator,
@@ -99,19 +99,14 @@ export function ListingDetailScreen() {
   }
 
   const isOwner = Boolean(live && user?.id && live.owner_id === user.id) || (manage && isProvider(user));
-  const [commentFooter, setCommentFooter] = useState<ReactNode>(null);
-  const [commentChrome, setCommentChrome] = useState(0);
 
   return (
     <View style={{ flex: 1, backgroundColor: "#fff" }}>
       <AppHeader onClose={() => navigation.goBack()} showPro={isOwner} />
       <KeyboardScreen
         adjustKeyboardInsets={true}
-        bottomChrome={commentChrome}
-        footer={commentFooter}
-        contentStyle={{ paddingBottom: commentChrome > 0 ? 8 : 28 }}
+        contentStyle={{ paddingBottom: 28 }}
         style={{ backgroundColor: "#fff" }}
-        keyboardDismissMode="none"
         onRefresh={async () => {
           if (!/^[0-9a-f-]{36}$/i.test(id)) {
             emitListingsChanged();
@@ -133,8 +128,6 @@ export function ListingDetailScreen() {
           navigation={navigation}
           saved={Boolean(live?.saved_by_me)}
           onSaved={setLive}
-          setCommentFooter={setCommentFooter}
-          setCommentChrome={setCommentChrome}
         />
       </KeyboardScreen>
     </View>
@@ -148,8 +141,6 @@ function ListingBody({
   navigation,
   saved,
   onSaved,
-  setCommentFooter,
-  setCommentChrome,
 }: {
   item: CatalogItem;
   live: ApiListing | null;
@@ -157,8 +148,6 @@ function ListingBody({
   navigation: any;
   saved: boolean;
   onSaved: (row: ApiListing) => void;
-  setCommentFooter: (node: ReactNode) => void;
-  setCommentChrome: (height: number) => void;
 }) {
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
@@ -185,69 +174,12 @@ function ListingBody({
   const marketplace = item.key === "used" || item.key === "electronics";
   const canReview = !isOwner && Boolean(live);
 
-  useEffect(() => {
-    if (tab !== "comments") {
-      setCommentFooter(null);
-      setCommentChrome(0);
-      return;
+  function refreshListing(row: ApiListing) {
+    onSaved(row);
+    if (/^[0-9a-f-]{36}$/i.test(row.id)) {
+      void fetchListing(row.id).then(onSaved).catch(() => undefined);
     }
-    const chrome = canReview ? 228 : 76;
-    setCommentChrome(chrome);
-    setCommentFooter(
-      <CommentReviewForm
-        comment={comment}
-        setComment={setComment}
-        reviewText={reviewText}
-        setReviewText={setReviewText}
-        rating={rating}
-        setRating={setRating}
-        canReview={canReview}
-        replyTo={replyTo}
-        setReplyTo={setReplyTo}
-        commentBusy={commentBusy}
-        reviewBusy={reviewBusy}
-        isOwner={isOwner}
-        onPost={() => {
-          if (!live || !comment.trim() || commentBusy) return;
-          setCommentBusy(true);
-          void postListingComment(live.id, comment.trim(), replyTo?.id)
-            .then((row) => {
-              onSaved(row);
-              setComment("");
-              setReplyTo(null);
-            })
-            .catch((err) => Alert.alert("Comment", err instanceof Error ? err.message : "Sign in to comment."))
-            .finally(() => setCommentBusy(false));
-        }}
-        onReview={() => {
-          if (!live || reviewBusy) return;
-          setReviewBusy(true);
-          void postListingReview(live.id, rating, reviewText.trim())
-            .then((row) => {
-              onSaved(row);
-              setReviewText("");
-              Alert.alert("Review", "Your rating was posted.");
-            })
-            .catch((err) => Alert.alert("Review", err instanceof Error ? err.message : "Sign in to rate this seller."))
-            .finally(() => setReviewBusy(false));
-        }}
-      />,
-    );
-  }, [
-    tab,
-    comment,
-    reviewText,
-    rating,
-    canReview,
-    replyTo,
-    commentBusy,
-    reviewBusy,
-    isOwner,
-    live,
-    onSaved,
-    setCommentFooter,
-    setCommentChrome,
-  ]);
+  }
 
   useEffect(() => {
     setPhoto(0);
@@ -608,9 +540,42 @@ function ListingBody({
         <CommentsTab
           reviews={rich.reviews}
           comments={live?.comments || []}
+          comment={comment}
+          setComment={setComment}
+          reviewText={reviewText}
+          setReviewText={setReviewText}
+          rating={rating}
+          setRating={setRating}
+          canReview={canReview}
           replyTo={replyTo}
           setReplyTo={setReplyTo}
+          commentBusy={commentBusy}
+          reviewBusy={reviewBusy}
           isOwner={isOwner}
+          onPost={() => {
+            if (!live || !comment.trim() || commentBusy) return;
+            setCommentBusy(true);
+            void postListingComment(live.id, comment.trim(), replyTo?.id)
+              .then((row) => {
+                refreshListing(row);
+                setComment("");
+                setReplyTo(null);
+              })
+              .catch((err) => Alert.alert("Comment", err instanceof Error ? err.message : "Sign in to comment."))
+              .finally(() => setCommentBusy(false));
+          }}
+          onReview={() => {
+            if (!live || reviewBusy) return;
+            setReviewBusy(true);
+            void postListingReview(live.id, rating, reviewText.trim())
+              .then((row) => {
+                refreshListing(row);
+                setReviewText("");
+                Alert.alert("Review", "Your rating was posted.");
+              })
+              .catch((err) => Alert.alert("Review", err instanceof Error ? err.message : "Sign in to rate this seller."))
+              .finally(() => setReviewBusy(false));
+          }}
         />
       ) : null}
 
@@ -831,24 +796,55 @@ function ListingBody({
 function CommentsTab({
   reviews,
   comments,
+  comment,
+  setComment,
+  reviewText,
+  setReviewText,
+  rating,
+  setRating,
+  canReview,
   replyTo,
   setReplyTo,
+  commentBusy,
+  reviewBusy,
   isOwner,
+  onPost,
+  onReview,
 }: {
   reviews: Review[];
   comments: ApiListing["comments"];
+  comment: string;
+  setComment: (v: string) => void;
+  reviewText: string;
+  setReviewText: (v: string) => void;
+  rating: number;
+  setRating: (v: number) => void;
+  canReview: boolean;
   replyTo: { id: string; name: string } | null;
   setReplyTo: (v: { id: string; name: string } | null) => void;
+  commentBusy: boolean;
+  reviewBusy: boolean;
   isOwner: boolean;
+  onPost: () => void;
+  onReview: () => void;
 }) {
+  const { onInputFocus, scrollAnchorIntoView } = useKeyboardScroll();
+  const formRef = useRef<View>(null);
   const replyCount = comments.reduce((sum, row) => sum + (row.replies?.length || 0), 0);
   const total = reviews.length + comments.length + replyCount;
   const scrollable = total > 5;
 
+  function focusField() {
+    onInputFocus();
+    scrollAnchorIntoView(formRef.current);
+    setTimeout(() => scrollAnchorIntoView(formRef.current), 120);
+    setTimeout(() => scrollAnchorIntoView(formRef.current), 280);
+  }
+
   return (
-    <View style={{ paddingHorizontal: 16, paddingTop: 14, paddingBottom: 8 }}>
+    <View style={{ paddingHorizontal: 16, paddingTop: 14, paddingBottom: 16 }}>
       {total === 0 ? (
-        <Text style={{ color: "#6B7280", fontSize: 13 }}>No comments or reviews yet.</Text>
+        <Text style={{ color: "#6B7280", fontSize: 13, marginBottom: 12 }}>No comments or reviews yet.</Text>
       ) : scrollable ? (
         <ScrollView nestedScrollEnabled showsVerticalScrollIndicator style={{ maxHeight: 300 }} contentContainerStyle={{ paddingBottom: 4 }}>
           {reviews.map((review, index) => (
@@ -882,109 +878,73 @@ function CommentsTab({
             <View key={row.id} style={{ paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: LINE }}>
               <Text style={{ fontWeight: "700", fontSize: 13 }}>{row.author_name || "User"}</Text>
               <Text style={{ color: "#4B5563", fontSize: 13, marginTop: 6, lineHeight: 20 }}>{row.text}</Text>
-              {!isOwner ? (
-                <Pressable onPress={() => setReplyTo({ id: row.id, name: row.author_name || "User" })} style={{ marginTop: 6 }}>
-                  <Text style={{ color: GREEN, fontWeight: "700", fontSize: 12 }}>Reply</Text>
-                </Pressable>
-              ) : null}
+              <Pressable onPress={() => setReplyTo({ id: row.id, name: row.author_name || "User" })} style={{ marginTop: 6 }}>
+                <Text style={{ color: GREEN, fontWeight: "700", fontSize: 12 }}>Reply</Text>
+              </Pressable>
               {(row.replies || []).map((reply) => (
                 <View key={reply.id} style={{ marginTop: 10, marginLeft: 14, paddingLeft: 10, borderLeftWidth: 2, borderLeftColor: "#E5E7EB" }}>
                   <Text style={{ fontWeight: "700", fontSize: 12 }}>{reply.author_name}</Text>
                   <Text style={{ color: "#4B5563", fontSize: 12, marginTop: 4, lineHeight: 18 }}>{reply.text}</Text>
+                  <Pressable onPress={() => setReplyTo({ id: row.id, name: reply.author_name })} style={{ marginTop: 4 }}>
+                    <Text style={{ color: GREEN, fontWeight: "700", fontSize: 11 }}>Reply</Text>
+                  </Pressable>
                 </View>
               ))}
             </View>
           ))}
         </View>
       )}
-    </View>
-  );
-}
-
-function CommentReviewForm({
-  comment,
-  setComment,
-  reviewText,
-  setReviewText,
-  rating,
-  setRating,
-  canReview,
-  replyTo,
-  setReplyTo,
-  commentBusy,
-  reviewBusy,
-  isOwner,
-  onPost,
-  onReview,
-}: {
-  comment: string;
-  setComment: (v: string) => void;
-  reviewText: string;
-  setReviewText: (v: string) => void;
-  rating: number;
-  setRating: (v: number) => void;
-  canReview: boolean;
-  replyTo: { id: string; name: string } | null;
-  setReplyTo: (v: { id: string; name: string } | null) => void;
-  commentBusy: boolean;
-  reviewBusy: boolean;
-  isOwner: boolean;
-  onPost: () => void;
-  onReview: () => void;
-}) {
-  const { onInputFocus } = useKeyboardScroll();
-
-  return (
-    <View style={{ backgroundColor: "#fff", borderTopWidth: 1, borderTopColor: LINE, paddingHorizontal: 16, paddingTop: 10, paddingBottom: 12 }}>
-      {replyTo ? (
-        <Pressable onPress={() => setReplyTo(null)} style={{ marginBottom: 8, flexDirection: "row", alignItems: "center", gap: 6 }}>
-          <Text style={{ color: "#6B7280", fontSize: 12 }}>Replying to {replyTo.name}</Text>
-          <Text style={{ color: GREEN, fontWeight: "700", fontSize: 12 }}>Cancel</Text>
-        </Pressable>
-      ) : null}
-      <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-        <TextInput
-          value={comment}
-          onChangeText={setComment}
-          onFocus={onInputFocus}
-          placeholder={isOwner ? "Reply to a buyer…" : "Write a comment…"}
-          placeholderTextColor="#9AA0A6"
-          style={{ flex: 1, borderWidth: 1, borderColor: LINE, borderRadius: 6, height: 44, paddingHorizontal: 12, fontSize: 13, backgroundColor: "#fff" }}
-        />
-        <PressScale
-          onPress={onPost}
-          style={{ backgroundColor: GREEN, height: 44, paddingHorizontal: 14, borderRadius: 6, alignItems: "center", justifyContent: "center", minWidth: 72, opacity: commentBusy ? 0.7 : 1 }}
-        >
-          {commentBusy ? <ActivityIndicator color="#fff" size="small" /> : <Text style={{ color: "#fff", fontWeight: "800", fontSize: 13 }}>Post</Text>}
-        </PressScale>
-      </View>
-      {canReview ? (
-        <View style={{ marginTop: 12 }}>
-          <Text style={{ fontWeight: "800", marginBottom: 8 }}>Rate this seller</Text>
-          <View style={{ flexDirection: "row", gap: 4, marginBottom: 8 }}>
-            {[1, 2, 3, 4, 5].map((n) => (
-              <Pressable key={n} onPress={() => setRating(n)}>
-                <Ionicons name="star" size={20} color={n <= rating ? "#F5C518" : "#E6E8EC"} />
-              </Pressable>
-            ))}
-          </View>
+      <View ref={formRef} collapsable={false}>
+        {replyTo ? (
+          <Pressable onPress={() => setReplyTo(null)} style={{ marginTop: 10, flexDirection: "row", alignItems: "center", gap: 6 }}>
+            <Text style={{ color: "#6B7280", fontSize: 12 }}>Replying to {replyTo.name}</Text>
+            <Text style={{ color: GREEN, fontWeight: "700", fontSize: 12 }}>Cancel</Text>
+          </Pressable>
+        ) : null}
+        <View style={{ flexDirection: "row", alignItems: "center", marginTop: 14, gap: 8 }}>
           <TextInput
-            value={reviewText}
-            onChangeText={setReviewText}
-            onFocus={onInputFocus}
-            placeholder="Optional note about this seller"
+            value={comment}
+            onChangeText={setComment}
+            onFocus={focusField}
+            placeholder={isOwner ? "Reply to a buyer…" : "Write a comment…"}
             placeholderTextColor="#9AA0A6"
-            style={{ borderWidth: 1, borderColor: LINE, borderRadius: 6, minHeight: 64, paddingHorizontal: 12, paddingVertical: 10, fontSize: 13, textAlignVertical: "top", backgroundColor: "#fff" }}
-            multiline
+            style={{ flex: 1, borderWidth: 1, borderColor: LINE, borderRadius: 6, height: 44, paddingHorizontal: 12, fontSize: 13 }}
           />
           <PressScale
-            onPress={onReview}
-            style={{ marginTop: 8, backgroundColor: GREEN, height: 44, borderRadius: 6, alignItems: "center", justifyContent: "center", opacity: reviewBusy ? 0.7 : 1 }}
+            onPress={onPost}
+            style={{ backgroundColor: GREEN, height: 44, paddingHorizontal: 14, borderRadius: 6, alignItems: "center", justifyContent: "center", minWidth: 72, opacity: commentBusy ? 0.7 : 1 }}
           >
-            {reviewBusy ? <ActivityIndicator color="#fff" /> : <Text style={{ color: "#fff", fontWeight: "800" }}>Submit rating</Text>}
+            {commentBusy ? <ActivityIndicator color="#fff" size="small" /> : <Text style={{ color: "#fff", fontWeight: "800", fontSize: 13 }}>Post</Text>}
           </PressScale>
         </View>
-      ) : null}
+        {canReview ? (
+          <View style={{ marginTop: 16 }}>
+            <Text style={{ fontWeight: "800", marginBottom: 8 }}>Rate this seller</Text>
+            <View style={{ flexDirection: "row", gap: 4, marginBottom: 8 }}>
+              {[1, 2, 3, 4, 5].map((n) => (
+                <Pressable key={n} onPress={() => setRating(n)}>
+                  <Ionicons name="star" size={20} color={n <= rating ? "#F5C518" : "#E6E8EC"} />
+                </Pressable>
+              ))}
+            </View>
+            <TextInput
+              value={reviewText}
+              onChangeText={setReviewText}
+              onFocus={focusField}
+              placeholder="Optional note about this seller"
+              placeholderTextColor="#9AA0A6"
+              style={{ borderWidth: 1, borderColor: LINE, borderRadius: 6, minHeight: 70, paddingHorizontal: 12, paddingVertical: 10, fontSize: 13, textAlignVertical: "top" }}
+              multiline
+            />
+            <PressScale
+              onPress={onReview}
+              style={{ marginTop: 8, backgroundColor: GREEN, height: 44, borderRadius: 6, alignItems: "center", justifyContent: "center", opacity: reviewBusy ? 0.7 : 1 }}
+            >
+              {reviewBusy ? <ActivityIndicator color="#fff" /> : <Text style={{ color: "#fff", fontWeight: "800" }}>Submit rating</Text>}
+            </PressScale>
+          </View>
+        ) : null}
+      </View>
     </View>
   );
 }
@@ -1023,7 +983,9 @@ function CommentRow({ review }: { review: Review }) {
           ))}
         </View>
       </View>
-      <Text style={{ color: "#4B5563", fontSize: 13, lineHeight: 20, marginTop: 8 }}>{review.text}</Text>
+      <Text style={{ color: "#4B5563", fontSize: 13, lineHeight: 20, marginTop: 8 }}>
+        {review.text?.trim() ? review.text : `Rated ${review.rating} out of 5 stars`}
+      </Text>
     </View>
   );
 }

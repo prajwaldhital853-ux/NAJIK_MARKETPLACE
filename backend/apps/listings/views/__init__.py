@@ -388,6 +388,11 @@ class ListingReviewView(APIView):
             author=request.user,
             defaults={"rating": rating, "text": text, "listing": listing},
         )
+        ListingReview.objects.update_or_create(
+            listing=listing,
+            author=request.user,
+            defaults={"rating": rating, "text": text},
+        )
         listing = listing_queryset().get(pk=listing.pk)
         return Response(ListingSerializer(listing, context={"request": request}).data)
 

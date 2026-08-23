@@ -250,6 +250,8 @@ class ListingModerationTests(TestCase):
         )
         self.assertEqual(review.status_code, 200, review.data)
         self.assertEqual(review.data["review_count"], 1)
+        self.assertEqual(len(review.data["reviews"]), 1)
+        self.assertEqual(review.data["reviews"][0]["rating"], 5)
         saved = buyer.post(f"/api/listings/{listing_id}/save/", {}, format="json")
         self.assertEqual(saved.status_code, 200)
         self.assertEqual(saved.data["save_count"], 1)

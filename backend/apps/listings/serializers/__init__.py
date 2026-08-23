@@ -116,7 +116,7 @@ class ListingCommentReplySerializer(serializers.ModelSerializer):
 
 
 class ListingReviewSerializer(serializers.ModelSerializer):
-    author_name = serializers.CharField(source="author.full_name", read_only=True)
+    author_name = serializers.SerializerMethodField()
     author_id = serializers.UUIDField(source="author.id", read_only=True)
 
     class Meta:
@@ -124,15 +124,21 @@ class ListingReviewSerializer(serializers.ModelSerializer):
         fields = ("id", "author_id", "author_name", "rating", "text", "created_at", "is_hidden")
         read_only_fields = fields
 
+    def get_author_name(self, obj):
+        return (obj.author.full_name or obj.author.phone or "Buyer").strip()
+
 
 class SellerReviewSerializer(serializers.ModelSerializer):
-    author_name = serializers.CharField(source="author.full_name", read_only=True)
+    author_name = serializers.SerializerMethodField()
     author_id = serializers.UUIDField(source="author.id", read_only=True)
 
     class Meta:
         model = SellerReview
         fields = ("id", "author_id", "author_name", "rating", "text", "created_at", "is_hidden", "listing")
         read_only_fields = fields
+
+    def get_author_name(self, obj):
+        return (obj.author.full_name or obj.author.phone or "Buyer").strip()
 
 
 class ListingSerializer(serializers.ModelSerializer):
@@ -220,8 +226,19 @@ class ListingSerializer(serializers.ModelSerializer):
 
     def get_reviews(self, obj):
         _, _, _, is_staff = viewer_flags(self)
-        rows = seller_reviews_for_owner(obj.owner_id, is_staff=is_staff)[:100]
-        return SellerReviewSerializer(rows, many=True, context=self.context).data
+        seller_rows = seller_reviews_for_owner(obj.owner_id, is_staff=is_staff)[:100]
+        seller_data = SellerReviewSerializer(seller_rows, many=True, context=self.context).data
+        listing_qs = obj.reviews.select_related("author").all()
+        if not is_staff:
+            listing_qs = listing_qs.filter(is_hidden=False)
+        legacy_data = ListingReviewSerializer(listing_qs.order_by("-created_at")[:100], many=True, context=self.context).data
+        seen = {row["author_id"] for row in seller_data}
+        merged = list(seller_data)
+        for row in legacy_data:
+            if row["author_id"] not in seen:
+                merged.append(row)
+                seen.add(row["author_id"])
+        return merged[:100]
 
     def get_comment_count(self, obj):
         _, _, _, is_staff = viewer_flags(self)

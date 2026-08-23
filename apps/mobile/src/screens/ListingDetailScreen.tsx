@@ -927,21 +927,43 @@ function CommentsTab({
                 </Pressable>
               ))}
             </View>
-            <TextInput
-              value={reviewText}
-              onChangeText={setReviewText}
-              onFocus={focusField}
-              placeholder="Optional note about this seller"
-              placeholderTextColor="#9AA0A6"
-              style={{ borderWidth: 1, borderColor: LINE, borderRadius: 6, minHeight: 70, paddingHorizontal: 12, paddingVertical: 10, fontSize: 13, textAlignVertical: "top" }}
-              multiline
-            />
-            <PressScale
-              onPress={onReview}
-              style={{ marginTop: 8, backgroundColor: GREEN, height: 44, borderRadius: 6, alignItems: "center", justifyContent: "center", opacity: reviewBusy ? 0.7 : 1 }}
-            >
-              {reviewBusy ? <ActivityIndicator color="#fff" /> : <Text style={{ color: "#fff", fontWeight: "800" }}>Submit rating</Text>}
-            </PressScale>
+            <View style={{ flexDirection: "row", alignItems: "flex-end", gap: 8, marginTop: 8 }}>
+              <TextInput
+                value={reviewText}
+                onChangeText={setReviewText}
+                onFocus={focusField}
+                placeholder="Optional note about this seller"
+                placeholderTextColor="#9AA0A6"
+                style={{
+                  flex: 1,
+                  borderWidth: 1,
+                  borderColor: LINE,
+                  borderRadius: 6,
+                  minHeight: 44,
+                  maxHeight: 80,
+                  paddingHorizontal: 12,
+                  paddingVertical: 10,
+                  fontSize: 13,
+                  textAlignVertical: "top",
+                }}
+                multiline
+              />
+              <PressScale
+                onPress={onReview}
+                style={{
+                  backgroundColor: GREEN,
+                  height: 44,
+                  paddingHorizontal: 14,
+                  borderRadius: 6,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  minWidth: 72,
+                  opacity: reviewBusy ? 0.7 : 1,
+                }}
+              >
+                {reviewBusy ? <ActivityIndicator color="#fff" size="small" /> : <Text style={{ color: "#fff", fontWeight: "800", fontSize: 13 }}>Submit</Text>}
+              </PressScale>
+            </View>
           </View>
         ) : null}
       </View>

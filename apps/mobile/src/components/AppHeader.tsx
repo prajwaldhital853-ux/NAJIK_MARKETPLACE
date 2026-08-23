@@ -173,18 +173,18 @@ function NotificationBell() {
   const navigation = useNavigation<any>();
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
-  const { items, unread, mark, markAll, refresh, dismiss, dismissTarget } = useInbox();
+  const { items, unread, mark, markRead, markAll, refresh, dismiss, dismissTarget } = useInbox();
   const [open, setOpen] = useState(false);
   const sheetMax = Math.min(360, Math.round(Dimensions.get("window").height * 0.48));
 
   async function go(item: (typeof items)[0]) {
     setOpen(false);
-    await dismiss(item.id);
     if (item.target === "chat" && item.target_id) {
-      await dismissTarget({ target: "chat", target_id: item.target_id, kind: "message" });
+      await markRead(item.id);
       openChatThread(navigation, item.target_id);
       return;
     }
+    await dismiss(item.id);
     if (item.target === "listing" && item.target_id) {
       await dismissTarget({ target: "listing", target_id: item.target_id });
       openListing(navigation, item.target_id);

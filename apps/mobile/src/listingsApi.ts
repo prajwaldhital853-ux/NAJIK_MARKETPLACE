@@ -238,13 +238,16 @@ export async function fetchMySellerReviews() {
 }
 
 export async function postListingComment(id: string, text: string, parentId?: string) {
-  return withAppAuth((token) =>
+  const row = await withAppAuth((token) =>
     api<ApiListing>(`/api/listings/${id}/comments/`, {
       method: "POST",
       token,
       body: JSON.stringify({ text, parent_id: parentId || undefined }),
     }),
   );
+  rememberListingDetail(row);
+  emitListingsChanged();
+  return row;
 }
 
 export async function postListingReview(id: string, rating: number, text?: string) {
@@ -255,6 +258,7 @@ export async function postListingReview(id: string, rating: number, text?: strin
       body: JSON.stringify({ rating, text: text?.trim() || "" }),
     }),
   );
+  rememberListingDetail(row);
   emitListingsChanged();
   return row;
 }

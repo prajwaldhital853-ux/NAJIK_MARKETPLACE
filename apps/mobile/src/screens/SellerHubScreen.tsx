@@ -1300,7 +1300,7 @@ function KycBody() {
 function NotesBody() {
   const navigation = useNavigation<any>();
   const { user } = useAuth();
-  const { items, unread, refresh, markAll, dismiss, dismissTarget } = useInbox();
+  const { items, unread, refresh, markAll, markRead, dismiss, dismissTarget } = useInbox();
   const [q, setQ] = useState("");
   const [filter, setFilter] = useState("All");
 
@@ -1317,12 +1317,12 @@ function NotesBody() {
   });
 
   async function openNotice(item: InboxNotice) {
-    await dismiss(item.id);
     if (item.target === "chat" && item.target_id) {
-      await dismissTarget({ target: "chat", target_id: item.target_id, kind: "message" });
+      await markRead(item.id);
       openChatThread(navigation, item.target_id);
       return;
     }
+    await dismiss(item.id);
     if (item.target === "listing" && item.target_id) {
       await dismissTarget({ target: "listing", target_id: item.target_id });
       openListing(navigation, item.target_id);

@@ -2,6 +2,7 @@
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
+from django.db.models import Sum
 
 from apps.core.models.seller_wallet import (
     SellerLoadRequest,
@@ -33,6 +34,30 @@ def get_listing_fee_paisa() -> int:
 def get_or_create_wallet(provider) -> SellerWallet:
     wallet, _ = SellerWallet.objects.get_or_create(provider=provider)
     return wallet
+
+
+def wallet_balance_breakdown(wallet: SellerWallet) -> tuple[int, int]:
+    """Refer & Earn spendable balance and loaded balance (fees consume refer earn first)."""
+    refer_credited = (
+        SellerWalletTransaction.objects.filter(
+            wallet=wallet,
+            kind=SellerWalletTransaction.KIND_REFERRAL_REWARD,
+        ).aggregate(total=Sum("amount_paisa"))["total"]
+        or 0
+    )
+    fees_paisa = (
+        SellerWalletTransaction.objects.filter(
+            wallet=wallet,
+            kind=SellerWalletTransaction.KIND_LISTING_FEE,
+        ).aggregate(total=Sum("amount_paisa"))["total"]
+        or 0
+    )
+    total_fees = abs(int(fees_paisa))
+    refer_credited = int(refer_credited)
+    refer_consumed = min(refer_credited, total_fees)
+    refer_earn_paisa = max(0, refer_credited - refer_consumed)
+    loaded_paisa = max(0, int(wallet.balance_paisa) - refer_earn_paisa)
+    return refer_earn_paisa, loaded_paisa
 
 
 def can_afford_listing(provider) -> bool:

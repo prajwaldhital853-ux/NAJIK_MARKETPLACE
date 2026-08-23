@@ -16,6 +16,7 @@ const InboxCtx = createContext<{
   unread: number;
   refresh: () => Promise<void>;
   mark: (id: string, isRead: boolean) => Promise<void>;
+  markRead: (id: string) => Promise<void>;
   markAll: () => Promise<void>;
   dismiss: (id: string) => Promise<void>;
   dismissTarget: (payload: { target?: string; target_id?: string; kind?: string }) => Promise<void>;
@@ -101,18 +102,16 @@ export function InboxProvider({ children }: { children: ReactNode }) {
   dismissTargetRef.current = dismissTarget;
   registerInboxDismissTarget((payload) => dismissTargetRef.current(payload));
 
-  const mark = useCallback(
-    async (id: string, isRead: boolean) => {
-      if (isRead) {
-        await dismiss(id);
-        return;
-      }
-      const row = await markInboxNotice(id, false);
+  const markRead = useCallback(async (id: string) => {
+    setItems((prev) => prev.map((item) => (item.id === id ? { ...item, is_read: true } : item)));
+    setUnread((n) => Math.max(0, n - 1));
+    try {
+      const row = await markInboxNotice(id, true);
       setItems((prev) => prev.map((item) => (item.id === row.id ? row : item)));
-      setUnread((n) => n + 1);
-    },
-    [dismiss],
-  );
+    } catch {
+      await refresh();
+    }
+  }, [refresh]);
 
   const markAll = useCallback(async () => {
     setItems((prev) => prev.map((item) => ({ ...item, is_read: true })));
@@ -125,9 +124,22 @@ export function InboxProvider({ children }: { children: ReactNode }) {
     }
   }, [refresh]);
 
+  const mark = useCallback(
+    async (id: string, isRead: boolean) => {
+      if (isRead) {
+        await markRead(id);
+        return;
+      }
+      const row = await markInboxNotice(id, false);
+      setItems((prev) => prev.map((item) => (item.id === row.id ? row : item)));
+      setUnread((n) => n + 1);
+    },
+    [markRead],
+  );
+
   const value = useMemo(
-    () => ({ items, unread, refresh, mark, markAll, dismiss, dismissTarget }),
-    [items, unread, refresh, mark, markAll, dismiss, dismissTarget],
+    () => ({ items, unread, refresh, mark, markRead, markAll, dismiss, dismissTarget }),
+    [items, unread, refresh, mark, markRead, markAll, dismiss, dismissTarget],
   );
   return <InboxCtx.Provider value={value}>{children}</InboxCtx.Provider>;
 }

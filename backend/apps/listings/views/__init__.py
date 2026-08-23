@@ -370,6 +370,21 @@ class ListingCommentView(APIView):
             text=serializer.validated_data["text"].strip(),
         )
         listing = listing_queryset().get(pk=listing.pk)
+        if listing.owner_id != request.user.id:
+            from apps.notifications.services import notify_listing_activity
+
+            author_name = (request.user.full_name or request.user.phone or "Someone").strip()
+            text = serializer.validated_data["text"].strip()
+            try:
+                notify_listing_activity(
+                    listing.owner,
+                    listing,
+                    f"Comment on {listing.title}",
+                    text[:160],
+                    sender_name=author_name,
+                )
+            except Exception:
+                pass
         return Response(ListingSerializer(listing, context={"request": request}).data, status=status.HTTP_201_CREATED)
 
 
@@ -396,6 +411,21 @@ class ListingReviewView(APIView):
             defaults={"rating": rating, "text": text},
         )
         listing = listing_queryset().get(pk=listing.pk)
+        if listing.owner_id != request.user.id:
+            from apps.notifications.services import notify_listing_activity
+
+            author_name = (request.user.full_name or request.user.phone or "Buyer").strip()
+            preview = text or f"Rated {rating} stars"
+            try:
+                notify_listing_activity(
+                    listing.owner,
+                    listing,
+                    f"Review on {listing.title}",
+                    preview[:160],
+                    sender_name=author_name,
+                )
+            except Exception:
+                pass
         return Response(ListingSerializer(listing, context={"request": request}).data)
 
 

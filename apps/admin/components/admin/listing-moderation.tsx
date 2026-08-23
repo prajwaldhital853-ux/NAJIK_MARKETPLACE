@@ -179,12 +179,13 @@ export function ListingModeration({
     }
     const rank = new Map(orderIds.map((id, i) => [id, i]));
     return [...filtered].sort((a, b) => {
+      const latest = new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      if (latest !== 0) return latest;
+      const owner = (a.owner_name || "").localeCompare(b.owner_name || "");
+      if (owner !== 0) return owner;
       const ai = rank.has(a.id) ? rank.get(a.id)! : Number.MAX_SAFE_INTEGER / 2;
       const bi = rank.has(b.id) ? rank.get(b.id)! : Number.MAX_SAFE_INTEGER / 2;
-      if (ai !== bi) return ai - bi;
-      if ((a.status === "pending" || a.has_pending_edit) && !(b.status === "pending" || b.has_pending_edit)) return -1;
-      if ((b.status === "pending" || b.has_pending_edit) && !(a.status === "pending" || a.has_pending_edit)) return 1;
-      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      return ai - bi;
     });
   }, [items, tab, orderIds, params]);
 

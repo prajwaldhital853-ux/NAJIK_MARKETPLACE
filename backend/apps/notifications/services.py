@@ -75,3 +75,42 @@ def notify_chat_message(user, sender_name: str, thread_id: str, preview: str):
         target_id=raw_tid[:64],
         sender_name=who[:120],
     )
+
+
+def notify_listing_activity(user, listing, title: str, body: str, sender_name: str = ""):
+    """One inbox row per listing — latest comment/review preview."""
+    if not user or not listing:
+        return None
+    who = (sender_name or "").strip() or "Someone"
+    preview = (body or title or "New activity").strip()[:160]
+    headline = (title or "Listing update").strip()[:160]
+    raw_id = str(listing.id)
+    tid = normalize_target_id(raw_id)
+    qs = InboxNotice.objects.filter(
+        user=user,
+        kind=InboxNotice.KIND_LISTING,
+        target="listing",
+    ).filter(Q(target_id=tid) | Q(target_id=raw_id))
+    existing = qs.order_by("-created_at").first()
+    now = timezone.now()
+    if existing:
+        dup_ids = list(qs.exclude(pk=existing.pk).values_list("pk", flat=True))
+        if dup_ids:
+            InboxNotice.objects.filter(pk__in=dup_ids).delete()
+        existing.title = headline
+        existing.body = preview
+        existing.sender_name = who[:120]
+        existing.is_read = False
+        existing.target_id = raw_id[:64]
+        existing.created_at = now
+        existing.save(update_fields=["title", "body", "sender_name", "is_read", "target_id", "created_at"])
+        return existing
+    return InboxNotice.objects.create(
+        user=user,
+        title=headline,
+        body=preview,
+        kind=InboxNotice.KIND_LISTING,
+        target="listing",
+        target_id=raw_id[:64],
+        sender_name=who[:120],
+    )

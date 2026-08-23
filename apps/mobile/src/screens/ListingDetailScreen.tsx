@@ -35,7 +35,7 @@ import { catalogMeta, listingById, type CatalogItem } from "../data/catalog";
 import { apiCategoryForKey, liveListingById, listingsToCatalog, listingToCatalog } from "../data/liveListings";
 import { rankSimilarListings, relatedKeywordsFor } from "../data/similarListings";
 import { fetchListing, fetchListingFeed, postListingComment, postListingReview, toggleListingSave, type ApiListing } from "../listingsApi";
-import { peekListingDetail } from "../listingCache";
+import { peekListingDetail, rememberListingDetail } from "../listingCache";
 import { recordListingView } from "../listingViews";
 import { emitListingsChanged, subscribeListingsChanged } from "../listingsRefresh";
 import { openCategory, openChatThread, openMapSearch, openSellerProfile } from "../navigation/browse";
@@ -200,10 +200,8 @@ function ListingBody({
   const canReview = !isOwner && Boolean(live);
 
   function refreshListing(row: ApiListing) {
+    rememberListingDetail(row);
     onSaved(row);
-    if (/^[0-9a-f-]{36}$/i.test(row.id)) {
-      void fetchListing(row.id).then(onSaved).catch(() => undefined);
-    }
   }
 
   useEffect(() => {
@@ -597,6 +595,7 @@ function ListingBody({
               .then((row) => {
                 refreshListing(row);
                 setReviewText("");
+                setTab("comments");
                 Alert.alert("Review", "Your rating was posted.");
               })
               .catch((err) => Alert.alert("Review", err instanceof Error ? err.message : "Sign in to rate this seller."))

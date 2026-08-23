@@ -124,7 +124,7 @@ export default function DashboardPage() {
       const needle = statusFilter.toLowerCase();
       list = list.filter((a) => a.status.toLowerCase().includes(needle));
     }
-    return list;
+    return list.sort((a, b) => (b.at || 0) - (a.at || 0));
   }, [tableTab, filteredActivity, statusFilter]);
 
   function openActivityRow(row: Activity) {

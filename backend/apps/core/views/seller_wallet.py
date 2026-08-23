@@ -25,6 +25,7 @@ from apps.core.seller_wallet_service import (
     admin_adjust_wallet,
     refund_listing_fee,
     rupees_to_paisa,
+    wallet_balance_breakdown,
 )
 from apps.listings.models import Listing
 from apps.staff.authentication import StaffJWTAuthentication
@@ -158,14 +159,7 @@ class SellerPaymentsMeView(APIView):
             .order_by("-created_at")[:80]
         )
         recent_loads = SellerLoadRequest.objects.filter(provider=user).order_by("-created_at")[:10]
-        refer_earn_paisa = (
-            SellerWalletTransaction.objects.filter(
-                wallet=wallet,
-                kind=SellerWalletTransaction.KIND_REFERRAL_REWARD,
-            ).aggregate(total=Sum("amount_paisa"))["total"]
-            or 0
-        )
-        loaded_paisa = max(0, wallet.balance_paisa - refer_earn_paisa)
+        refer_earn_paisa, loaded_paisa = wallet_balance_breakdown(wallet)
         return Response(
             {
                 "balance_paisa": wallet.balance_paisa,

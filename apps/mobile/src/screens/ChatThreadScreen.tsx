@@ -1,5 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useNavigation, useRoute } from "@react-navigation/native";
+import { useNavigation, useRoute, useFocusEffect } from "@react-navigation/native";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -67,7 +67,7 @@ export function ChatThreadScreen() {
   const route = useRoute<any>();
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
-  const { dismissTarget, refresh } = useInbox();
+  const { dismissTarget } = useInbox();
   const id = uuidFromNorm(String(route.params?.id ?? ""));
   const idRef = useRef(id);
   const [thread, setThread] = useState<ChatThread | null>(null);
@@ -124,31 +124,32 @@ export function ChatThreadScreen() {
     }
   }, [id]);
 
-  useEffect(() => {
-    if (!id) return;
-    const clearChatNotices = () =>
-      void dismissTarget({ target: "chat", target_id: normTargetId(id), kind: "message" }).then(() => refresh());
-    clearChatNotices();
-    void pingChatPresence(id).catch(() => undefined);
-    void load(false).catch((err) => Alert.alert("Chat", err instanceof Error ? err.message : "Could not open chat."));
-    const tick = () => {
-      if (AppState.currentState !== "active") return;
+  useFocusEffect(
+    useCallback(() => {
+      if (!id) return;
       void pingChatPresence(id).catch(() => undefined);
-      void load(true).catch(() => undefined);
-    };
-    const timer = setInterval(tick, 4000);
+      void load(false).catch((err) => Alert.alert("Chat", err instanceof Error ? err.message : "Could not open chat."));
+      const tick = () => {
+        if (AppState.currentState !== "active") return;
+        void pingChatPresence(id).catch(() => undefined);
+        void load(true).catch(() => undefined);
+      };
+      const timer = setInterval(tick, 4000);
+      const sub = AppState.addEventListener("change", (state) => {
+        if (state === "active") tick();
+      });
+      return () => {
+        clearInterval(timer);
+        sub.remove();
+        void pingChatPresence("").catch(() => undefined);
+      };
+    }, [id, load]),
+  );
+
+  useEffect(() => {
     const stop = subscribeAppRefresh(() => void load(false).catch(() => undefined));
-    const sub = AppState.addEventListener("change", (state) => {
-      if (state === "active") tick();
-    });
-    return () => {
-      clearInterval(timer);
-      stop();
-      sub.remove();
-      clearChatNotices();
-      void pingChatPresence("").catch(() => undefined);
-    };
-  }, [id, load, dismissTarget, refresh]);
+    return () => stop();
+  }, [load]);
 
   useEffect(() => {
     const cover = (event: { endCoordinates: { height: number; screenY: number } }) => {

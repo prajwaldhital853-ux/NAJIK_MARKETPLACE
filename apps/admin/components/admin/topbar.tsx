@@ -37,7 +37,6 @@ export function Topbar({ onMenu }: { onMenu?: () => void }) {
     sessionStorage.removeItem(OPEN_INBOX_KEY);
     if (inboxCount > 0) {
       setBell(true);
-      setMail(false);
       setMenu(false);
     }
   }, [inboxReady, inboxCount]);

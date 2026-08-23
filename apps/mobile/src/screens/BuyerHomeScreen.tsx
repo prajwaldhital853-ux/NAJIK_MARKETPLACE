@@ -18,7 +18,7 @@ import { UrgentSellSection } from "../components/UrgentSellSection";
 import { fetchListingFeed, fetchSavedListings, type ApiListing } from "../listingsApi";
 import { getRecentViewIds } from "../listingViews";
 import { subscribeListingsChanged } from "../listingsRefresh";
-import { openCategory } from "../navigation/browse";
+import { openCategory, openHomeSection } from "../navigation/browse";
 import { colors, shadow } from "../theme";
 
 const { width: SCREEN_W } = Dimensions.get("window");
@@ -212,12 +212,12 @@ export function BuyerHomeScreen() {
           </View>
         ) : (
           <>
-            <MarketplaceSection title="Recommended" icon="thumbs-up" iconColor="#2563EB" items={recommended} onViewMore={() => openCategory(navigation, "property")} emptyText={recommended.length ? undefined : "Browse listings to get personalised picks."} />
-            <MarketplaceSection title="Trending" icon="stats-chart" iconColor="#2563EB" items={trending} chips={TREND_CHIPS.map(({ key, label }) => ({ key, label }))} activeChip={trendChip} onChip={setTrendChip} onViewMore={() => { const chip = TREND_CHIPS.find((c) => c.key === trendChip); openCategory(navigation, chip?.catalog || "property"); }} />
+            <MarketplaceSection title="Recommended" icon="thumbs-up" iconColor="#2563EB" items={recommended} onViewMore={() => openHomeSection(navigation, "recommended", { title: "Recommended" })} emptyText={recommended.length ? undefined : "Browse listings to get personalised picks."} />
+            <MarketplaceSection title="Trending" icon="stats-chart" iconColor="#2563EB" items={trending} chips={TREND_CHIPS.map(({ key, label }) => ({ key, label }))} activeChip={trendChip} onChip={setTrendChip} onViewMore={() => { const chip = TREND_CHIPS.find((c) => c.key === trendChip); openHomeSection(navigation, "trending", { title: chip?.key === "all" ? "Trending" : chip?.label || "Trending", catalog: chip?.catalog }); }} />
             {verifiedSellers.length ? (
-              <MarketplaceSection title="By verified sellers" icon="checkmark-circle" iconColor="#2563EB" items={verifiedSellers} onViewMore={() => openCategory(navigation, "property")} />
+              <MarketplaceSection title="By verified sellers" icon="checkmark-circle" iconColor="#2563EB" items={verifiedSellers} onViewMore={() => openHomeSection(navigation, "verified", { title: "By verified sellers" })} />
             ) : null}
-            <MarketplaceSection title="Latest Uploads" icon="cloud-upload" iconColor="#111827" items={latest} mode="grid" limit={SECTION_LIMIT} onViewMore={() => openCategory(navigation, "property")} />
+            <MarketplaceSection title="Latest Uploads" icon="cloud-upload" iconColor="#111827" items={latest} mode="grid" limit={SECTION_LIMIT} onViewMore={() => openHomeSection(navigation, "latest", { title: "Latest uploads" })} />
           </>
         )}
       </ScrollView>

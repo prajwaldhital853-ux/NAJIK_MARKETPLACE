@@ -29,6 +29,7 @@ import { ListingDetailScreen } from "../screens/ListingDetailScreen";
 import { ChatInboxScreen } from "../screens/ChatInboxScreen";
 import { ChatThreadScreen } from "../screens/ChatThreadScreen";
 import { SellerProfileScreen } from "../screens/SellerProfileScreen";
+import { HomeSectionScreen } from "../screens/HomeSectionScreen";
 import { BuyerRecentViewsScreen, BuyerReviewsGivenScreen } from "../screens/BuyerActivityScreens";
 import { SavedScreen } from "../screens/SavedScreen";
 import { SellerApplyScreen } from "../screens/SellerApplyScreen";
@@ -105,6 +106,7 @@ function MainDrawer() {
       <Drawer.Screen name="Bookings" component={BookingsScreen} />
       <Drawer.Screen name="ChatInbox" component={ChatInboxScreen} />
       <Drawer.Screen name="ChatThread" component={ChatThreadScreen} options={{ swipeEnabled: false }} />
+      <Drawer.Screen name="HomeSection" component={HomeSectionScreen} />
       <Drawer.Screen name="BuyerReviewsGiven" component={BuyerReviewsGivenScreen} />
       <Drawer.Screen name="BuyerRecentViews" component={BuyerRecentViewsScreen} />
       <Drawer.Screen name="SellerProfile" component={SellerProfileScreen} />

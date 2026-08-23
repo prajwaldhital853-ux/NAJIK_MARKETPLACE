@@ -225,14 +225,14 @@ export function KeyboardScreen({
   // Extra room so focused fields near the end can scroll above keyboard + sticky footer.
   const extraPad =
     bottomChrome > 0
-      ? 24 + (keyboardHeight > 0 ? 64 : 0)
+      ? 12
       : (Platform.OS === "android" ? keyboardHeight : 0) + (keyboardHeight > 0 ? BUTTON_GAP : 12);
 
   return (
     <KeyboardAvoidingView
       style={[{ flex: 1 }, style]}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-      keyboardVerticalOffset={Platform.OS === "ios" ? 8 : 0}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      keyboardVerticalOffset={Platform.OS === "ios" ? bottomChrome > 0 ? 0 : 8 : 0}
     >
       <KeyboardScrollContext.Provider value={{ onInputFocus, scrollAnchorIntoView, isScrollDragging }}>
         <ScrollView

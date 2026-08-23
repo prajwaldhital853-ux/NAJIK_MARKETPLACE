@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import { ActivityIndicator, Alert, Dimensions, Linking, Pressable, ScrollView, Text, View, type LayoutChangeEvent, type RefreshControlProps } from "react-native";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { ActivityIndicator, Alert, Linking, Pressable, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Avatar } from "../components/Avatar";
 import { ListingListRow } from "../components/ClassifiedCard";
@@ -14,46 +14,11 @@ import { subscribeAppRefresh } from "../listingsRefresh";
 import { colors } from "../theme";
 
 const GREEN = colors.greenDeep;
-const LISTINGS_MIN_HEIGHT = 120;
 
 type ProfilePreview = {
   full_name?: string;
   account_type?: "user" | "provider";
 };
-
-function OverflowList({
-  children,
-  maxHeight,
-  refreshControl,
-}: {
-  children: ReactNode;
-  maxHeight: number;
-  refreshControl?: React.ReactElement<RefreshControlProps>;
-}) {
-  const [contentHeight, setContentHeight] = useState(0);
-  const onLayout = (event: LayoutChangeEvent) => setContentHeight(event.nativeEvent.layout.height);
-  const needsScroll = maxHeight > 0 && contentHeight > maxHeight;
-
-  if (!needsScroll) {
-    return (
-      <ScrollView scrollEnabled={false} refreshControl={refreshControl} contentContainerStyle={{ flexGrow: 1 }}>
-        <View onLayout={onLayout}>{children}</View>
-      </ScrollView>
-    );
-  }
-
-  return (
-    <ScrollView
-      nestedScrollEnabled
-      showsVerticalScrollIndicator
-      refreshControl={refreshControl}
-      style={{ maxHeight }}
-      contentContainerStyle={{ paddingBottom: 2 }}
-    >
-      <View onLayout={onLayout}>{children}</View>
-    </ScrollView>
-  );
-}
 
 export function SellerProfileScreen() {
   const navigation = useNavigation<any>();
@@ -71,8 +36,7 @@ export function SellerProfileScreen() {
   const [profile, setProfile] = useState<SellerPublicProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [reportOpen, setReportOpen] = useState(false);
-  const [listingsMaxHeight, setListingsMaxHeight] = useState(0);
-  const refreshControl = useAppRefreshControl();
+  const refreshControl = useAppRefreshControl(load);
 
   const load = useCallback(async () => {
     if (!userId) return;
@@ -96,13 +60,6 @@ export function SellerProfileScreen() {
   const reviews = profile?.reviews || [];
   const hasPreview = Boolean(preview.full_name);
   const showBlockingLoader = loading && !profile && !hasPreview;
-
-  const windowHeight = Dimensions.get("window").height;
-  const headerHeight = insets.top + 52;
-  const topMaxHeight = Math.max(
-    160,
-    windowHeight - headerHeight - LISTINGS_MIN_HEIGHT - insets.bottom - 32,
-  );
 
   async function openPhone() {
     if (!profile?.phone) return;
@@ -135,86 +92,80 @@ export function SellerProfileScreen() {
         </View>
       </View>
       {showBlockingLoader ? (
-        <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
+        <View style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 10 }}>
           <ActivityIndicator color={GREEN} size="large" />
+          <Text style={{ color: colors.muted, fontWeight: "600" }}>Opening profile…</Text>
         </View>
       ) : (
-        <View style={{ flex: 1, paddingHorizontal: 16, paddingTop: 16, paddingBottom: insets.bottom + 12 }}>
-          <OverflowList maxHeight={isBuyer ? topMaxHeight + LISTINGS_MIN_HEIGHT + 24 : topMaxHeight} refreshControl={refreshControl}>
-            <View style={{ backgroundColor: colors.white, borderRadius: 16, padding: 16, alignItems: "center", borderWidth: 1, borderColor: colors.border }}>
-              <Avatar name={displayName} uri={profile?.photo_url} size={88} />
-              <Text style={{ fontWeight: "800", fontSize: 18, marginTop: 12 }}>{displayName}</Text>
-              {!isBuyer && profile?.business_name && profile.business_name !== profile?.full_name ? (
-                <Text style={{ color: colors.muted, marginTop: 4 }}>{profile.business_name}</Text>
-              ) : null}
-              {!isBuyer && profile?.service_type ? <Text style={{ color: GREEN, fontWeight: "700", marginTop: 4 }}>{profile.service_type}</Text> : null}
-              {!isBuyer && (profile?.rating_avg ?? 0) > 0 ? (
-                <View style={{ flexDirection: "row", alignItems: "center", marginTop: 8, gap: 4 }}>
-                  {[1, 2, 3, 4, 5].map((n) => (
-                    <Ionicons key={n} name={n <= Math.round(profile?.rating_avg || 0) ? "star" : "star-outline"} size={16} color="#F5C518" />
-                  ))}
-                  <Text style={{ color: colors.muted, fontSize: 12, marginLeft: 4 }}>
-                    {profile?.rating_avg?.toFixed(1)} ({profile?.review_count ?? 0})
-                  </Text>
-                </View>
-              ) : null}
-              {isBuyer ? <Text style={{ color: colors.muted, marginTop: 6 }}>Buyer on NAJIK</Text> : null}
-            </View>
-            {profile?.phone || profile?.email || profile?.address ? (
-              <View style={{ backgroundColor: colors.white, borderRadius: 16, padding: 14, marginTop: 12, borderWidth: 1, borderColor: colors.border, gap: 10 }}>
-                {profile.phone ? (
-                  <Pressable onPress={() => void openPhone()} style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-                    <Ionicons name="call-outline" size={18} color={GREEN} />
-                    <Text style={{ fontWeight: "700", color: GREEN }}>{profile.phone}</Text>
-                  </Pressable>
-                ) : null}
-                {profile.email ? (
-                  <Pressable onPress={() => void openEmail()} style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-                    <Ionicons name="mail-outline" size={18} color={GREEN} />
-                    <Text style={{ fontWeight: "700", color: GREEN, flex: 1 }}>{profile.email}</Text>
-                  </Pressable>
-                ) : null}
-                {profile.address ? (
-                  <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 10 }}>
-                    <Ionicons name="location-outline" size={18} color={GREEN} />
-                    <Text style={{ flex: 1 }}>{profile.address}</Text>
-                  </View>
-                ) : null}
+        <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: insets.bottom + 32 }} refreshControl={refreshControl}>
+          <View style={{ backgroundColor: colors.white, borderRadius: 16, padding: 16, alignItems: "center", borderWidth: 1, borderColor: colors.border }}>
+            <Avatar name={displayName} uri={profile?.photo_url} size={88} />
+            <Text style={{ fontWeight: "800", fontSize: 18, marginTop: 12 }}>{displayName}</Text>
+            {!isBuyer && profile?.business_name && profile.business_name !== profile?.full_name ? (
+              <Text style={{ color: colors.muted, marginTop: 4 }}>{profile.business_name}</Text>
+            ) : null}
+            {!isBuyer && profile?.service_type ? <Text style={{ color: GREEN, fontWeight: "700", marginTop: 4 }}>{profile.service_type}</Text> : null}
+            {!isBuyer && (profile?.rating_avg ?? 0) > 0 ? (
+              <View style={{ flexDirection: "row", alignItems: "center", marginTop: 8, gap: 4 }}>
+                {[1, 2, 3, 4, 5].map((n) => (
+                  <Ionicons key={n} name={n <= Math.round(profile?.rating_avg || 0) ? "star" : "star-outline"} size={16} color="#F5C518" />
+                ))}
+                <Text style={{ color: colors.muted, fontSize: 12, marginLeft: 4 }}>
+                  {profile?.rating_avg?.toFixed(1)} ({profile?.review_count ?? 0})
+                </Text>
               </View>
             ) : null}
-            {!isBuyer && reviews.length > 0 ? (
-              <>
-                <Text style={{ fontWeight: "800", fontSize: 15, marginTop: 18, marginBottom: 8 }}>Reviews</Text>
-                {reviews.map((row) => (
-                  <View key={row.id} style={{ backgroundColor: colors.white, borderRadius: 14, padding: 12, marginBottom: 8, borderWidth: 1, borderColor: colors.border }}>
-                    <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-                      <Text style={{ fontWeight: "700" }}>{row.author_name}</Text>
-                      <Text style={{ fontWeight: "800", color: GREEN }}>{row.rating} ★</Text>
-                    </View>
-                    {row.text ? <Text style={{ color: colors.muted, marginTop: 6, lineHeight: 20 }}>{row.text}</Text> : null}
+            {isBuyer ? <Text style={{ color: colors.muted, marginTop: 6 }}>Buyer on NAJIK</Text> : null}
+          </View>
+          {profile?.phone || profile?.email || profile?.address ? (
+            <View style={{ backgroundColor: colors.white, borderRadius: 16, padding: 14, marginTop: 12, borderWidth: 1, borderColor: colors.border, gap: 10 }}>
+              {profile.phone ? (
+                <Pressable onPress={() => void openPhone()} style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+                  <Ionicons name="call-outline" size={18} color={GREEN} />
+                  <Text style={{ fontWeight: "700", color: GREEN }}>{profile.phone}</Text>
+                </Pressable>
+              ) : null}
+              {profile.email ? (
+                <Pressable onPress={() => void openEmail()} style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+                  <Ionicons name="mail-outline" size={18} color={GREEN} />
+                  <Text style={{ fontWeight: "700", color: GREEN, flex: 1 }}>{profile.email}</Text>
+                </Pressable>
+              ) : null}
+              {profile.address ? (
+                <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 10 }}>
+                  <Ionicons name="location-outline" size={18} color={GREEN} />
+                  <Text style={{ flex: 1 }}>{profile.address}</Text>
+                </View>
+              ) : null}
+            </View>
+          ) : null}
+          {!isBuyer && reviews.length > 0 ? (
+            <>
+              <Text style={{ fontWeight: "800", fontSize: 15, marginTop: 18, marginBottom: 8 }}>Reviews</Text>
+              {reviews.map((row) => (
+                <View key={row.id} style={{ backgroundColor: colors.white, borderRadius: 14, padding: 12, marginBottom: 8, borderWidth: 1, borderColor: colors.border }}>
+                  <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                    <Text style={{ fontWeight: "700" }}>{row.author_name}</Text>
+                    <Text style={{ fontWeight: "800", color: GREEN }}>{row.rating} ★</Text>
                   </View>
-                ))}
-              </>
-            ) : null}
-          </OverflowList>
+                  {row.text ? <Text style={{ color: colors.muted, marginTop: 6, lineHeight: 20 }}>{row.text}</Text> : null}
+                </View>
+              ))}
+            </>
+          ) : null}
           {!isBuyer ? (
-            <View
-              style={{ flex: 1, minHeight: LISTINGS_MIN_HEIGHT, marginTop: 12 }}
-              onLayout={(event) => setListingsMaxHeight(event.nativeEvent.layout.height)}
-            >
-              <Text style={{ fontWeight: "800", fontSize: 15, marginBottom: 8 }}>Listings</Text>
+            <>
+              <Text style={{ fontWeight: "800", fontSize: 15, marginTop: 18, marginBottom: 8 }}>Listings</Text>
               {items.length ? (
-                <OverflowList maxHeight={listingsMaxHeight}>
-                  {items.map((item) => <ListingListRow key={item.id} item={item} />)}
-                </OverflowList>
+                items.map((item) => <ListingListRow key={item.id} item={item} />)
               ) : loading && !profile ? (
                 <ActivityIndicator color={GREEN} style={{ marginTop: 8 }} />
               ) : (
                 <Text style={{ color: colors.muted, lineHeight: 20 }}>No live listings right now.</Text>
               )}
-            </View>
+            </>
           ) : null}
-        </View>
+        </ScrollView>
       )}
       <ReportComplaintModal visible={reportOpen} onClose={() => setReportOpen(false)} kind="user" title={displayName} accusedId={userId} />
     </View>

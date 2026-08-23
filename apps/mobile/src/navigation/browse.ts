@@ -63,6 +63,14 @@ export function openChatThread(navigation: { navigate: (...args: any[]) => void 
   navigateNamed(navigation, "ChatThread", { id });
 }
 
+export function openHomeSection(
+  navigation: { navigate: (...args: any[]) => void },
+  section: "recommended" | "trending" | "verified" | "latest",
+  options?: { title?: string; catalog?: CatalogKey },
+) {
+  navigateNamed(navigation, "HomeSection", { section, title: options?.title, catalog: options?.catalog });
+}
+
 export function openSellerProfile(
   navigation: { navigate: (...args: any[]) => void },
   userId: string,

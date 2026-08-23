@@ -308,8 +308,9 @@ class StaffBookingListView(APIView):
     permission_classes = [IsStaffUser]
 
     def get(self, request):
-        items = Booking.objects.select_related("listing", "listing__owner", "requester", "recipient").order_by("-created_at")[:500]
+        items = Booking.objects.select_related("listing", "listing__owner", "requester", "recipient").order_by("-created_at")
         status_filter = (request.query_params.get("status") or "").strip()
         if status_filter:
             items = items.filter(status=status_filter)
+        items = items[:500]
         return Response(StaffBookingSerializer(items, many=True).data)

@@ -2,6 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   AppState,
   Dimensions,
@@ -260,6 +261,17 @@ export function ChatThreadScreen() {
 
   const blocked = Boolean(thread?.blocked_by_me || thread?.blocked_me);
   const canSend = Boolean(draft.trim() || pendingImage || pendingVoice);
+  const [openingProfile, setOpeningProfile] = useState(false);
+
+  function openOtherProfile() {
+    if (!thread?.other.id) return;
+    setOpeningProfile(true);
+    openSellerProfile(navigation, thread.other.id, {
+      full_name: thread.other.full_name,
+      account_type: thread.other.account_type,
+    });
+    setTimeout(() => setOpeningProfile(false), 900);
+  }
 
   return (
     <View style={{ flex: 1, backgroundColor: BG, paddingBottom: keyboardLift }}>
@@ -269,16 +281,7 @@ export function ChatThreadScreen() {
             <Ionicons name="arrow-back" size={24} color="#111827" />
           </Pressable>
           <View style={{ flex: 1 }}>
-            <Pressable
-              onPress={() =>
-                thread?.other.id &&
-                openSellerProfile(navigation, thread.other.id, {
-                  full_name: thread.other.full_name,
-                  account_type: thread.other.account_type,
-                })
-              }
-              style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
-            >
+            <Pressable onPress={openOtherProfile} style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
               <Text style={{ fontWeight: "800", fontSize: 16, flexShrink: 1 }} numberOfLines={1}>
                 {thread?.other.full_name || "Chat"}
               </Text>
@@ -456,6 +459,12 @@ export function ChatThreadScreen() {
         title={thread?.listing_title || "Chat"}
         threadId={id}
       />
+      {openingProfile ? (
+        <View style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "rgba(255,255,255,0.88)", alignItems: "center", justifyContent: "center", zIndex: 50 }}>
+          <ActivityIndicator color={GREEN} size="large" />
+          <Text style={{ marginTop: 10, fontWeight: "700", color: "#374151" }}>Opening profile…</Text>
+        </View>
+      ) : null}
     </View>
   );
 }

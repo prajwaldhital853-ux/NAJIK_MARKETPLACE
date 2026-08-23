@@ -216,13 +216,15 @@ export async function postListingComment(id: string, text: string, parentId?: st
 }
 
 export async function postListingReview(id: string, rating: number, text?: string) {
-  return withAppAuth((token) =>
+  const row = await withAppAuth((token) =>
     api<ApiListing>(`/api/listings/${id}/reviews/`, {
       method: "POST",
       token,
       body: JSON.stringify({ rating, text: text?.trim() || "" }),
     }),
   );
+  emitListingsChanged();
+  return row;
 }
 
 export async function toggleListingSave(id: string) {

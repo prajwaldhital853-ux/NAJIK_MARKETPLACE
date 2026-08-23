@@ -124,7 +124,6 @@ export const NAV: NavItem[] = [
     icon: "star",
     children: [
       { href: "/admin/reviews", label: "All reviews" },
-      { href: "/admin/reviews?status=flagged", label: "Flagged" },
     ],
   },
   { href: "/admin/notifications", label: "Notifications", icon: "bell" },

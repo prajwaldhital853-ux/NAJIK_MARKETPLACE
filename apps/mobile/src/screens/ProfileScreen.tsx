@@ -442,7 +442,7 @@ function BuyerProfile() {
     { icon: "headset" as const, color: "#EA580C", bg: "#FFF1E0", title: "Help & Support" },
     { icon: "settings" as const, color: "#7C3AED", bg: "#F1E9FF", title: "Settings" },
   ];
-  const refreshControl = useAppRefreshControl();
+  const refreshControl = useAppRefreshControl(loadCounts);
 
   return (
     <View style={{ flex: 1, backgroundColor: "#F7F8FA" }}>

@@ -1,14 +1,13 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useNavigation } from "@react-navigation/native";
-import { useMemo, useState } from "react";
+import { useFocusEffect, useNavigation } from "@react-navigation/native";
+import { useCallback, useMemo, useState } from "react";
 import { Image, Pressable, ScrollView, Text, View } from "react-native";
 import { AppHeader } from "../components/AppHeader";
 import { useAppRefreshControl } from "../components/KeyboardScreen";
 import { PressScale } from "../components/PressScale";
 import { useSavedListings } from "../context/SavedListings";
-import { catalogItems, type CatalogItem } from "../data/catalog";
-import { fetchListingFeed } from "../listingsApi";
-import { listingsToCatalog, liveListingById } from "../data/liveListings";
+import { listingsToCatalog } from "../data/liveListings";
+import { fetchSavedListings, type ApiListing } from "../listingsApi";
 import { openListing } from "../navigation/browse";
 import { colors, shadow } from "../theme";
 
@@ -50,7 +49,7 @@ const tabMap: Record<string, SavedItem["category"] | "All"> = {
   Services: "Service",
 };
 
-const catalogCategory: Record<CatalogItem["key"], SavedItem["category"]> = {
+const catalogCategory: Record<string, SavedItem["category"]> = {
   property: "Property",
   vehicles: "Vehicle",
   jobs: "Job",
@@ -61,15 +60,15 @@ const catalogCategory: Record<CatalogItem["key"], SavedItem["category"]> = {
   others: "Service",
 };
 
-function fromCatalog(item: CatalogItem): SavedItem {
+function fromCatalog(item: ReturnType<typeof listingsToCatalog>[number]): SavedItem {
   return {
     id: item.id,
-    category: catalogCategory[item.key],
+    category: catalogCategory[item.key] || "Service",
     title: item.title,
     company: item.company,
     location: item.location,
     price: item.price,
-    savedOn: "Today",
+    savedOn: "Saved",
     photo: item.photo,
     tags: item.tags,
   };
@@ -77,21 +76,29 @@ function fromCatalog(item: CatalogItem): SavedItem {
 
 export function SavedScreen() {
   const navigation = useNavigation<any>();
-  const { ids, remove } = useSavedListings();
+  const { remove, reload } = useSavedListings();
   const [tab, setTab] = useState("All");
   const [banner, setBanner] = useState(true);
+  const [rows, setRows] = useState<ApiListing[]>([]);
   const filter = tabMap[tab];
-  const extras = useMemo(
-    () =>
-      ids
-        .map((id) => catalogItems.find((item) => item.id === id) || liveListingById(id))
-        .filter((item): item is CatalogItem => Boolean(item))
-        .map(fromCatalog),
-    [ids],
+
+  const load = useCallback(() => {
+    return fetchSavedListings()
+      .then(setRows)
+      .catch(() => setRows([]));
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      void load();
+    }, [load]),
   );
+
+  const extras = useMemo(() => listingsToCatalog(rows).map(fromCatalog), [rows]);
   const list = filter === "All" ? extras : extras.filter((item) => item.category === filter);
   const refreshControl = useAppRefreshControl(async () => {
-    await fetchListingFeed().then(listingsToCatalog).catch(() => undefined);
+    await load();
+    await reload();
   });
 
   return (
@@ -164,6 +171,10 @@ export function SavedScreen() {
             onRemove={() => remove(item.id)}
           />
         ))}
+
+        {list.length === 0 ? (
+          <Text style={{ color: colors.muted, textAlign: "center", marginTop: 24 }}>No saved listings yet.</Text>
+        ) : null}
 
         {banner ? (
           <View

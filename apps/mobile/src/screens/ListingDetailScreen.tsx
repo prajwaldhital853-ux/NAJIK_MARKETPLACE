@@ -820,14 +820,14 @@ function CommentsTab({
   onReview: () => void;
 }) {
   const { onInputFocus, scrollAnchorIntoView } = useKeyboardScroll();
-  const formRef = useRef<View>(null);
+  const bottomRef = useRef<View>(null);
   const replyCount = comments.reduce((sum, row) => sum + (row.replies?.length || 0), 0);
   const total = reviews.length + comments.length + replyCount;
   const scrollable = total > 6;
 
-  function focusCommentField() {
+  function focusInputField() {
     onInputFocus();
-    scrollAnchorIntoView(formRef.current);
+    scrollAnchorIntoView(bottomRef.current);
   }
 
   return (
@@ -859,17 +859,18 @@ function CommentsTab({
           ))}
         </ScrollView>
       )}
+      <View ref={bottomRef} collapsable={false}>
       {replyTo ? (
         <Pressable onPress={() => setReplyTo(null)} style={{ marginTop: 10, flexDirection: "row", alignItems: "center", gap: 6 }}>
           <Text style={{ color: "#6B7280", fontSize: 12 }}>Replying to {replyTo.name}</Text>
           <Text style={{ color: GREEN, fontWeight: "700", fontSize: 12 }}>Cancel</Text>
         </Pressable>
       ) : null}
-      <View ref={formRef} collapsable={false} style={{ flexDirection: "row", alignItems: "center", marginTop: 14, gap: 8 }}>
+      <View style={{ flexDirection: "row", alignItems: "center", marginTop: 14, gap: 8 }}>
         <TextInput
           value={comment}
           onChangeText={setComment}
-          onFocus={focusCommentField}
+          onFocus={focusInputField}
           placeholder={isOwner ? "Reply to a buyer…" : "Write a comment…"}
           placeholderTextColor="#9AA0A6"
           style={{ flex: 1, borderWidth: 1, borderColor: LINE, borderRadius: 6, height: 44, paddingHorizontal: 12, fontSize: 13 }}
@@ -894,7 +895,7 @@ function CommentsTab({
           <TextInput
             value={reviewText}
             onChangeText={setReviewText}
-            onFocus={focusCommentField}
+            onFocus={focusInputField}
             placeholder="Optional note about this seller"
             placeholderTextColor="#9AA0A6"
             style={{ borderWidth: 1, borderColor: LINE, borderRadius: 6, minHeight: 70, paddingHorizontal: 12, paddingVertical: 10, fontSize: 13, textAlignVertical: "top" }}
@@ -908,6 +909,7 @@ function CommentsTab({
           </PressScale>
         </View>
       ) : null}
+      </View>
     </View>
   );
 }

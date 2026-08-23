@@ -17,7 +17,7 @@ import {
   type EngagementSummary,
 } from "@/lib/staff-api";
 
-const KIND_TABS = ["All", "Comments", "Reviews", "Hidden"] as const;
+const KIND_TABS = ["All", "Comments", "Reviews"] as const;
 
 export default function ReviewsPage() {
   const { apiSession } = useSession();
@@ -29,13 +29,7 @@ export default function ReviewsPage() {
   const [rows, setRows] = useState<EngagementRow[]>([]);
   const [error, setError] = useState("");
   const [tab, setTab] = useState<(typeof KIND_TABS)[number]>(
-    params.get("kind") === "comment"
-      ? "Comments"
-      : params.get("kind") === "review"
-        ? "Reviews"
-        : params.get("kind") === "hidden"
-          ? "Hidden"
-          : "All",
+    params.get("kind") === "comment" ? "Comments" : params.get("kind") === "review" ? "Reviews" : "All",
   );
   const [openId, setOpenId] = useState<string | null>(params.get("id"));
   const [busy, setBusy] = useState(false);
@@ -45,7 +39,6 @@ export default function ReviewsPage() {
     const qs = new URLSearchParams();
     if (next === "Comments") qs.set("kind", "comment");
     else if (next === "Reviews") qs.set("kind", "review");
-    else if (next === "Hidden") qs.set("kind", "hidden");
     const open = id === undefined ? openId : id;
     if (open) qs.set("id", open);
     const suffix = qs.toString();
@@ -55,15 +48,8 @@ export default function ReviewsPage() {
   async function load() {
     if (!apiSession) return;
     try {
-      const kind =
-        tab === "Comments" ? "comment" : tab === "Reviews" ? "review" : tab === "Hidden" ? "all" : "all";
-      const [sum, list] = await Promise.all([
-        getEngagementSummary(),
-        listEngagement({
-          kind: tab === "Hidden" ? "all" : kind,
-          hidden: tab === "Hidden" ? true : undefined,
-        }),
-      ]);
+      const kind = tab === "Comments" ? "comment" : tab === "Reviews" ? "review" : "all";
+      const [sum, list] = await Promise.all([getEngagementSummary(), listEngagement({ kind })]);
       setSummary(sum);
       setRows(list);
       setError("");
@@ -116,7 +102,6 @@ export default function ReviewsPage() {
           { label: "Comments", value: summary?.comment_count ?? "—", tone: "brand" },
           { label: "Seller reviews", value: summary?.review_count ?? "—", tone: "green" },
           { label: "Average stars", value: summary ? summary.rating_avg.toFixed(1) : "—", tone: "green" },
-          { label: "Hidden", value: (summary?.comment_hidden ?? 0) + (summary?.review_hidden ?? 0), tone: "red" },
           { label: "Five star", value: summary?.five_star ?? "—", tone: "amber" },
         ]}
       />

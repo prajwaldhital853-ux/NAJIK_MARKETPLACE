@@ -1,6 +1,7 @@
 import type { CatalogKey } from "../data/catalog";
 import type { SellerPage } from "../data/sellerHub";
 import { dismissInboxTargetOnVisit, normTargetId } from "../inboxBridge";
+import { prefetchListing } from "../listingsApi";
 
 export function openCategory(
   navigation: { navigate: (...args: any[]) => void },
@@ -22,6 +23,7 @@ export function openListing(
   id: string,
   manage = false,
 ) {
+  prefetchListing(id);
   dismissInboxTargetOnVisit({ target: "listing", target_id: normTargetId(id) });
   navigation.navigate("ListingDetail", { id, manage });
 }

@@ -35,6 +35,7 @@ import { catalogMeta, listingById, type CatalogItem } from "../data/catalog";
 import { apiCategoryForKey, liveListingById, listingsToCatalog, listingToCatalog } from "../data/liveListings";
 import { rankSimilarListings, relatedKeywordsFor } from "../data/similarListings";
 import { fetchListing, fetchListingFeed, postListingComment, postListingReview, toggleListingSave, type ApiListing } from "../listingsApi";
+import { peekListingDetail } from "../listingCache";
 import { recordListingView } from "../listingViews";
 import { emitListingsChanged, subscribeListingsChanged } from "../listingsRefresh";
 import { openCategory, openChatThread, openMapSearch, openSellerProfile } from "../navigation/browse";
@@ -58,8 +59,20 @@ export function ListingDetailScreen() {
   const { dismissTarget } = useInbox();
   const id = String(route.params?.id ?? "");
   const manage = Boolean(route.params?.manage);
-  const [item, setItem] = useState<CatalogItem | undefined>(listingById(id) || liveListingById(id));
-  const [live, setLive] = useState<ApiListing | null>(null);
+  const cached = listingById(id) || liveListingById(id);
+  const [item, setItem] = useState<CatalogItem | undefined>(cached);
+  const [live, setLive] = useState<ApiListing | null>(() => peekListingDetail(id));
+  const [missing, setMissing] = useState(false);
+  const idRef = useRef(id);
+
+  if (idRef.current !== id) {
+    idRef.current = id;
+    setItem(cached);
+    setLive(peekListingDetail(id));
+    setMissing(false);
+  }
+
+  const displayItem = item?.id === id ? item : cached;
 
   useFocusEffect(
     useCallback(() => {
@@ -69,8 +82,8 @@ export function ListingDetailScreen() {
   );
 
   useEffect(() => {
-    const cached = listingById(id) || liveListingById(id);
-    if (cached) setItem(cached);
+    const nextCached = listingById(id) || liveListingById(id);
+    if (nextCached) setItem(nextCached);
     if (!/^[0-9a-f-]{36}$/i.test(id)) return;
     const load = () => {
       void fetchListing(id)
@@ -80,20 +93,31 @@ export function ListingDetailScreen() {
           void recordListingView(row.id);
         })
         .catch(() => {
-          if (!cached) setItem(undefined);
+          if (!nextCached) {
+            setItem(undefined);
+            setMissing(true);
+          }
         });
     };
     load();
     return subscribeListingsChanged(load);
   }, [id]);
 
-  if (!item) {
+  if (!displayItem) {
+    if (missing || !/^[0-9a-f-]{36}$/i.test(id)) {
+      return (
+        <View style={{ flex: 1, backgroundColor: "#fff", alignItems: "center", justifyContent: "center", padding: 24 }}>
+          <Text style={{ fontWeight: "800", fontSize: 16 }}>Listing not found</Text>
+          <PressScale onPress={() => navigation.goBack()} style={{ marginTop: 12 }}>
+            <Text style={{ color: GREEN, fontWeight: "800" }}>Go back</Text>
+          </PressScale>
+        </View>
+      );
+    }
     return (
       <View style={{ flex: 1, backgroundColor: "#fff", alignItems: "center", justifyContent: "center", padding: 24 }}>
-        <Text style={{ fontWeight: "800", fontSize: 16 }}>Listing not found</Text>
-        <PressScale onPress={() => navigation.goBack()} style={{ marginTop: 12 }}>
-          <Text style={{ color: GREEN, fontWeight: "800" }}>Go back</Text>
-        </PressScale>
+        <ActivityIndicator color={GREEN} />
+        <Text style={{ marginTop: 12, fontWeight: "800", fontSize: 16 }}>Loading listing…</Text>
       </View>
     );
   }
@@ -122,7 +146,8 @@ export function ListingDetailScreen() {
         }}
       >
         <ListingBody
-          item={item}
+          key={id}
+          item={displayItem}
           live={live}
           isOwner={isOwner}
           navigation={navigation}
@@ -286,12 +311,13 @@ function ListingBody({
       {rich.gallery.length ? (
       <View style={{ height: PHOTO_H, backgroundColor: "#F3F4F6" }}>
         <FlatList
+          key={listingId}
           ref={galleryRef}
           data={rich.gallery}
           horizontal
           pagingEnabled
           showsHorizontalScrollIndicator={false}
-          keyExtractor={(_, i) => String(i)}
+          keyExtractor={(src, i) => (typeof src === "number" ? `local-${i}` : src.uri || String(i))}
           onMomentumScrollEnd={onHeroScroll}
           getItemLayout={(_, i) => ({ length: SCREEN_W, offset: SCREEN_W * i, index: i })}
           renderItem={({ item: src }) => (
@@ -299,7 +325,7 @@ function ListingBody({
               {typeof src === "number" ? (
                 <Image source={src} style={{ width: SCREEN_W, height: PHOTO_H, backgroundColor: "#E8EEF0" }} resizeMode="cover" />
               ) : (
-                <AuthImage uri={src.uri} style={{ width: SCREEN_W, height: PHOTO_H, backgroundColor: "#E8EEF0" }} />
+                <AuthImage uri={src.uri} style={{ width: SCREEN_W, height: PHOTO_H, backgroundColor: "#E8EEF0" }} priority="high" />
               )}
             </Pressable>
           )}
@@ -343,7 +369,7 @@ function ListingBody({
           onPress={() => rich.seller.ownerId && openSellerProfile(navigation, rich.seller.ownerId)}
           style={{ flexDirection: "row", alignItems: "center" }}
         >
-          <Avatar name={rich.seller.name} uri={rich.seller.photoUrl} size={44} />
+          <Avatar name={rich.seller.name} uri={rich.seller.photoUrl} size={44} priority="high" />
           <View style={{ flex: 1, marginLeft: 10 }}>
             <Text style={{ fontWeight: "700", fontSize: 14, color: "#111" }}>{rich.seller.name}</Text>
             <Text style={{ color: "#6B7280", fontSize: 12, marginTop: 2 }}>{rich.seller.role}</Text>

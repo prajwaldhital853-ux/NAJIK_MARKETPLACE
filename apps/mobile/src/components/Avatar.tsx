@@ -16,6 +16,7 @@ export function Avatar({
   borderWidth = 2,
   onCamera,
   style,
+  priority,
 }: {
   name?: string | null;
   uri?: string | null;
@@ -24,6 +25,7 @@ export function Avatar({
   borderWidth?: number;
   onCamera?: () => void;
   style?: StyleProp<ViewStyle>;
+  priority?: "low" | "normal" | "high";
 }) {
   const cam = Math.max(18, Math.round(size * 0.32));
   return (
@@ -31,6 +33,7 @@ export function Avatar({
       {uri ? (
         <AuthImage
           uri={uri}
+          priority={priority}
           style={{
             width: size,
             height: size,

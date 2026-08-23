@@ -145,7 +145,11 @@ class ListingFeedView(APIView):
             items = items.order_by("-price")
         else:
             items = items.order_by("-created_at")
-        rows = ListingSerializer(items[:200], many=True, context={"request": request}).data
+        try:
+            limit = min(max(int(request.query_params.get("limit") or 200), 1), 200)
+        except (TypeError, ValueError):
+            limit = 200
+        rows = ListingSerializer(items[:limit], many=True, context={"request": request}).data
         min_price = request.query_params.get("min_price")
         max_price = request.query_params.get("max_price")
         if min_price or max_price:

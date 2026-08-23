@@ -329,71 +329,104 @@ class StaffLoadRequestProofView(APIView):
         return FileResponse(load.proof_image.open("rb"), content_type=content_type or "image/jpeg")
 
 
-def _admin_credit_revenue_series(period: str) -> list[dict]:
-    """Aggregate admin wallet credits (staff top-ups) for dashboard revenue charts."""
-    base = SellerWalletTransaction.objects.filter(kind=SellerWalletTransaction.KIND_ADMIN_CREDIT)
+def _wallet_series_for_kind(kind: str, period: str) -> list[dict]:
+    base = SellerWalletTransaction.objects.filter(kind=kind)
     now = timezone.now()
     period = (period or "month").lower()
-    series: list[dict] = []
+    rows = []
 
     if period == "day":
         since = now - timedelta(days=29)
-        rows = (
+        qs = (
             base.filter(created_at__gte=since)
             .annotate(bucket=TruncDate("created_at"))
             .values("bucket")
             .annotate(total=Sum("amount_paisa"))
             .order_by("bucket")
         )
-        for row in rows:
+        for row in qs:
             bucket = row["bucket"]
             if not bucket:
                 continue
-            total = row["total"] or 0
-            series.append({"label": bucket.strftime("%d %b"), "v": total / 100, "amount_paisa": total})
+            rows.append({"label": bucket.strftime("%d %b"), "amount_paisa": row["total"] or 0})
     elif period == "year":
-        rows = (
+        qs = (
             base.annotate(bucket=TruncYear("created_at"))
             .values("bucket")
             .annotate(total=Sum("amount_paisa"))
             .order_by("bucket")
         )
-        for row in rows:
+        for row in qs:
             bucket = row["bucket"]
             if not bucket:
                 continue
-            total = row["total"] or 0
-            series.append({"label": str(bucket.year), "v": total / 100, "amount_paisa": total})
+            rows.append({"label": str(bucket.year), "amount_paisa": row["total"] or 0})
     elif period == "all":
-        rows = (
+        qs = (
             base.annotate(bucket=TruncMonth("created_at"))
             .values("bucket")
             .annotate(total=Sum("amount_paisa"))
             .order_by("bucket")
         )
-        for row in rows:
+        for row in qs:
             bucket = row["bucket"]
             if not bucket:
                 continue
-            total = row["total"] or 0
-            series.append({"label": bucket.strftime("%b %Y"), "v": total / 100, "amount_paisa": total})
+            rows.append({"label": bucket.strftime("%b %Y"), "amount_paisa": row["total"] or 0})
     else:
         since = now - timedelta(days=365)
-        rows = (
+        qs = (
             base.filter(created_at__gte=since)
             .annotate(bucket=TruncMonth("created_at"))
             .values("bucket")
             .annotate(total=Sum("amount_paisa"))
             .order_by("bucket")
         )
-        for row in rows:
+        for row in qs:
             bucket = row["bucket"]
             if not bucket:
                 continue
-            total = row["total"] or 0
-            series.append({"label": bucket.strftime("%b"), "v": total / 100, "amount_paisa": total})
+            rows.append({"label": bucket.strftime("%b"), "amount_paisa": row["total"] or 0})
+    return rows
 
+
+def _wallet_revenue_series(period: str) -> list[dict]:
+    admin_rows = _wallet_series_for_kind(SellerWalletTransaction.KIND_ADMIN_CREDIT, period)
+    load_rows = _wallet_series_for_kind(SellerWalletTransaction.KIND_LOAD, period)
+    order: list[str] = []
+    admin_map: dict[str, int] = {}
+    load_map: dict[str, int] = {}
+    for row in admin_rows:
+        if row["label"] not in order:
+            order.append(row["label"])
+        admin_map[row["label"]] = row["amount_paisa"]
+    for row in load_rows:
+        if row["label"] not in order:
+            order.append(row["label"])
+        load_map[row["label"]] = row["amount_paisa"]
+    series: list[dict] = []
+    for label in order:
+        admin_paisa = admin_map.get(label, 0)
+        load_paisa = load_map.get(label, 0)
+        series.append(
+            {
+                "label": label,
+                "admin_v": admin_paisa / 100,
+                "load_v": load_paisa / 100,
+                "v": (admin_paisa + load_paisa) / 100,
+                "admin_paisa": admin_paisa,
+                "load_paisa": load_paisa,
+            }
+        )
     return series
+
+
+def _admin_credit_revenue_series(period: str) -> list[dict]:
+    """Backward-compatible admin-only series."""
+    return [
+        {"label": row["label"], "v": row["admin_v"], "amount_paisa": row["admin_paisa"]}
+        for row in _wallet_revenue_series(period)
+    ]
 
 
 class StaffPaymentsSummaryView(APIView):
@@ -418,7 +451,13 @@ class StaffPaymentsSummaryView(APIView):
             .aggregate(total=Sum("amount_paisa"))["total"]
             or 0
         )
+        approved_load_paisa = (
+            SellerWalletTransaction.objects.filter(kind=SellerWalletTransaction.KIND_LOAD)
+            .aggregate(total=Sum("amount_paisa"))["total"]
+            or 0
+        )
         revenue_period = (request.query_params.get("revenue_period") or "month").strip().lower()
+        wallet_series = _wallet_revenue_series(revenue_period)
         cfg = SellerPaymentConfig.get_solo()
         wallet_count = wallet_agg["count"] or 0
         total_balance_paisa = wallet_agg["total_paisa"] or 0
@@ -435,7 +474,14 @@ class StaffPaymentsSummaryView(APIView):
                 "admin_credit_total_paisa": admin_credit_paisa,
                 "admin_credit_total_label": paisa_to_label(admin_credit_paisa),
                 "admin_credit_total_rupees": admin_credit_paisa / 100,
+                "approved_load_total_paisa": approved_load_paisa,
+                "approved_load_total_label": paisa_to_label(approved_load_paisa),
+                "approved_load_total_rupees": approved_load_paisa / 100,
+                "total_revenue_paisa": admin_credit_paisa + approved_load_paisa,
+                "total_revenue_label": paisa_to_label(admin_credit_paisa + approved_load_paisa),
+                "total_revenue_rupees": (admin_credit_paisa + approved_load_paisa) / 100,
                 "revenue_period": revenue_period,
+                "wallet_revenue_series": wallet_series,
                 "admin_credit_series": _admin_credit_revenue_series(revenue_period),
                 "listing_fee_label": cfg.listing_fee_label,
                 "listing_fee_rupees": cfg.listing_fee_rupees,

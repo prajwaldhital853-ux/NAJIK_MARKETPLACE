@@ -27,6 +27,7 @@ const GAP = 11;
 const TILE = (SCREEN_W - PAD * 2 - GAP * 3) / 4;
 const GREEN = "#1B7D2C";
 const SECTION_LIMIT = 10;
+const QUICK_FEED_LIMIT = 16;
 
 const categories: { label: string; icon: keyof typeof Ionicons.glyphMap; bg: string; color: string }[] = [
   { label: "Property", icon: "home", bg: "#E8F1FE", color: "#1D4ED8" },
@@ -81,13 +82,27 @@ export function BuyerHomeScreen() {
   const [latestRows, setLatestRows] = useState<CatalogItem[]>([]);
   const [recommendedRows, setRecommendedRows] = useState<CatalogItem[]>([]);
   const [trendChip, setTrendChip] = useState("all");
+  const [loadingHome, setLoadingHome] = useState(true);
 
   async function loadSections() {
     const base = { ...feedParams };
+    setLoadingHome(true);
+    try {
+      const quick = await fetchListingFeed({ ...base, sort: "new", limit: QUICK_FEED_LIMIT }).catch(() => [] as ApiListing[]);
+      const quickItems = listingsToCatalog(quick).filter((item) => !item.urgent);
+      if (quickItems.length) {
+        setLatestRows(quickItems);
+        setTrendingRows(quickItems);
+        setRecommendedRows(quickItems.slice(0, SECTION_LIMIT));
+      }
+    } finally {
+      setLoadingHome(false);
+    }
+
     const [popular, verified, latest, saved, recentIds] = await Promise.all([
-      fetchListingFeed({ ...base, sort: "popular" }).catch(() => [] as ApiListing[]),
-      fetchListingFeed({ ...base, verified: true, sort: "new" }).catch(() => [] as ApiListing[]),
-      fetchListingFeed({ ...base, sort: "new" }).catch(() => [] as ApiListing[]),
+      fetchListingFeed({ ...base, sort: "popular", limit: 60 }).catch(() => [] as ApiListing[]),
+      fetchListingFeed({ ...base, verified: true, sort: "new", limit: 40 }).catch(() => [] as ApiListing[]),
+      fetchListingFeed({ ...base, sort: "new", limit: 60 }).catch(() => [] as ApiListing[]),
       user ? fetchSavedListings().catch(() => [] as ApiListing[]) : Promise.resolve([] as ApiListing[]),
       getRecentViewIds(),
     ]);
@@ -212,12 +227,12 @@ export function BuyerHomeScreen() {
           </View>
         ) : (
           <>
-            <MarketplaceSection title="Recommended" icon="thumbs-up" iconColor="#2563EB" items={recommended} onViewMore={() => openHomeSection(navigation, "recommended", { title: "Recommended" })} emptyText={recommended.length ? undefined : "Browse listings to get personalised picks."} />
-            <MarketplaceSection title="Trending" icon="stats-chart" iconColor="#2563EB" items={trending} chips={TREND_CHIPS.map(({ key, label }) => ({ key, label }))} activeChip={trendChip} onChip={setTrendChip} onViewMore={() => { const chip = TREND_CHIPS.find((c) => c.key === trendChip); openHomeSection(navigation, "trending", { title: chip?.key === "all" ? "Trending" : chip?.label || "Trending", catalog: chip?.catalog }); }} />
-            {verifiedSellers.length ? (
-              <MarketplaceSection title="By verified sellers" icon="checkmark-circle" iconColor="#2563EB" items={verifiedSellers} onViewMore={() => openHomeSection(navigation, "verified", { title: "By verified sellers" })} />
+            <MarketplaceSection title="Recommended" icon="thumbs-up" iconColor="#2563EB" items={recommended} loading={loadingHome && !recommended.length} onViewMore={() => openHomeSection(navigation, "recommended", { title: "Recommended" })} emptyText={!loadingHome && !recommended.length ? "Browse listings to get personalised picks." : undefined} />
+            <MarketplaceSection title="Trending" icon="stats-chart" iconColor="#2563EB" items={trending} loading={loadingHome && !trending.length} chips={TREND_CHIPS.map(({ key, label }) => ({ key, label }))} activeChip={trendChip} onChip={setTrendChip} onViewMore={() => { const chip = TREND_CHIPS.find((c) => c.key === trendChip); openHomeSection(navigation, "trending", { title: chip?.key === "all" ? "Trending" : chip?.label || "Trending", catalog: chip?.catalog }); }} />
+            {verifiedSellers.length || loadingHome ? (
+              <MarketplaceSection title="By verified sellers" icon="checkmark-circle" iconColor="#2563EB" items={verifiedSellers} loading={loadingHome && !verifiedSellers.length} onViewMore={() => openHomeSection(navigation, "verified", { title: "By verified sellers" })} />
             ) : null}
-            <MarketplaceSection title="Latest Uploads" icon="cloud-upload" iconColor="#111827" items={latest} mode="grid" limit={SECTION_LIMIT} onViewMore={() => openHomeSection(navigation, "latest", { title: "Latest uploads" })} />
+            <MarketplaceSection title="Latest Uploads" icon="cloud-upload" iconColor="#111827" items={latest} loading={loadingHome && !latest.length} mode="grid" limit={SECTION_LIMIT} onViewMore={() => openHomeSection(navigation, "latest", { title: "Latest uploads" })} />
           </>
         )}
       </ScrollView>

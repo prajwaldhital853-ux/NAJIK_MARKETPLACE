@@ -446,7 +446,14 @@ export type StaffPaymentsSummary = {
   admin_credit_total_paisa: number;
   admin_credit_total_label: string;
   admin_credit_total_rupees: number;
+  approved_load_total_paisa: number;
+  approved_load_total_label: string;
+  approved_load_total_rupees: number;
+  total_revenue_paisa: number;
+  total_revenue_label: string;
+  total_revenue_rupees: number;
   revenue_period: string;
+  wallet_revenue_series: { label: string; admin_v: number; load_v: number; v: number; admin_paisa: number; load_paisa: number }[];
   admin_credit_series: { label: string; v: number; amount_paisa: number }[];
   listing_fee_label: string;
   listing_fee_rupees: number;

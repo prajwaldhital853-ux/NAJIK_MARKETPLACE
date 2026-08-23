@@ -400,7 +400,7 @@ export function AdminStoreProvider({ children }: { children: React.ReactNode }) 
       usedItems: listingCount("marketplace"),
       electronics: listingCount("marketplace"),
       shops: listingCount("business"),
-      revenue: paymentsSummary?.admin_credit_total_rupees ?? 0,
+      revenue: paymentsSummary?.total_revenue_rupees ?? paymentsSummary?.admin_credit_total_rupees ?? 0,
       revenueDelta: 0,
     }),
     [mergedUsers, liveListings, paymentsSummary],

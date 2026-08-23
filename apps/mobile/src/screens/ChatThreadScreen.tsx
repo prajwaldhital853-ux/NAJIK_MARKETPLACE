@@ -69,8 +69,10 @@ export function ChatThreadScreen() {
   const { user } = useAuth();
   const { dismissTarget, refresh } = useInbox();
   const id = String(route.params?.id ?? "");
+  const idRef = useRef(id);
   const [thread, setThread] = useState<ChatThread | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [loading, setLoading] = useState(true);
   const [draft, setDraft] = useState("");
   const [placeOpen, setPlaceOpen] = useState(false);
   const [bookOpen, setBookOpen] = useState(false);
@@ -87,21 +89,39 @@ export function ChatThreadScreen() {
   const listRef = useRef<FlatList<ChatMessage>>(null);
   const stickToBottom = useRef(true);
 
+  if (idRef.current !== id) {
+    idRef.current = id;
+    setThread(null);
+    setMessages([]);
+    setDraft("");
+    setPendingImage(null);
+    setPendingVoice(null);
+    setPlaceOpen(false);
+    setPlaceQ("");
+    setHits([]);
+    setLoading(true);
+  }
+
   const load = useCallback(async (incremental = false) => {
     if (!id) return;
-    const since = incremental && messagesRef.current.length ? messagesRef.current[messagesRef.current.length - 1]?.created_at : undefined;
-    const row = await fetchChatThread(id, since);
-    setThread(row);
-    const incoming = row.messages || [];
-    if (!incremental || !since) {
-      setMessages(incoming);
-      return;
+    if (!incremental) setLoading(true);
+    try {
+      const since = incremental && messagesRef.current.length ? messagesRef.current[messagesRef.current.length - 1]?.created_at : undefined;
+      const row = await fetchChatThread(id, since);
+      setThread(row);
+      const incoming = row.messages || [];
+      if (!incremental || !since) {
+        setMessages(incoming);
+        return;
+      }
+      setMessages((prev) => {
+        const seen = new Set(prev.map((item) => item.id));
+        const extra = incoming.filter((item) => !seen.has(item.id));
+        return extra.length ? [...prev, ...extra] : prev;
+      });
+    } finally {
+      if (!incremental) setLoading(false);
     }
-    setMessages((prev) => {
-      const seen = new Set(prev.map((item) => item.id));
-      const extra = incoming.filter((item) => !seen.has(item.id));
-      return extra.length ? [...prev, ...extra] : prev;
-    });
   }, [id]);
 
   useEffect(() => {
@@ -283,11 +303,15 @@ export function ChatThreadScreen() {
           <View style={{ flex: 1 }}>
             <Pressable onPress={openOtherProfile} style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
               <Text style={{ fontWeight: "800", fontSize: 16, flexShrink: 1 }} numberOfLines={1}>
-                {thread?.other.full_name || "Chat"}
+                {loading && !thread ? "Loading chat…" : thread?.other.full_name || "Chat"}
               </Text>
-              <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: thread?.other.online ? "#22C55E" : "#D1D5DB" }} />
+              {thread ? (
+                <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: thread.other.online ? "#22C55E" : "#D1D5DB" }} />
+              ) : null}
             </Pressable>
-            <Text style={{ color: "#6B7280", fontSize: 11 }}>{lastSeenLabel(thread?.other.last_seen, thread?.other.online)}</Text>
+            <Text style={{ color: "#6B7280", fontSize: 11 }}>
+              {loading && !thread ? "Please wait" : lastSeenLabel(thread?.other.last_seen, thread?.other.online)}
+            </Text>
           </View>
           <PressScale onPress={callListing} style={{ padding: 6 }}>
             <Ionicons name="call-outline" size={20} color={GREEN} />
@@ -343,6 +367,7 @@ export function ChatThreadScreen() {
       </View>
 
       <FlatList
+        key={id}
         ref={listRef}
         data={messages}
         keyExtractor={(item) => item.id}
@@ -385,9 +410,15 @@ export function ChatThreadScreen() {
           />
         )}
         ListEmptyComponent={
-          <Text style={{ textAlign: "center", color: colors.muted, paddingHorizontal: 32, lineHeight: 20 }}>
-            No messages yet. Say hello below.
-          </Text>
+          loading ? (
+            <View style={{ alignItems: "center", paddingVertical: 32 }}>
+              <ActivityIndicator color={GREEN} />
+            </View>
+          ) : (
+            <Text style={{ textAlign: "center", color: colors.muted, paddingHorizontal: 32, lineHeight: 20 }}>
+              No messages yet. Say hello below.
+            </Text>
+          )
         }
       />
 

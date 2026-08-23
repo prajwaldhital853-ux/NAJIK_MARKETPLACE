@@ -1,53 +1,54 @@
+import { Image, type ImageContentFit } from "expo-image";
 import { useEffect, useState } from "react";
-import { Image, type ImageStyle, type StyleProp } from "react-native";
+import { View, type StyleProp, type ImageStyle } from "react-native";
 import { optionalAppAccessToken } from "../authApi";
 
 export function AuthImage({
   uri,
   style,
   resizeMode = "cover",
+  priority,
 }: {
   uri?: string | null;
   style?: StyleProp<ImageStyle>;
-  resizeMode?: "cover" | "contain" | "stretch" | "center";
+  resizeMode?: ImageContentFit;
+  priority?: "low" | "normal" | "high";
 }) {
-  const [src, setSrc] = useState<string | null | undefined>(undefined);
+  const [headers, setHeaders] = useState<Record<string, string> | undefined>(undefined);
+  const needsAuth = Boolean(uri && uri.includes("/api/"));
 
   useEffect(() => {
-    if (!uri) {
-      setSrc(null);
-      return;
-    }
-    if (!uri.includes("/api/")) {
-      setSrc(uri);
-      return;
-    }
     let cancelled = false;
-    (async () => {
-      try {
-        const token = await optionalAppAccessToken();
-        const response = await fetch(uri, {
-          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-        });
-        if (!response.ok) {
-          if (!cancelled) setSrc(null);
-          return;
-        }
-        const blob = await response.blob();
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          if (!cancelled) setSrc(typeof reader.result === "string" ? reader.result : null);
-        };
-        reader.readAsDataURL(blob);
-      } catch {
-        if (!cancelled) setSrc(null);
-      }
-    })();
+    if (!uri) {
+      setHeaders(undefined);
+      return;
+    }
+    if (!needsAuth) {
+      setHeaders({});
+      return;
+    }
+    void optionalAppAccessToken().then((token) => {
+      if (!cancelled) setHeaders(token ? { Authorization: `Bearer ${token}` } : {});
+    });
     return () => {
       cancelled = true;
     };
-  }, [uri]);
+  }, [uri, needsAuth]);
 
-  if (!uri || !src) return null;
-  return <Image source={{ uri: src }} style={style} resizeMode={resizeMode} />;
+  if (!uri) return null;
+  if (needsAuth && headers === undefined) {
+    return <View style={[style, { backgroundColor: "#E8EEF0" }]} />;
+  }
+
+  return (
+    <Image
+      source={{ uri, headers: needsAuth ? headers : undefined }}
+      style={style}
+      contentFit={resizeMode}
+      cachePolicy="memory-disk"
+      transition={120}
+      priority={priority}
+      recyclingKey={uri}
+    />
+  );
 }

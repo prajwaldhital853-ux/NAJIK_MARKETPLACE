@@ -1,6 +1,7 @@
 import { api } from "./api";
 import { optionalAppAccessToken, withAppAuth } from "./authApi";
 import { emitListingsChanged } from "./listingsRefresh";
+import { peekListingDetail, prefetchListingDetail, rememberListingDetail, rememberListingFeed } from "./listingCache";
 
 export type ApiListingPhoto = { id: string; url: string; sort_order: number; is_pending?: boolean };
 
@@ -98,6 +99,7 @@ export type FeedQuery = {
   place?: string;
   owner?: string;
   urgent?: string;
+  limit?: number;
 };
 
 export type SellerPublicProfile = {
@@ -133,12 +135,23 @@ export async function fetchListingFeed(categoryOrQuery?: string | FeedQuery) {
     });
   }
   const query = params.toString() ? `?${params.toString()}` : "";
-  return api<ApiListing[]>(`/api/listings/feed/${query}`);
+  const rows = await api<ApiListing[]>(`/api/listings/feed/${query}`);
+  rememberListingFeed(rows);
+  return rows;
+}
+
+export function prefetchListing(id: string) {
+  if (!/^[0-9a-f-]{36}$/i.test(id)) return;
+  prefetchListingDetail(fetchListing, id);
 }
 
 export async function fetchListing(id: string) {
+  const cached = peekListingDetail(id);
+  if (cached) return cached;
   const token = await optionalAppAccessToken();
-  return api<ApiListing>(`/api/listings/${id}/`, { token });
+  const row = await api<ApiListing>(`/api/listings/${id}/`, { token });
+  rememberListingDetail(row);
+  return row;
 }
 
 export async function fetchMyListings() {

@@ -1,5 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import { ScrollView, Text, View, type NativeScrollEvent, type NativeSyntheticEvent } from "react-native";
+import { ScrollView, Text, View, type NativeScrollEvent, type NativeSyntheticEvent, ActivityIndicator } from "react-native";
 import type { CatalogItem } from "../data/catalog";
 import { colors } from "../theme";
 import { ListingGrid, ListingList, ListingRail } from "./ClassifiedCard";
@@ -22,6 +22,7 @@ type Props = {
   viewMoreColor?: string;
   emptyText?: string;
   limit?: number;
+  loading?: boolean;
 };
 
 export function MarketplaceSection({
@@ -38,8 +39,9 @@ export function MarketplaceSection({
   viewMoreColor = BLUE,
   emptyText,
   limit = 10,
+  loading = false,
 }: Props) {
-  if (!items.length && !emptyText && !chips) return null;
+  if (!items.length && !emptyText && !chips && !loading) return null;
 
   const displayItems = items.slice(0, limit);
 
@@ -75,7 +77,14 @@ export function MarketplaceSection({
       ) : null}
 
       {!displayItems.length ? (
-        emptyText ? (
+        loading ? (
+          <View style={{ flexDirection: "row", gap: 10 }}>
+            {[0, 1].map((slot) => (
+              <View key={slot} style={{ width: 168, height: 210, borderRadius: 16, backgroundColor: "#EEF0F3" }} />
+            ))}
+            <ActivityIndicator color={BLUE} style={{ alignSelf: "center", marginLeft: 8 }} />
+          </View>
+        ) : emptyText ? (
           <View style={{ backgroundColor: "#fff", borderRadius: 14, padding: 16 }}>
             <Text style={{ color: colors.muted, textAlign: "center", fontSize: 13 }}>{emptyText}</Text>
           </View>

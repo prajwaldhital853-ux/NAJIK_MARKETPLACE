@@ -75,30 +75,40 @@ const REVENUE_PERIODS = [
 ] as const;
 
 export function RevenueOverview({
+  adminTotalLabel,
+  loadTotalLabel,
   totalLabel,
   series,
   period,
   onPeriod,
   loading,
 }: {
+  adminTotalLabel: string;
+  loadTotalLabel: string;
   totalLabel: string;
-  series: { label: string; v: number }[];
+  series: { label: string; admin_v: number; load_v: number; v: number }[];
   period: string;
   onPeriod: (id: string) => void;
   loading?: boolean;
 }) {
   const c = useChartColors();
-  const chartData = series.length ? series : [{ label: "—", v: 0 }];
-  const periodTotal = series.reduce((sum, row) => sum + row.v, 0);
+  const chartData = series.length ? series : [{ label: "—", admin_v: 0, load_v: 0, v: 0 }];
+  const periodAdmin = series.reduce((sum, row) => sum + row.admin_v, 0);
+  const periodLoad = series.reduce((sum, row) => sum + row.load_v, 0);
+  const periodTotal = periodAdmin + periodLoad;
 
   return (
     <div>
       <div className="mb-2 flex flex-wrap items-start justify-between gap-2">
-        <div>
-          <p className="text-[11px] text-muted">Admin credits to seller wallets</p>
+        <div className="min-w-0">
+          <p className="text-[11px] text-muted">Seller wallet revenue (admin credits + approved loads)</p>
           <p className="text-[12px] font-semibold text-ink">{totalLabel}</p>
+          <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[10px] text-muted">
+            <span>Admin loaded: <b className="text-ink">{adminTotalLabel}</b></span>
+            <span>Approved loads: <b className="text-ink">{loadTotalLabel}</b></span>
+          </div>
           <p className="text-[10px] text-muted">
-            {loading ? "Loading…" : `NPR ${periodTotal.toLocaleString()} in this view`}
+            {loading ? "Loading…" : `NPR ${periodTotal.toLocaleString()} in this view (${periodAdmin.toLocaleString()} admin · ${periodLoad.toLocaleString()} loads)`}
           </p>
         </div>
         <div className="flex flex-wrap gap-0.5">
@@ -116,6 +126,16 @@ export function RevenueOverview({
           ))}
         </div>
       </div>
+      <div className="mb-2 flex flex-wrap gap-3 text-[10px]">
+        <span className="flex items-center gap-1 text-muted">
+          <span className="h-2 w-2 rounded-sm bg-brand" />
+          Admin credit
+        </span>
+        <span className="flex items-center gap-1 text-muted">
+          <span className="h-2 w-2 rounded-sm bg-[#3d6b5a]" />
+          Approved load
+        </span>
+      </div>
       <ResponsiveContainer width="100%" height={168}>
         <BarChart data={chartData} margin={{ top: 8, right: 2, left: 0, bottom: 0 }}>
           <CartesianGrid stroke={c.grid} vertical={false} />
@@ -123,9 +143,13 @@ export function RevenueOverview({
           <YAxis stroke={c.tick} fontSize={9} width={40} tickLine={false} axisLine={false} />
           <Tooltip
             contentStyle={{ background: c.tooltipBg, border: `1px solid ${c.tooltipBorder}`, borderRadius: 4, fontSize: 12 }}
-            formatter={(v) => [`NPR ${Number(v).toLocaleString()}`, "Admin credit"]}
+            formatter={(v, name) => [
+              `NPR ${Number(v).toLocaleString()}`,
+              name === "load_v" ? "Approved load" : "Admin credit",
+            ]}
           />
-          <Bar dataKey="v" fill="#1b7d2c" radius={[2, 2, 0, 0]} />
+          <Bar dataKey="admin_v" stackId="rev" fill="#1b7d2c" radius={[0, 0, 0, 0]} />
+          <Bar dataKey="load_v" stackId="rev" fill="#3d6b5a" radius={[2, 2, 0, 0]} />
         </BarChart>
       </ResponsiveContainer>
     </div>

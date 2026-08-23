@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { Pressable, ScrollView, Text, View, ActivityIndicator } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ListingGrid } from "../components/ClassifiedCard";
 import { useAppRefreshControl } from "../components/KeyboardScreen";
@@ -16,6 +16,8 @@ import { subscribeListingsChanged } from "../listingsRefresh";
 import { colors } from "../theme";
 
 type SectionKey = "recommended" | "trending" | "verified" | "latest";
+const QUICK_LIMIT = 24;
+const FULL_LIMIT = 120;
 
 function buildRecommended(pool: CatalogItem[], seeds: CatalogItem[], excludeIds: Set<string>) {
   const out: CatalogItem[] = [];
@@ -47,16 +49,37 @@ export function HomeSectionScreen() {
   const catalog = route.params?.catalog as CatalogKey | undefined;
   const title = route.params?.title as string | undefined;
   const [items, setItems] = useState<CatalogItem[]>([]);
+  const [loading, setLoading] = useState(true);
 
   const heading = title || (section === "recommended" ? "Recommended" : section === "verified" ? "By verified sellers" : section === "latest" ? "Latest uploads" : "Trending");
 
   const load = useCallback(async () => {
     const base = { ...feedParams };
+    setLoading(true);
     try {
+      if (section === "verified") {
+        const quick = await fetchListingFeed({ ...base, verified: true, sort: "new", limit: QUICK_LIMIT }).catch(() => [] as ApiListing[]);
+        setItems(listingsToCatalog(quick).filter((row) => row.verified && !row.urgent));
+        setLoading(false);
+        const rows = await fetchListingFeed({ ...base, verified: true, sort: "new", limit: FULL_LIMIT }).catch(() => [] as ApiListing[]);
+        setItems(listingsToCatalog(rows).filter((row) => row.verified && !row.urgent));
+        return;
+      }
+      if (section === "latest") {
+        const quick = await fetchListingFeed({ ...base, sort: "new", limit: QUICK_LIMIT }).catch(() => [] as ApiListing[]);
+        setItems(listingsToCatalog(quick).filter((row) => !row.urgent));
+        setLoading(false);
+        const rows = await fetchListingFeed({ ...base, sort: "new", limit: FULL_LIMIT }).catch(() => [] as ApiListing[]);
+        setItems(listingsToCatalog(rows).filter((row) => !row.urgent));
+        return;
+      }
       if (section === "recommended") {
+        const quick = await fetchListingFeed({ ...base, sort: "new", limit: QUICK_LIMIT }).catch(() => [] as ApiListing[]);
+        setItems(listingsToCatalog(quick).filter((row) => !row.urgent));
+        setLoading(false);
         const [popular, latest, saved, recentIds] = await Promise.all([
-          fetchListingFeed({ ...base, sort: "popular" }).catch(() => [] as ApiListing[]),
-          fetchListingFeed({ ...base, sort: "new" }).catch(() => [] as ApiListing[]),
+          fetchListingFeed({ ...base, sort: "popular", limit: FULL_LIMIT }).catch(() => [] as ApiListing[]),
+          fetchListingFeed({ ...base, sort: "new", limit: FULL_LIMIT }).catch(() => [] as ApiListing[]),
           user ? fetchSavedListings().catch(() => [] as ApiListing[]) : Promise.resolve([] as ApiListing[]),
           getRecentViewIds(),
         ]);
@@ -76,17 +99,14 @@ export function HomeSectionScreen() {
         setItems(buildRecommended(pool, seeds, exclude));
         return;
       }
-      if (section === "verified") {
-        const rows = await fetchListingFeed({ ...base, verified: true, sort: "new" });
-        setItems(listingsToCatalog(rows).filter((row) => row.verified && !row.urgent));
-        return;
+      const quick = await fetchListingFeed({ ...base, sort: "popular", limit: QUICK_LIMIT }).catch(() => [] as ApiListing[]);
+      let quickPool = listingsToCatalog(quick).filter((row) => !row.urgent);
+      if (catalog) {
+        quickPool = quickPool.filter((row) => row.key === catalog || (catalog === "used" && row.key === "electronics"));
       }
-      if (section === "latest") {
-        const rows = await fetchListingFeed({ ...base, sort: "new" });
-        setItems(listingsToCatalog(rows).filter((row) => !row.urgent));
-        return;
-      }
-      const rows = await fetchListingFeed({ ...base, sort: "popular" });
+      setItems(quickPool);
+      setLoading(false);
+      const rows = await fetchListingFeed({ ...base, sort: "popular", limit: FULL_LIMIT }).catch(() => [] as ApiListing[]);
       let pool = listingsToCatalog(rows).filter((row) => !row.urgent);
       if (catalog) {
         pool = pool.filter((row) => row.key === catalog || (catalog === "used" && row.key === "electronics"));
@@ -95,6 +115,8 @@ export function HomeSectionScreen() {
       setItems(pool);
     } catch {
       setItems([]);
+    } finally {
+      setLoading(false);
     }
   }, [section, catalog, feedParams, user?.id]);
 
@@ -123,6 +145,8 @@ export function HomeSectionScreen() {
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 32 }} refreshControl={refreshControl}>
         {items.length ? (
           <ListingGrid items={items} />
+        ) : loading ? (
+          <ActivityIndicator color={colors.greenDeep} style={{ marginTop: 24 }} />
         ) : (
           <Text style={{ color: colors.muted, textAlign: "center", marginTop: 24 }}>No listings in this section yet.</Text>
         )}

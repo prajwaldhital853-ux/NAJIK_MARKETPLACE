@@ -1,5 +1,28 @@
 import { Alert } from "react-native";
+import * as ImageManipulator from "expo-image-manipulator";
 import * as ImagePicker from "expo-image-picker";
+
+const MAX_EDGE = 1280;
+const JPEG_QUALITY = 0.72;
+
+export async function compressPhotoAsset(asset: ImagePicker.ImagePickerAsset) {
+  const actions: ImageManipulator.Action[] = [];
+  const width = asset.width || 0;
+  const height = asset.height || 0;
+  if (width > MAX_EDGE || height > MAX_EDGE) {
+    if (width >= height) actions.push({ resize: { width: MAX_EDGE } });
+    else actions.push({ resize: { height: MAX_EDGE } });
+  }
+  const sourceUri = asset.uri;
+  if (!sourceUri) return null;
+  const out = await ImageManipulator.manipulateAsync(sourceUri, actions, {
+    compress: JPEG_QUALITY,
+    format: ImageManipulator.SaveFormat.JPEG,
+    base64: true,
+  });
+  if (!out.base64) return null;
+  return `data:image/jpeg;base64,${out.base64}`;
+}
 
 export async function pickPhotoDataUri(fromCamera?: boolean): Promise<string | null> {
   if (fromCamera) {
@@ -16,15 +39,14 @@ export async function pickPhotoDataUri(fromCamera?: boolean): Promise<string | n
     }
   }
   const result = fromCamera
-    ? await ImagePicker.launchCameraAsync({ quality: 0.4, base64: true })
-    : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], quality: 0.4, base64: true });
+    ? await ImagePicker.launchCameraAsync({ quality: 1, base64: false })
+    : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], quality: 1, base64: false });
   const asset = result.assets?.[0];
-  if (result.canceled || !asset?.base64) {
+  if (result.canceled || !asset) {
     if (!result.canceled) Alert.alert("Upload failed", "Could not read that image. Try another photo.");
     return null;
   }
-  const mime = asset.mimeType?.includes("png") ? "image/png" : "image/jpeg";
-  return `data:${mime};base64,${asset.base64}`;
+  return compressPhotoAsset(asset);
 }
 
 export function choosePhoto(onPicked: (uri: string) => void, title = "Add photo") {

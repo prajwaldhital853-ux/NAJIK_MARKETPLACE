@@ -61,7 +61,8 @@ export default function DashboardPage() {
   const [chartTab, setChartTab] = useState<(keyof typeof growth)>("Users");
   const [tableTab, setTableTab] = useState("All");
   const [revenuePeriod, setRevenuePeriod] = useState("month");
-  const [revenueSeries, setRevenueSeries] = useState<{ label: string; v: number }[]>([]);
+  const [revenueSeries, setRevenueSeries] = useState<{ label: string; admin_v: number; load_v: number; v: number }[]>([]);
+  const [revenueTotals, setRevenueTotals] = useState({ admin: "", load: "", total: "" });
   const [revenueLoading, setRevenueLoading] = useState(false);
 
   useEffect(() => {
@@ -70,7 +71,19 @@ export default function DashboardPage() {
     void getStaffPaymentsSummary(revenuePeriod)
       .then((data) => {
         if (!alive) return;
-        setRevenueSeries(data.admin_credit_series.map((row) => ({ label: row.label, v: row.v })));
+        setRevenueSeries(
+          (data.wallet_revenue_series || []).map((row) => ({
+            label: row.label,
+            admin_v: row.admin_v,
+            load_v: row.load_v,
+            v: row.v,
+          })),
+        );
+        setRevenueTotals({
+          admin: data.admin_credit_total_label,
+          load: data.approved_load_total_label,
+          total: data.total_revenue_label,
+        });
       })
       .catch(() => {
         if (!alive) return;
@@ -181,8 +194,9 @@ export default function DashboardPage() {
     { key: "status", label: "Status", render: (r) => <StatusBadge status={r.status} /> },
   ];
 
-  const revenueTotalLabel =
-    paymentsSummary?.admin_credit_total_label || npr(k.revenue);
+  const revenueTotalLabel = revenueTotals.total || paymentsSummary?.total_revenue_label || npr(k.revenue);
+  const revenueAdminLabel = revenueTotals.admin || paymentsSummary?.admin_credit_total_label || "—";
+  const revenueLoadLabel = revenueTotals.load || paymentsSummary?.approved_load_total_label || "—";
 
   return (
     <div>
@@ -313,6 +327,8 @@ export default function DashboardPage() {
         <section className="min-w-0 rounded border border-line bg-card p-3 xl:col-span-4">
           <h2 className="mb-1 text-[13px] font-semibold text-ink">Revenue Overview</h2>
           <RevenueOverview
+            adminTotalLabel={revenueAdminLabel}
+            loadTotalLabel={revenueLoadLabel}
             totalLabel={revenueTotalLabel}
             series={revenueSeries}
             period={revenuePeriod}

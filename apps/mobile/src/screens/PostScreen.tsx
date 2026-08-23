@@ -1,5 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
+import { compressPhotoAsset } from "../pickPhoto";
 import * as ImagePicker from "expo-image-picker";
 import { useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
 import { Alert, ActivityIndicator, Image, Keyboard, Modal, Pressable, Text, TextInput, View } from "react-native";
@@ -306,8 +307,8 @@ export function PostScreen() {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ["images"],
       allowsMultipleSelection: true,
-      quality: 0.32,
-      base64: true,
+      quality: 1,
+      base64: false,
       selectionLimit: 8,
     });
     if (result.canceled) return;
@@ -317,9 +318,9 @@ export function PostScreen() {
     const assets = result.assets.slice(0, 8);
     for (let i = 0; i < assets.length; i += 1) {
       const asset = assets[i];
-      if (!asset.base64) continue;
-      const mime = asset.mimeType?.includes("png") ? "image/png" : "image/jpeg";
-      next.push(`data:${mime};base64,${asset.base64}`);
+      const dataUri = await compressPhotoAsset(asset);
+      if (!dataUri) continue;
+      next.push(dataUri);
       setUploadPct(Math.round(((i + 1) / assets.length) * 100));
     }
     setPhotos(next);

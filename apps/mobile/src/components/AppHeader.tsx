@@ -264,15 +264,28 @@ function NotificationBell() {
                     borderTopColor: "#F3F4F6",
                   }}
                 >
-                  <Pressable onPress={() => void go(item)}>
-                    <Text style={{ color: GREEN, fontSize: 10, fontWeight: "800", letterSpacing: 0.4 }}>
-                      {noticeKindLabel(item.kind)}
-                    </Text>
-                    <Text style={{ fontWeight: "800", color: "#111827", fontSize: 15, marginTop: 2 }}>{noticeSenderLabel(item)}</Text>
-                    {item.title && item.title !== noticeSenderLabel(item) && item.title !== "New message" && item.title !== "Notification" ? (
-                      <Text style={{ fontWeight: "700", color: "#374151", fontSize: 12, marginTop: 2 }}>{item.title}</Text>
-                    ) : null}
-                    {item.body ? <Text style={{ color: "#6B7280", fontSize: 12, marginTop: 3 }} numberOfLines={2}>{item.body}</Text> : null}
+                    <Pressable onPress={() => void go(item)}>
+                    {item.kind === "message" ? (
+                      <>
+                        <Text style={{ fontWeight: "800", color: "#111827", fontSize: 15 }}>{noticeSenderLabel(item)}</Text>
+                        {item.body ? (
+                          <Text style={{ color: "#6B7280", fontSize: 13, marginTop: 4, lineHeight: 18 }} numberOfLines={2}>
+                            {item.body}
+                          </Text>
+                        ) : null}
+                      </>
+                    ) : (
+                      <>
+                        <Text style={{ color: GREEN, fontSize: 10, fontWeight: "800", letterSpacing: 0.4 }}>
+                          {noticeKindLabel(item.kind)}
+                        </Text>
+                        <Text style={{ fontWeight: "800", color: "#111827", fontSize: 15, marginTop: 2 }}>{noticeSenderLabel(item)}</Text>
+                        {item.title && item.title !== noticeSenderLabel(item) && item.title !== "New message" && item.title !== "Notification" ? (
+                          <Text style={{ fontWeight: "700", color: "#374151", fontSize: 12, marginTop: 2 }}>{item.title}</Text>
+                        ) : null}
+                        {item.body ? <Text style={{ color: "#6B7280", fontSize: 12, marginTop: 3 }} numberOfLines={2}>{item.body}</Text> : null}
+                      </>
+                    )}
                   </Pressable>
                   {!item.is_read ? (
                     <Pressable onPress={() => void mark(item.id, true)} hitSlop={8} style={{ marginTop: 6, alignSelf: "flex-start" }}>

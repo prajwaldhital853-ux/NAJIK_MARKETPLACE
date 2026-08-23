@@ -114,7 +114,16 @@ export type SellerPublicProfile = {
   photo_url: string | null;
   rating_avg?: number;
   review_count?: number;
-  reviews?: { id: string; author_name: string; rating: number; text: string; created_at: string }[];
+  reviews?: {
+    id: string;
+    author_id: string;
+    author_name: string;
+    rating: number;
+    text: string;
+    created_at: string;
+    listing?: string;
+    listing_title?: string;
+  }[];
   listings: ApiListing[];
 };
 

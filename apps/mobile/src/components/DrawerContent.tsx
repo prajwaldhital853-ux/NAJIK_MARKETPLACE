@@ -53,7 +53,6 @@ const sellerMenu: Item[] = [
   { icon: "bookmark-outline", title: "Saved Listings", page: "saved" },
   { icon: "shield-checkmark-outline", title: "Verification & KYC", page: "kyc" },
   { icon: "notifications-outline", title: "Notification", page: "notifications" },
-  { icon: "mail-outline", title: "Messages", tab: "ChatInbox" },
   { icon: "settings-outline", title: "Settings", page: "settings" },
   { icon: "headset-outline", title: "Help & Support", page: "help" },
   { icon: "wallet-outline", title: "Payments", page: "payments" },
@@ -87,7 +86,6 @@ const buyerPrimary: BuyerItem[] = [
 ];
 
 const buyerSecondary: BuyerItem[] = [
-  { icon: "chatbubbles-outline", title: "Messages", tab: "Messages", color: "#4B5563", bg: "transparent" },
   { icon: "heart-outline", title: "Saved", tab: "Saved", color: "#4B5563", bg: "transparent" },
   { icon: "search-outline", title: "Explore", tab: "Explore", color: "#4B5563", bg: "transparent" },
   { icon: "notifications-outline", title: "Notifications", tab: "Home", color: "#4B5563", bg: "transparent" },

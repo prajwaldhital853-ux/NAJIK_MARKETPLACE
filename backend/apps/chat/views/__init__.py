@@ -175,21 +175,12 @@ class ChatMessageCreateView(APIView):
             preview = "Shared a location"
         elif data["kind"] == ChatMessage.KIND_BOOKING:
             preview = "Booking update"
-        from apps.notifications.models import InboxNotice
-        from apps.notifications.services import notify_user
+        from apps.notifications.services import notify_chat_message
 
         other_thread = ChatThread.objects.filter(pk=thread.pk).first()
         if not is_viewing_thread(other, other_thread):
             sender_name = (request.user.full_name or request.user.phone or "Someone").strip()
-            notify_user(
-                other,
-                "New message",
-                preview[:160],
-                InboxNotice.KIND_MESSAGE,
-                "chat",
-                str(thread.id),
-                sender_name=sender_name,
-            )
+            notify_chat_message(other, sender_name, str(thread.id), preview)
         return Response(ChatMessageSerializer(msg, context={"request": request}).data, status=status.HTTP_201_CREATED)
 
 

@@ -189,3 +189,41 @@ class ChatPrivacyTests(TestCase):
         self.assertEqual(acted.status_code, 200, acted.data)
         self.assertFalse(acted.data["reporter_active"])
         self.assertFalse(acted.data["accused_active"])
+
+    def test_message_notifications_group_per_thread(self):
+        from apps.notifications.models import InboxNotice
+
+        seller_tokens, listing_id, _staff = self.approved_listing()
+        buyer, _ = self.buyer()
+        started = buyer.post("/api/chat/threads/", {"listing_id": listing_id}, format="json")
+        self.assertEqual(started.status_code, 201, started.data)
+        thread_id = started.data["id"]
+
+        seller = APIClient()
+        seller.credentials(HTTP_AUTHORIZATION=f"Bearer {seller_tokens.data['access']}")
+
+        first = buyer.post(
+            f"/api/chat/threads/{thread_id}/messages/",
+            {"kind": "text", "text": "Is this still available?"},
+            format="json",
+        )
+        self.assertEqual(first.status_code, 201, first.data)
+        second = buyer.post(
+            f"/api/chat/threads/{thread_id}/messages/",
+            {"kind": "text", "text": "Can we visit tomorrow morning?"},
+            format="json",
+        )
+        self.assertEqual(second.status_code, 201, second.data)
+
+        notices = InboxNotice.objects.filter(user_id=seller_tokens.data["user"]["id"], kind=InboxNotice.KIND_MESSAGE)
+        self.assertEqual(notices.count(), 1)
+        notice = notices.first()
+        self.assertEqual(notice.body, "Can we visit tomorrow morning?")
+        self.assertFalse(notice.is_read)
+
+        inbox = seller.get("/api/notices/inbox/")
+        self.assertEqual(inbox.status_code, 200, inbox.data)
+        self.assertEqual(inbox.data["unread"], 1)
+        message_rows = [row for row in inbox.data["items"] if row["kind"] == "message"]
+        self.assertEqual(len(message_rows), 1)
+        self.assertEqual(message_rows[0]["body"], "Can we visit tomorrow morning?")

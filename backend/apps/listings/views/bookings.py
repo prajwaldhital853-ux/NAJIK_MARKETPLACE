@@ -14,6 +14,7 @@ from apps.chat.models import ChatMessage, ChatThread
 from apps.chat.presence import is_viewing_thread
 from apps.listings.models import Booking, Listing
 from apps.notifications.models import InboxNotice
+from apps.notifications.services import notify_user
 from apps.staff.authentication import StaffJWTAuthentication
 from apps.staff.permissions import IsStaffUser
 
@@ -146,10 +147,13 @@ def booking_friendly_text(booking: Booking, action: str) -> str:
 
 
 def maybe_notify_booking(user, booking, title: str, body: str, sender_name: str = ""):
-    thread = ChatThread.objects.filter(pk=booking.thread_id).first() if booking.thread_id else booking.thread
-    if is_viewing_thread(user, thread):
-        return
-    notify_user(user, title, body, InboxNotice.KIND_BOOKING, "booking", booking.id, sender_name=sender_name)
+    try:
+        thread = ChatThread.objects.filter(pk=booking.thread_id).first() if booking.thread_id else booking.thread
+        if is_viewing_thread(user, thread):
+            return
+        notify_user(user, title, body, InboxNotice.KIND_BOOKING, "booking", booking.id, sender_name=sender_name)
+    except Exception:
+        pass
 
 
 def post_booking_message(booking: Booking, sender, action: str, label: str):

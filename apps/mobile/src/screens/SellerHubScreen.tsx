@@ -5,23 +5,23 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Alert, AppState, Image, Linking, Modal, Pressable, ScrollView, Share, StyleSheet, Switch, Text, TextInput, View } from "react-native";
 import QRCode from "react-native-qrcode-svg";
 import { AppHeader } from "../components/AppHeader";
+import { AppImage } from "../components/AppImage";
+import { AuthImage } from "../components/AuthImage";
 import { KeyboardScreen, useKeyboardScroll } from "../components/KeyboardScreen";
 import { PressScale } from "../components/PressScale";
 import { SellerProfileEditModal } from "../components/SellerProfileEditModal";
-import { updateProviderPrivacySettings } from "../authApi";
+import { updateProviderPrivacySettings, fetchSellerApplication } from "../authApi";
 import { useAuth } from "../context/AuthContext";
 import { useInbox } from "../context/InboxContext";
+import { isPendingProvider, isRejectedProvider, isVerifiedProvider } from "../demo";
 import { BookingsBody } from "./BookingsScreen";
 import {
   helpFaqs,
-  kycSteps,
   payouts,
   promoPacks,
   sellerNotes,
   sellerPageMeta,
-  sellerReviews,
   sellerSaved,
-  sellerServices,
   weekBars,
   type SellerPage,
 } from "../data/sellerHub";
@@ -29,6 +29,7 @@ import { ChatInboxList } from "./ChatInboxScreen";
 import { choosePhoto } from "../pickPhoto";
 import { openChatThread, openListing, openSellerPage } from "../navigation/browse";
 import { fetchSellerEarningsSummary } from "../earningsApi";
+import { fetchSellerProfile, fetchMyListings, updateListing, type ApiListing } from "../listingsApi";
 import { createSellerLoadRequest, fetchSellerPaymentsMe, resolvePaymentAssetUrl } from "../paymentsApi";
 import { fetchReferEarnMe } from "../referralsApi";
 import { colors, shadow } from "../theme";
@@ -179,66 +180,145 @@ function Chips({ items, value, onChange }: { items: string[]; value: string; onC
   );
 }
 
+function formatReviewWhen(created_at: string) {
+  const d = new Date(created_at);
+  if (Number.isNaN(d.getTime())) return created_at;
+  return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+}
+
+function ratingDistribution(reviews: { rating: number }[]) {
+  const counts = [0, 0, 0, 0, 0, 0];
+  reviews.forEach((r) => {
+    const n = Math.min(5, Math.max(1, Math.round(r.rating)));
+    counts[n] += 1;
+  });
+  const total = reviews.length;
+  return { counts, total, avg: total ? reviews.reduce((s, r) => s + r.rating, 0) / total : 0 };
+}
+
+function serviceListingLive(item: ApiListing) {
+  if (item.status !== "approved") return false;
+  const extras = item.extras || {};
+  if (extras.sold === true || extras.sold === "true") return false;
+  if (extras.paused === true || extras.paused === "true") return false;
+  return true;
+}
+
 function ReviewsBody() {
+  const { user } = useAuth();
   const [filter, setFilter] = useState("All");
-  const [replied, setReplied] = useState<Record<string, string>>({});
-  const list = sellerReviews.filter((row) => filter === "All" || (filter === "5★" ? row.rating === 5 : row.rating === 4));
+  const [loading, setLoading] = useState(true);
+  const [reviews, setReviews] = useState<
+    { id: string; name: string; rating: number; text: string; time: string; listing: string }[]
+  >([]);
+  const [avgRating, setAvgRating] = useState(0);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    setLoading(true);
+    void fetchSellerProfile(user.id)
+      .then((profile) => {
+        const rows = (profile.reviews || []).map((row) => ({
+          id: row.id,
+          name: row.author_name || "Buyer",
+          rating: row.rating,
+          text: row.text,
+          time: formatReviewWhen(row.created_at),
+          listing: row.listing_title || "Listing",
+        }));
+        setReviews(rows);
+        setAvgRating(profile.rating_avg ?? (rows.length ? rows.reduce((s, r) => s + r.rating, 0) / rows.length : 0));
+      })
+      .catch(() => {
+        setReviews([]);
+        setAvgRating(0);
+      })
+      .finally(() => setLoading(false));
+  }, [user?.id]);
+
+  const dist = ratingDistribution(reviews);
+  const list = reviews.filter((row) => filter === "All" || (filter === "5★" ? row.rating >= 5 : row.rating >= 4 && row.rating < 5));
 
   return (
     <>
       <QuickRow
         items={[
-          { icon: "star-outline", label: "Ask review", onPress: () => Alert.alert("Request", "Demo: send a review link after a visit.") },
-          { icon: "chatbubble-outline", label: "Reply all", onPress: () => Alert.alert("Replies", "Open unread reviews below.") },
-          { icon: "share-social-outline", label: "Share", onPress: () => void Share.share({ message: "See my 4.9 rating on NAJIK" }) },
+          {
+            icon: "refresh-outline",
+            label: "Refresh",
+            onPress: () => {
+              if (!user?.id) return;
+              setLoading(true);
+              void fetchSellerProfile(user.id)
+                .then((profile) => {
+                  const rows = (profile.reviews || []).map((row) => ({
+                    id: row.id,
+                    name: row.author_name || "Buyer",
+                    rating: row.rating,
+                    text: row.text,
+                    time: formatReviewWhen(row.created_at),
+                    listing: row.listing_title || "Listing",
+                  }));
+                  setReviews(rows);
+                  setAvgRating(profile.rating_avg ?? (rows.length ? rows.reduce((s, r) => s + r.rating, 0) / rows.length : 0));
+                })
+                .catch(() => {})
+                .finally(() => setLoading(false));
+            },
+          },
+          { icon: "share-social-outline", label: "Share", onPress: () => void Share.share({ message: `See my ${avgRating.toFixed(1)} rating on NAJIK` }) },
         ]}
       />
       <View style={{ marginHorizontal: 16, marginTop: 12, backgroundColor: "#fff", borderRadius: 16, padding: 14, ...shadow.card }}>
         <View style={{ flexDirection: "row", alignItems: "center" }}>
-          <Text style={{ fontSize: 36, fontWeight: "800", color: "#111827" }}>0</Text>
+          <Text style={{ fontSize: 36, fontWeight: "800", color: "#111827" }}>{avgRating.toFixed(1)}</Text>
           <View style={{ marginLeft: 12, flex: 1 }}>
             {[5, 4, 3, 2, 1].map((n) => (
               <View key={n} style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 3 }}>
                 <Text style={{ width: 10, fontSize: 10, color: "#6B7280" }}>{n}</Text>
                 <View style={{ flex: 1, height: 6, backgroundColor: "#EEF0F2", borderRadius: 4, overflow: "hidden" }}>
-                  <View style={{ width: `${0}%`, height: "100%", backgroundColor: "#F5C518" }} />
+                  <View
+                    style={{
+                      width: `${dist.total ? (dist.counts[n] / dist.total) * 100 : 0}%`,
+                      height: "100%",
+                      backgroundColor: "#F5C518",
+                    }}
+                  />
                 </View>
               </View>
             ))}
           </View>
         </View>
+        <Text style={{ color: "#6B7280", fontSize: 12, marginTop: 8 }}>{reviews.length} review{reviews.length === 1 ? "" : "s"} from buyers</Text>
       </View>
       <Chips items={["All", "5★", "4★"]} value={filter} onChange={setFilter} />
-      {list.map((row) => (
-        <View key={row.id} style={{ marginHorizontal: 16, marginTop: 12, backgroundColor: "#fff", borderRadius: 16, padding: 14, ...shadow.card }}>
-          <View style={{ flexDirection: "row", alignItems: "center" }}>
-            <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: "#E7F6EC", alignItems: "center", justifyContent: "center" }}>
-              <Text style={{ fontWeight: "800", color: GREEN }}>{row.name[0]}</Text>
+      {loading ? (
+        <Text style={{ textAlign: "center", color: "#6B7280", marginTop: 24 }}>Loading reviews…</Text>
+      ) : list.length === 0 ? (
+        <Text style={{ textAlign: "center", color: "#6B7280", marginTop: 24, paddingHorizontal: 24 }}>
+          No reviews yet. Buyers can rate you after visiting a listing.
+        </Text>
+      ) : (
+        list.map((row) => (
+          <View key={row.id} style={{ marginHorizontal: 16, marginTop: 12, backgroundColor: "#fff", borderRadius: 16, padding: 14, ...shadow.card }}>
+            <View style={{ flexDirection: "row", alignItems: "center" }}>
+              <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: "#E7F6EC", alignItems: "center", justifyContent: "center" }}>
+                <Text style={{ fontWeight: "800", color: GREEN }}>{row.name[0] || "B"}</Text>
+              </View>
+              <View style={{ flex: 1, marginLeft: 10 }}>
+                <Text style={{ fontWeight: "800", fontSize: 14 }}>{row.name}</Text>
+                <Text style={{ color: "#9AA0A6", fontSize: 11 }}>Buyer · {row.listing} · {row.time}</Text>
+              </View>
+              <View style={{ flexDirection: "row", gap: 2 }}>
+                {[1, 2, 3, 4, 5].map((n) => (
+                  <Ionicons key={n} name="star" size={12} color={n <= row.rating ? "#F5C518" : "#E6E8EC"} />
+                ))}
+              </View>
             </View>
-            <View style={{ flex: 1, marginLeft: 10 }}>
-              <Text style={{ fontWeight: "800", fontSize: 14 }}>{row.name}</Text>
-              <Text style={{ color: "#9AA0A6", fontSize: 11 }}>{row.listing} · {row.time}</Text>
-            </View>
-            <View style={{ flexDirection: "row", gap: 2 }}>
-              {[1, 2, 3, 4, 5].map((n) => (
-                <Ionicons key={n} name="star" size={12} color={n <= row.rating ? "#F5C518" : "#E6E8EC"} />
-              ))}
-            </View>
+            <Text style={{ color: "#4B5563", fontSize: 13, lineHeight: 20, marginTop: 10 }}>{row.text}</Text>
           </View>
-          <Text style={{ color: "#4B5563", fontSize: 13, lineHeight: 20, marginTop: 10 }}>{row.text}</Text>
-          {replied[row.id] ? (
-            <View style={{ marginTop: 10, backgroundColor: "#F3FBF5", borderRadius: 12, padding: 10 }}>
-              <Text style={{ color: GREEN, fontWeight: "800", fontSize: 11 }}>Your reply</Text>
-              <Text style={{ color: "#374151", fontSize: 12, marginTop: 4 }}>{replied[row.id]}</Text>
-            </View>
-          ) : (
-            <MiniBtn
-              label="Reply"
-              onPress={() => setReplied((p) => ({ ...p, [row.id]: "Thank you for visiting on NAJIK. You’re welcome anytime." }))}
-            />
-          )}
-        </View>
-      ))}
+        ))
+      )}
     </>
   );
 }
@@ -842,44 +922,123 @@ function PromosBody() {
 }
 
 function ServicesBody() {
+  const navigation = useNavigation<any>();
   const [q, setQ] = useState("");
-  const [rows, setRows] = useState(sellerServices);
-  const list = rows.filter((row) => `${row.title} ${row.sub}`.toLowerCase().includes(q.trim().toLowerCase()) || !q.trim());
+  const [rows, setRows] = useState<ApiListing[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    void fetchMyListings()
+      .then((items) => setRows(items.filter((item) => item.category === "services")))
+      .catch(() => setRows([]))
+      .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const list = rows.filter((row) => `${row.title} ${row.subcategory} ${row.location}`.toLowerCase().includes(q.trim().toLowerCase()) || !q.trim());
+  const liveCount = rows.filter((r) => serviceListingLive(r)).length;
+
+  async function toggleService(row: ApiListing) {
+    const nextPaused = serviceListingLive(row);
+    setBusyId(row.id);
+    try {
+      const extras = { ...row.extras, paused: nextPaused };
+      const updated = await updateListing(row.id, {
+        category: row.category,
+        subcategory: row.subcategory,
+        title: row.title,
+        description: row.description,
+        price: row.price,
+        location: row.location,
+        contact_phone: row.contact_phone,
+        extras,
+      });
+      setRows((prev) => prev.map((item) => (item.id === row.id ? updated : item)));
+    } catch (err) {
+      Alert.alert("Could not update", err instanceof Error ? err.message : "Try again.");
+    } finally {
+      setBusyId(null);
+    }
+  }
 
   return (
     <>
       <QuickRow
         items={[
-          { icon: "add-outline", label: "Add", onPress: () => Alert.alert("Add service", "Demo: plumbing, visits, inspection.") },
-          { icon: "pricetag-outline", label: "Prices", onPress: () => Alert.alert("Prices", "Edit visit fees in the list.") },
-          { icon: "time-outline", label: "Hours", onPress: () => Alert.alert("Hours", "8am – 7pm · Lahan") },
-          { icon: "map-outline", label: "Area", onPress: () => Alert.alert("Coverage", "Lahan, Golbazar, Siraha.") },
+          { icon: "add-outline", label: "Add", onPress: () => navigation.navigate("Tabs", { screen: "Post" } as never) },
+          { icon: "refresh-outline", label: "Refresh", onPress: load },
+          { icon: "map-outline", label: "Browse", onPress: () => navigation.navigate("CategoryBrowse", { key: "services" }) },
         ]}
       />
       <StatStrip
         items={[
-          { n: String(rows.filter((r) => r.on).length), l: "Live" },
-          { n: String(rows.filter((r) => !r.on).length), l: "Paused" },
-          { n: "4.8", l: "Rating" },
+          { n: String(liveCount), l: "Live" },
+          { n: String(rows.length - liveCount), l: "Paused" },
+          { n: rows.length ? (rows.reduce((s, r) => s + (r.rating_avg || 0), 0) / rows.length).toFixed(1) : "—", l: "Rating" },
         ]}
       />
       <SearchBox value={q} onChange={setQ} placeholder="Find a service..." />
-      {list.map((row) => (
-        <View key={row.id} style={{ marginHorizontal: 16, marginTop: 12, backgroundColor: "#fff", borderRadius: 16, padding: 12, flexDirection: "row", ...shadow.card }}>
-          <Image source={row.photo} style={{ width: 72, height: 72, borderRadius: 12 }} />
-          <View style={{ flex: 1, marginLeft: 12 }}>
-            <Text style={{ fontWeight: "800", fontSize: 14 }}>{row.title}</Text>
-            <Text style={{ color: "#6B7280", fontSize: 12, marginTop: 2 }}>{row.sub}</Text>
-            <Text style={{ color: GREEN, fontWeight: "800", marginTop: 6 }}>{row.price}</Text>
-          </View>
-          <Switch
-            value={row.on}
-            onValueChange={() => setRows((prev) => prev.map((s) => (s.id === row.id ? { ...s, on: !s.on } : s)))}
-            trackColor={{ false: "#E6E8EC", true: "#A8E0B8" }}
-            thumbColor={row.on ? GREEN : "#f4f3f4"}
-          />
+      {loading ? (
+        <Text style={{ textAlign: "center", color: "#6B7280", marginTop: 24 }}>Loading your services…</Text>
+      ) : list.length === 0 ? (
+        <View style={{ marginHorizontal: 16, marginTop: 16, backgroundColor: "#fff", borderRadius: 16, padding: 20, alignItems: "center", ...shadow.card }}>
+          <Ionicons name="construct-outline" size={40} color={GREEN} />
+          <Text style={{ fontWeight: "800", fontSize: 16, marginTop: 12 }}>No service listings yet</Text>
+          <Text style={{ color: "#6B7280", textAlign: "center", marginTop: 6, lineHeight: 20 }}>
+            Post plumbing, repairs, visits, and other local services buyers can book.
+          </Text>
+          <MiniBtn label="Post a service" fill onPress={() => navigation.navigate("Tabs", { screen: "Post" } as never)} />
         </View>
-      ))}
+      ) : (
+        list.map((row) => {
+          const live = serviceListingLive(row);
+          const photo = row.photos?.[0]?.url;
+          return (
+            <PressScale
+              key={row.id}
+              onPress={() => openListing(navigation, row.id, true)}
+              style={{
+                marginHorizontal: 16,
+                marginTop: 12,
+                backgroundColor: "#fff",
+                borderRadius: 18,
+                padding: 14,
+                borderWidth: 2,
+                borderColor: live ? "#C8EBD4" : "transparent",
+                ...shadow.card,
+              }}
+            >
+              <View style={{ flexDirection: "row", alignItems: "center" }}>
+                <AppImage uri={photo} style={{ width: 76, height: 76, borderRadius: 14 }} />
+                <View style={{ flex: 1, marginLeft: 12 }}>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                    <Text style={{ fontWeight: "800", fontSize: 15, flex: 1 }} numberOfLines={1}>{row.title}</Text>
+                    <View style={{ backgroundColor: live ? "#E7F6EC" : "#F3F4F6", paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 }}>
+                      <Text style={{ color: live ? GREEN : "#6B7280", fontWeight: "800", fontSize: 10 }}>{live ? "Live" : row.status === "pending" ? "Pending" : "Paused"}</Text>
+                    </View>
+                  </View>
+                  <Text style={{ color: "#6B7280", fontSize: 12, marginTop: 4 }} numberOfLines={1}>
+                    {row.subcategory} · {row.location || row.city}
+                  </Text>
+                  <Text style={{ color: GREEN, fontWeight: "800", marginTop: 6 }}>{row.price || "Price on request"}</Text>
+                </View>
+                <Switch
+                  value={live}
+                  disabled={busyId === row.id || row.status === "pending"}
+                  onValueChange={() => void toggleService(row)}
+                  trackColor={{ false: "#E6E8EC", true: "#A8E0B8" }}
+                  thumbColor={live ? GREEN : "#f4f3f4"}
+                />
+              </View>
+            </PressScale>
+          );
+        })
+      )}
     </>
   );
 }
@@ -949,51 +1108,205 @@ function SavedBody() {
 }
 
 function KycBody() {
-  const { user, refreshVerification } = useAuth();
-  const done = kycSteps.filter((s) => s.done).length;
+  const { user, refreshVerification, updateSellerProfile } = useAuth();
+  const verified = isVerifiedProvider(user);
+  const pending = isPendingProvider(user);
+  const rejected = isRejectedProvider(user);
+  const canEdit = verified || rejected;
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [appStatus, setAppStatus] = useState<string>("none");
+  const [docs, setDocs] = useState({
+    photo: "",
+    nagrita: "",
+    nagritaBack: "",
+    nationCard: "",
+    otherDocument: "",
+  });
+  const [pendingUploads, setPendingUploads] = useState({
+    photo: "",
+    nagrita: "",
+    nagritaBack: "",
+    nationCard: "",
+    otherDocument: "",
+  });
+
+  const load = useCallback(() => {
+    setLoading(true);
+    void fetchSellerApplication()
+      .then((row) => {
+        if (row.status === "none") {
+          setAppStatus("none");
+          setDocs({ photo: "", nagrita: "", nagritaBack: "", nationCard: "", otherDocument: "" });
+          return;
+        }
+        setAppStatus(String(row.status || user?.verification_status || "pending"));
+        setDocs({
+          photo: String(row.photo_uri || user?.photo_uri || ""),
+          nagrita: String(row.nagrita_uri || ""),
+          nagritaBack: String(row.nagrita_back_uri || ""),
+          nationCard: String(row.nation_card_uri || ""),
+          otherDocument: String(row.other_document_uri || ""),
+        });
+        setPendingUploads({ photo: "", nagrita: "", nagritaBack: "", nationCard: "", otherDocument: "" });
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [user?.photo_uri, user?.verification_status]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const statusLabel = verified
+    ? "Verified"
+    : rejected
+      ? "Rejected — resubmit documents"
+      : pending
+        ? "Pending admin review"
+        : appStatus === "none"
+          ? "Not submitted"
+          : "Under review";
+
+  const statusColor = verified ? GREEN : rejected ? "#DC2626" : pending ? "#F59E0B" : "#6B7280";
+
+  async function submitForReview() {
+    if (!canEdit) {
+      Alert.alert("Wait for verification", "You can update documents after admin verifies your account, or if your application was rejected.");
+      return;
+    }
+    const hasChange = Object.values(pendingUploads).some(Boolean);
+    if (!hasChange) {
+      Alert.alert("No changes", "Replace a document first, then send for approval.");
+      return;
+    }
+    setBusy(true);
+    try {
+      await updateSellerProfile({
+        ...(pendingUploads.nagrita ? { nagrita_uri: pendingUploads.nagrita } : {}),
+        ...(pendingUploads.nagritaBack ? { nagrita_back_uri: pendingUploads.nagritaBack } : {}),
+        ...(pendingUploads.photo ? { photo_uri: pendingUploads.photo } : {}),
+        ...(pendingUploads.nationCard ? { nation_card_uri: pendingUploads.nationCard } : {}),
+        ...(pendingUploads.otherDocument ? { other_document_uri: pendingUploads.otherDocument } : {}),
+      });
+      await refreshVerification();
+      Alert.alert(
+        rejected ? "Resubmitted" : "Sent for review",
+        rejected
+          ? "Your updated documents were sent to admin for review."
+          : "Admin will verify your document changes. Your live profile stays the same until approved.",
+      );
+      load();
+    } catch (err) {
+      Alert.alert("Could not submit", err instanceof Error ? err.message : "Try again.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function pickDoc(key: keyof typeof pendingUploads, label: string) {
+    if (!canEdit) {
+      Alert.alert("Cannot edit yet", "Document updates are available after verification or if your application was rejected.");
+      return;
+    }
+    choosePhoto((uri) => setPendingUploads((prev) => ({ ...prev, [key]: uri })), label);
+  }
+
+  const docRows: { key: keyof typeof docs; label: string }[] = [
+    { key: "photo", label: "Profile photo" },
+    { key: "nagrita", label: "Citizenship front (Nagrita)" },
+    { key: "nagritaBack", label: "Citizenship back" },
+    { key: "nationCard", label: "Nation card" },
+    { key: "otherDocument", label: "Other document" },
+  ];
 
   return (
     <>
       <QuickRow
         items={[
-          { icon: "refresh-outline", label: "Refresh", onPress: () => void refreshVerification() },
-          { icon: "card-outline", label: "eSewa", onPress: () => Alert.alert("eSewa", "Add your payout number in settings.") },
-          { icon: "document-outline", label: "ID copy", onPress: () => Alert.alert("Nagrita", "Already on file with NAJIK admin.") },
-          { icon: "help-circle-outline", label: "Why KYC", onPress: () => Alert.alert("KYC", "Verified sellers get more calls and can withdraw.") },
+          { icon: "refresh-outline", label: "Refresh", onPress: () => void refreshVerification().then(load) },
+          { icon: "document-outline", label: "Documents", onPress: () => Alert.alert("KYC", "All uploaded files are listed below.") },
+          { icon: "help-circle-outline", label: "Why KYC", onPress: () => Alert.alert("KYC", "Verified sellers get more calls and can withdraw earnings.") },
         ]}
       />
-      <View style={{ marginHorizontal: 16, marginTop: 12, backgroundColor: "#fff", borderRadius: 16, padding: 14, flexDirection: "row", alignItems: "center", ...shadow.card }}>
-        <View style={{ width: 64, height: 64, borderRadius: 32, borderWidth: 6, borderColor: GREEN, alignItems: "center", justifyContent: "center" }}>
-          <Text style={{ fontWeight: "800", fontSize: 16 }}>{done}/{kycSteps.length}</Text>
+      <View style={{ marginHorizontal: 16, marginTop: 12, backgroundColor: "#fff", borderRadius: 16, padding: 14, ...shadow.card }}>
+        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontWeight: "800", fontSize: 16 }}>KYC status</Text>
+            <Text style={{ color: statusColor, fontWeight: "800", marginTop: 6 }}>{statusLabel}</Text>
+            <Text style={{ color: "#4B5563", fontSize: 12, marginTop: 6, lineHeight: 18 }}>
+              {user?.full_name || "Account"} · {user?.service_type || "Service provider"}
+            </Text>
+          </View>
+          <View style={{ width: 52, height: 52, borderRadius: 26, backgroundColor: verified ? "#E7F6EC" : rejected ? "#FEECEC" : "#FFF7E6", alignItems: "center", justifyContent: "center" }}>
+            <Ionicons name={verified ? "shield-checkmark" : rejected ? "close-circle" : "time-outline"} size={28} color={statusColor} />
+          </View>
         </View>
-        <View style={{ flex: 1, marginLeft: 14 }}>
-          <Text style={{ fontWeight: "800", fontSize: 15 }}>{user?.verification_status === "verified" ? "You’re verified to post" : "Verification checklist"}</Text>
-          <Text style={{ color: "#4B5563", fontSize: 12, marginTop: 4, lineHeight: 18 }}>
-            {user?.full_name || "Account"} · {user?.service_type || "Service provider"}
-            {user?.verification_status === "pending" ? " · Updates automatically when admin approves" : ""}
-          </Text>
-          <Text style={{ color: GREEN, fontWeight: "800", fontSize: 12, marginTop: 6 }}>Add eSewa to unlock payouts</Text>
-        </View>
+        {rejected && user?.rejection_note ? (
+          <View style={{ marginTop: 12, backgroundColor: "#FEECEC", borderRadius: 12, padding: 10 }}>
+            <Text style={{ fontWeight: "800", color: "#991B1B", fontSize: 12 }}>Admin note</Text>
+            <Text style={{ color: "#7F1D1D", fontSize: 12, marginTop: 4, lineHeight: 18 }}>{user.rejection_note}</Text>
+          </View>
+        ) : null}
       </View>
-      <StatStrip items={[{ n: "Live", l: "Listings" }, { n: "OK", l: "ID check" }, { n: "Pending", l: "Payouts" }]} />
-      <Text style={{ fontWeight: "800", marginHorizontal: 16, marginTop: 16 }}>Checklist</Text>
-      {kycSteps.map((step, i) => (
-        <View key={step.id} style={{ marginHorizontal: 16, flexDirection: "row", gap: 12, marginTop: i === 0 ? 8 : 0 }}>
-          <View style={{ alignItems: "center" }}>
-            <View style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: step.done ? GREEN : "#E6E8EC", alignItems: "center", justifyContent: "center" }}>
-              <Ionicons name={step.done ? "checkmark" : "ellipse-outline"} size={14} color={step.done ? "#fff" : "#9AA0A6"} />
-            </View>
-            {i < kycSteps.length - 1 ? <View style={{ width: 2, flex: 1, backgroundColor: "#E6E8EC", minHeight: 28 }} /> : null}
-          </View>
-          <View style={{ flex: 1, backgroundColor: "#fff", borderRadius: 14, padding: 12, marginBottom: 10, ...shadow.card }}>
-            <Text style={{ fontWeight: "800" }}>{step.title}</Text>
-            <Text style={{ color: "#6B7280", fontSize: 12, marginTop: 3 }}>{step.sub}</Text>
-            {!step.done ? (
-              <MiniBtn label="Add now" fill onPress={() => Alert.alert("Bank / eSewa", "Add your payout number in settings.")} />
-            ) : null}
-          </View>
-        </View>
-      ))}
+      <Text style={{ fontWeight: "800", marginHorizontal: 16, marginTop: 16 }}>Uploaded documents</Text>
+      {loading ? (
+        <Text style={{ color: "#6B7280", marginHorizontal: 16, marginTop: 10 }}>Loading documents…</Text>
+      ) : (
+        docRows.map((row) => {
+          const uri = pendingUploads[row.key] || docs[row.key];
+          const changed = Boolean(pendingUploads[row.key]);
+          return (
+            <PressScale
+              key={row.key}
+              onPress={() => pickDoc(row.key, row.label)}
+              style={{
+                marginHorizontal: 16,
+                marginTop: 10,
+                backgroundColor: "#fff",
+                borderRadius: 14,
+                padding: 12,
+                flexDirection: "row",
+                alignItems: "center",
+                borderWidth: changed ? 2 : 0,
+                borderColor: changed ? GREEN : "transparent",
+                ...shadow.card,
+              }}
+            >
+              {uri ? (
+                <AuthImage uri={uri} style={{ width: 56, height: 56, borderRadius: 10 }} />
+              ) : (
+                <View style={{ width: 56, height: 56, borderRadius: 10, backgroundColor: "#E7F6EC", alignItems: "center", justifyContent: "center" }}>
+                  <Ionicons name="image-outline" size={24} color={GREEN} />
+                </View>
+              )}
+              <View style={{ flex: 1, marginLeft: 12 }}>
+                <Text style={{ fontWeight: "700" }}>{row.label}</Text>
+                <Text style={{ color: "#9AA0A6", fontSize: 11, marginTop: 2 }}>
+                  {uri ? (changed ? "New file ready to submit" : "On file with NAJIK") : "Not uploaded"}
+                </Text>
+              </View>
+              <Text style={{ color: GREEN, fontWeight: "800", fontSize: 12 }}>{uri ? "Replace" : "Upload"}</Text>
+            </PressScale>
+          );
+        })
+      )}
+      {canEdit ? (
+        <PressScale
+          onPress={() => void submitForReview()}
+          style={{
+            marginHorizontal: 16,
+            marginTop: 16,
+            backgroundColor: GREEN,
+            borderRadius: 14,
+            paddingVertical: 14,
+            alignItems: "center",
+            opacity: busy ? 0.7 : 1,
+          }}
+        >
+          <Text style={{ color: "#fff", fontWeight: "800" }}>{busy ? "Sending…" : rejected ? "Resubmit for approval" : "Send changes to admin"}</Text>
+        </PressScale>
+      ) : null}
     </>
   );
 }

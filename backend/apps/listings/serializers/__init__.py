@@ -66,7 +66,7 @@ def engagement_visible(qs, is_staff: bool):
 
 
 def seller_reviews_for_owner(owner_id, is_staff: bool = False):
-    qs = SellerReview.objects.filter(seller_id=owner_id).select_related("author")
+    qs = SellerReview.objects.filter(seller_id=owner_id).select_related("author", "listing")
     return engagement_visible(qs, is_staff).order_by("-created_at")
 
 
@@ -131,14 +131,28 @@ class ListingReviewSerializer(serializers.ModelSerializer):
 class SellerReviewSerializer(serializers.ModelSerializer):
     author_name = serializers.SerializerMethodField()
     author_id = serializers.UUIDField(source="author.id", read_only=True)
+    listing_title = serializers.SerializerMethodField()
 
     class Meta:
         model = SellerReview
-        fields = ("id", "author_id", "author_name", "rating", "text", "created_at", "is_hidden", "listing")
+        fields = (
+            "id",
+            "author_id",
+            "author_name",
+            "rating",
+            "text",
+            "created_at",
+            "is_hidden",
+            "listing",
+            "listing_title",
+        )
         read_only_fields = fields
 
     def get_author_name(self, obj):
         return (obj.author.full_name or obj.author.phone or "Buyer").strip()
+
+    def get_listing_title(self, obj):
+        return (obj.listing.title or "").strip() if obj.listing_id else ""
 
 
 class ListingSerializer(serializers.ModelSerializer):

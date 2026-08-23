@@ -7,6 +7,9 @@ backend/.env
 apps/admin/.env.local
 apps/mobile/.env
 
+# Local secrets (never commit)
+apps/mobile/.secrets/
+
 # Python
 backend/venv/
 .venv/

@@ -121,7 +121,12 @@ export function usePushNotifications(user: AppUser | null) {
       }
 
       const pushToken = await resolveExpoPushToken();
-      if (!pushToken || cancelled) return;
+      if (!pushToken || cancelled) {
+        if (!cancelled && user) {
+          console.warn("[push] No Expo push token — check notification permission and google-services.json in the build.");
+        }
+        return;
+      }
 
       tokenRef.current = pushToken;
       try {
@@ -130,8 +135,8 @@ export function usePushNotifications(user: AppUser | null) {
           platform: Platform.OS === "ios" ? "ios" : "android",
           device_name: Device.modelName || undefined,
         });
-      } catch {
-        /* retry on next login / foreground */
+      } catch (err) {
+        console.warn("[push] Failed to register token with API:", err);
       }
     }
 

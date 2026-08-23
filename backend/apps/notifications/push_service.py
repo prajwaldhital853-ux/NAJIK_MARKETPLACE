@@ -52,6 +52,7 @@ def send_push_to_user(
         PushDevice.objects.filter(user=user, is_active=True).values_list("token", flat=True)
     )
     if not tokens:
+        logger.info("push skipped for user %s — no registered device tokens", getattr(user, "id", ""))
         return
 
     payload = {

@@ -375,27 +375,30 @@ def get_boosted_listings_for_category(category: str, limit: int = 5) -> list:
     return [c.listing_id for c in ranked[:limit]]
 
 
-def get_all_boosted_listings(limit: int = 10) -> list:
+def get_all_boosted_listings(limit: int | None = None) -> list:
     """
     Returns all active boosted listing IDs across all categories (for global feeds).
     Uses rotation slot + priority score with fair cross-category rotation.
+    Default limit: all active platform boosts (max_active_boosts_platform).
     """
     expire_campaigns()
     rotate_campaign_slots()
-    
+
+    pricing = BoostPricing.get_solo()
+    if limit is None:
+        limit = pricing.max_active_boosts_platform
+
     campaigns = list(
         BoostCampaign.objects.filter(
             status=BoostCampaign.STATUS_ACTIVE,
             ends_at__gt=timezone.now(),
         ).select_related("listing").order_by("current_slot", "-duration_days")
     )
-    
+
     if not campaigns:
         return []
-    
-    # Sort by slot for fair rotation, then priority
+
     ranked = sorted(campaigns, key=lambda c: (c.current_slot, -c.calculate_priority_score()))
-    
     return [c.listing_id for c in ranked[:limit]]
 
 

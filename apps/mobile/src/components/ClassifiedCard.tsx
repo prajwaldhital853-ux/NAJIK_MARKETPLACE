@@ -52,7 +52,7 @@ export function postedLabel(time: string) {
 
 export function listingTags(item: CatalogItem) {
   const tags: string[] = [];
-  if (item.badge === "FEATURED") tags.push("Featured");
+  if (item.badge === "BOOSTED" || item.badge === "FEATURED") tags.push("Boosted");
   if (item.badge === "VERIFIED") tags.push("Verified");
   item.tags.forEach((tag) => {
     if (tag !== "All" && !tags.includes(tag)) tags.push(tag);
@@ -297,8 +297,14 @@ function ListingAdCard({
   const navigation = useNavigation<any>();
   const blurb = listingBlurb(item);
   const { amount, unit } = splitPrice(item.price);
-  const badge = item.urgent ? "URGENT" : item.badge === "FEATURED" ? "FEATURED" : item.badge === "VERIFIED" ? "VERIFIED" : null;
-  const badgeColor = item.urgent ? "#EAB308" : GREEN;
+  const badge = item.urgent
+    ? "URGENT"
+    : item.badge === "BOOSTED" || item.badge === "FEATURED"
+      ? "BOOSTED"
+      : item.badge === "VERIFIED"
+        ? "VERIFIED"
+        : null;
+  const badgeColor = item.urgent ? "#EAB308" : badge === "BOOSTED" ? "#EA580C" : GREEN;
 
   const compactBodyMin = 108;
   const cardMinHeight = compact ? photoH + compactBodyMin : undefined;

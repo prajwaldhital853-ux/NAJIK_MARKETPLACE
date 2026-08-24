@@ -8,8 +8,8 @@ import { useAppRefreshControl } from "../components/KeyboardScreen";
 import { useAuth } from "../context/AuthContext";
 import { useBuyerLocation } from "../context/BuyerLocationContext";
 import { type CatalogItem, type CatalogKey } from "../data/catalog";
+import { catalogFromFeed, buildRecommendedFromFeed, prioritizePromoted } from "../data/feedOrdering";
 import { listingsToCatalog, liveListingById } from "../data/liveListings";
-import { rankSimilarListings } from "../data/similarListings";
 import { fetchListingFeed, fetchSavedListings, type ApiListing } from "../listingsApi";
 import { getRecentViewIds } from "../listingViews";
 import { subscribeListingsChanged } from "../listingsRefresh";
@@ -18,26 +18,6 @@ import { colors } from "../theme";
 type SectionKey = "recommended" | "trending" | "verified" | "latest";
 const QUICK_LIMIT = 24;
 const FULL_LIMIT = 120;
-
-function buildRecommended(pool: CatalogItem[], seeds: CatalogItem[], excludeIds: Set<string>) {
-  const out: CatalogItem[] = [];
-  const seen = new Set<string>(excludeIds);
-  for (const seed of seeds) {
-    const related = rankSimilarListings(pool, seed).filter((row) => !seen.has(row.id) && !row.urgent);
-    for (const row of related) {
-      if (seen.has(row.id)) continue;
-      seen.add(row.id);
-      out.push(row);
-      if (out.length >= 200) return out;
-    }
-  }
-  for (const row of pool) {
-    if (seen.has(row.id) || row.urgent) continue;
-    out.push(row);
-    if (out.length >= 200) break;
-  }
-  return out;
-}
 
 export function HomeSectionScreen() {
   const navigation = useNavigation<any>();
@@ -59,23 +39,23 @@ export function HomeSectionScreen() {
     try {
       if (section === "verified") {
         const quick = await fetchListingFeed({ ...base, verified: true, sort: "new", limit: QUICK_LIMIT }).catch(() => [] as ApiListing[]);
-        setItems(listingsToCatalog(quick).filter((row) => row.verified && !row.urgent));
+        setItems(prioritizePromoted(catalogFromFeed(quick).filter((row) => row.verified)));
         setLoading(false);
         const rows = await fetchListingFeed({ ...base, verified: true, sort: "new", limit: FULL_LIMIT }).catch(() => [] as ApiListing[]);
-        setItems(listingsToCatalog(rows).filter((row) => row.verified && !row.urgent));
+        setItems(prioritizePromoted(catalogFromFeed(rows).filter((row) => row.verified)));
         return;
       }
       if (section === "latest") {
         const quick = await fetchListingFeed({ ...base, sort: "new", limit: QUICK_LIMIT }).catch(() => [] as ApiListing[]);
-        setItems(listingsToCatalog(quick).filter((row) => !row.urgent));
+        setItems(catalogFromFeed(quick));
         setLoading(false);
         const rows = await fetchListingFeed({ ...base, sort: "new", limit: FULL_LIMIT }).catch(() => [] as ApiListing[]);
-        setItems(listingsToCatalog(rows).filter((row) => !row.urgent));
+        setItems(catalogFromFeed(rows));
         return;
       }
       if (section === "recommended") {
         const quick = await fetchListingFeed({ ...base, sort: "new", limit: QUICK_LIMIT }).catch(() => [] as ApiListing[]);
-        setItems(listingsToCatalog(quick).filter((row) => !row.urgent));
+        setItems(catalogFromFeed(quick));
         setLoading(false);
         const [popular, latest, saved, recentIds] = await Promise.all([
           fetchListingFeed({ ...base, sort: "popular", limit: FULL_LIMIT }).catch(() => [] as ApiListing[]),
@@ -83,8 +63,8 @@ export function HomeSectionScreen() {
           user ? fetchSavedListings().catch(() => [] as ApiListing[]) : Promise.resolve([] as ApiListing[]),
           getRecentViewIds(),
         ]);
-        const popularItems = listingsToCatalog(popular).filter((row) => !row.urgent);
-        const latestItems = listingsToCatalog(latest).filter((row) => !row.urgent);
+        const popularItems = catalogFromFeed(popular);
+        const latestItems = catalogFromFeed(latest);
         const savedItems = listingsToCatalog(saved);
         const exclude = new Set(savedItems.map((row) => row.id));
         const seeds: CatalogItem[] = [];
@@ -96,22 +76,21 @@ export function HomeSectionScreen() {
           if (!seeds.some((s) => s.id === row.id)) seeds.push(row);
         }
         const pool = [...popularItems, ...latestItems];
-        setItems(buildRecommended(pool, seeds, exclude));
+        setItems(buildRecommendedFromFeed(latestItems, pool, seeds, exclude, FULL_LIMIT));
         return;
       }
       const quick = await fetchListingFeed({ ...base, sort: "popular", limit: QUICK_LIMIT }).catch(() => [] as ApiListing[]);
-      let quickPool = listingsToCatalog(quick).filter((row) => !row.urgent);
+      let quickPool = prioritizePromoted(catalogFromFeed(quick));
       if (catalog) {
         quickPool = quickPool.filter((row) => row.key === catalog || (catalog === "used" && row.key === "electronics"));
       }
       setItems(quickPool);
       setLoading(false);
       const rows = await fetchListingFeed({ ...base, sort: "popular", limit: FULL_LIMIT }).catch(() => [] as ApiListing[]);
-      let pool = listingsToCatalog(rows).filter((row) => !row.urgent);
+      let pool = prioritizePromoted(catalogFromFeed(rows));
       if (catalog) {
         pool = pool.filter((row) => row.key === catalog || (catalog === "used" && row.key === "electronics"));
       }
-      pool.sort((a, b) => (b.viewCount || 0) - (a.viewCount || 0));
       setItems(pool);
     } catch {
       setItems([]);

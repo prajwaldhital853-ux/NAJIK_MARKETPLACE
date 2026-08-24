@@ -58,6 +58,44 @@ def listing_queryset():
 from apps.listings.urgent import active_urgent_filter, exclude_sold_listings, expire_urgent_listings, is_sold_extras
 
 
+def apply_feed_boost_priority(items, single_cat: str | None, limit: int) -> tuple[list, list[str]]:
+    """
+    Reorder queryset results: all active boosted listings first (rotation order),
+    then organic. Returns (ordered_listings, boosted_ids_in_result).
+    """
+    from apps.promotions.models import BoostPricing
+    from apps.promotions.boost_service import (
+        expire_campaigns,
+        get_all_boosted_listings,
+        get_boosted_listings_for_category,
+    )
+
+    expire_campaigns()
+    pricing = BoostPricing.get_solo()
+    if not pricing.is_active:
+        sliced = list(items[:limit])
+        return sliced, []
+
+    if single_cat:
+        slot_limit = pricing.max_slots_per_category_feed
+        boosted_ids = get_boosted_listings_for_category(single_cat, limit=slot_limit)
+    else:
+        slot_limit = pricing.max_active_boosts_platform
+        boosted_ids = get_all_boosted_listings(limit=slot_limit)
+
+    if not boosted_ids:
+        return list(items[:limit]), []
+
+    boosted_qs = items.filter(id__in=boosted_ids)
+    organic_qs = items.exclude(id__in=boosted_ids)
+    boosted_map = {str(lid): idx for idx, lid in enumerate(boosted_ids)}
+    boosted_items = sorted(list(boosted_qs), key=lambda x: boosted_map.get(str(x.id), 999))
+    ordered = list(boosted_items) + list(organic_qs)
+    slice_items = ordered[:limit]
+    impression_ids = [str(item.id) for item in slice_items if str(item.id) in boosted_map]
+    return slice_items, impression_ids
+
+
 def apply_boost_priority(items, category: str | None, limit: int) -> list:
     """
     Inject boosted listings at top of results using category rotation.
@@ -165,9 +203,11 @@ class ListingFeedView(APIView):
         place_q = listing_place_q(place)
         no_coords = Q(lat__isnull=True) | Q(lng__isnull=True)
         if place and geo_q is not None:
-            items = items.filter(place_q | geo_q | (no_coords & place_q))
+            # Geo filter: include listings in radius OR without map coords (national visibility).
+            items = items.filter(place_q | geo_q | no_coords)
         elif place:
-            items = items.filter(place_q)
+            # Text place only: match location fields OR listings without coords (still discoverable).
+            items = items.filter(place_q | no_coords)
         elif geo_q is not None:
             # Listings without map coordinates still appear nationally until coords are set.
             items = items.filter(geo_q | no_coords)
@@ -192,36 +232,14 @@ class ListingFeedView(APIView):
             if len(cats) == 1:
                 single_cat = cats[0]
         
-        # Boost priority: category-specific for single cat, global for recommendation/trending
+        # Boost priority: category-scoped or global (recommendation / home feeds)
         if sort in ("new", "popular"):
-            from apps.promotions.models import BoostPricing
-            from apps.promotions.boost_service import (
-                get_all_boosted_listings,
-                get_boosted_listings_for_category,
-                record_boost_impressions_for_listing_ids,
-            )
+            from apps.promotions.boost_service import record_boost_impressions_for_listing_ids
 
-            pricing = BoostPricing.get_solo()
-            
-            if single_cat:
-                # Category feed: category-scoped boost
-                boosted_ids = get_boosted_listings_for_category(single_cat, limit=pricing.max_slots_per_category_feed)
-            else:
-                # Global feed (recommendation/trending): all boosts with rotation
-                boosted_ids = get_all_boosted_listings(limit=10)
-            
-            if boosted_ids:
-                boosted_qs = items.filter(id__in=boosted_ids)
-                organic_qs = items.exclude(id__in=boosted_ids)
-                boosted_map = {str(lid): idx for idx, lid in enumerate(boosted_ids)}
-                boosted_items = sorted(list(boosted_qs), key=lambda x: boosted_map.get(str(x.id), 999))
-                items_with_boost = list(boosted_items) + list(organic_qs)
-                slice_items = items_with_boost[:limit]
-                impression_ids = [str(item.id) for item in slice_items if str(item.id) in boosted_map]
+            slice_items, impression_ids = apply_feed_boost_priority(items, single_cat, limit)
+            if impression_ids:
                 record_boost_impressions_for_listing_ids(impression_ids)
-                rows = ListingSerializer(slice_items, many=True, context={"request": request}).data
-            else:
-                rows = ListingSerializer(items[:limit], many=True, context={"request": request}).data
+            rows = ListingSerializer(slice_items, many=True, context={"request": request}).data
         else:
             rows = ListingSerializer(items[:limit], many=True, context={"request": request}).data
         min_price = request.query_params.get("min_price")

@@ -11,8 +11,8 @@ import { StaffWarningCard, AccountStatusCard } from "../components/StaffWarningB
 import { useAuth } from "../context/AuthContext";
 import { useBuyerLocation } from "../context/BuyerLocationContext";
 import { homeCategoryKey, type CatalogItem, type CatalogKey } from "../data/catalog";
+import { catalogFromFeed, buildRecommendedFromFeed, prioritizePromoted } from "../data/feedOrdering";
 import { listingsToCatalog, liveListingById } from "../data/liveListings";
-import { rankSimilarListings } from "../data/similarListings";
 import { HomeBannerCarousel } from "../components/HomeBannerCarousel";
 import { UrgentSellSection } from "../components/UrgentSellSection";
 import { fetchListingFeed, fetchSavedListings, type ApiListing } from "../listingsApi";
@@ -27,7 +27,7 @@ const GAP = 11;
 const TILE = (SCREEN_W - PAD * 2 - GAP * 3) / 4;
 const GREEN = "#1B7D2C";
 const SECTION_LIMIT = 10;
-const QUICK_FEED_LIMIT = 16;
+const QUICK_FEED_LIMIT = 40;
 
 const categories: { label: string; icon: keyof typeof Ionicons.glyphMap; bg: string; color: string }[] = [
   { label: "Property", icon: "home", bg: "#E8F1FE", color: "#1D4ED8" },
@@ -50,26 +50,6 @@ const TREND_CHIPS: { key: string; label: string; catalog?: CatalogKey }[] = [
   { key: "electronics", label: "Electronics", catalog: "electronics" },
 ];
 
-function buildRecommended(pool: CatalogItem[], seeds: CatalogItem[], excludeIds: Set<string>) {
-  const out: CatalogItem[] = [];
-  const seen = new Set<string>(excludeIds);
-  for (const seed of seeds) {
-    const related = rankSimilarListings(pool, seed).filter((row) => !seen.has(row.id) && !row.urgent);
-    for (const row of related) {
-      if (seen.has(row.id)) continue;
-      seen.add(row.id);
-      out.push(row);
-      if (out.length >= SECTION_LIMIT) return out;
-    }
-  }
-  for (const row of pool) {
-    if (seen.has(row.id) || row.urgent) continue;
-    out.push(row);
-    if (out.length >= SECTION_LIMIT) break;
-  }
-  return out;
-}
-
 export function BuyerHomeScreen() {
   const navigation = useNavigation<any>();
   const { user } = useAuth();
@@ -89,7 +69,7 @@ export function BuyerHomeScreen() {
     setLoadingHome(true);
     try {
       const quick = await fetchListingFeed({ ...base, sort: "new", limit: QUICK_FEED_LIMIT }).catch(() => [] as ApiListing[]);
-      const quickItems = listingsToCatalog(quick).filter((item) => !item.urgent);
+      const quickItems = catalogFromFeed(quick);
       if (quickItems.length) {
         setLatestRows(quickItems);
         setTrendingRows(quickItems);
@@ -106,9 +86,9 @@ export function BuyerHomeScreen() {
       user ? fetchSavedListings().catch(() => [] as ApiListing[]) : Promise.resolve([] as ApiListing[]),
       getRecentViewIds(),
     ]);
-    const popularItems = listingsToCatalog(popular).filter((item) => !item.urgent);
-    const verifiedItems = listingsToCatalog(verified).filter((item) => item.verified && !item.urgent);
-    const latestItems = listingsToCatalog(latest).filter((item) => !item.urgent);
+    const popularItems = catalogFromFeed(popular);
+    const verifiedItems = catalogFromFeed(verified).filter((item) => item.verified);
+    const latestItems = catalogFromFeed(latest);
     const savedItems = listingsToCatalog(saved);
     const exclude = new Set(savedItems.map((row) => row.id));
     const seedItems: CatalogItem[] = [];
@@ -120,10 +100,10 @@ export function BuyerHomeScreen() {
       if (!seedItems.some((s) => s.id === row.id)) seedItems.push(row);
     }
     const pool = [...popularItems, ...latestItems];
-    const recommended = buildRecommended(pool, seedItems, exclude);
+    const recommended = buildRecommendedFromFeed(latestItems, pool, seedItems, exclude, SECTION_LIMIT);
 
-    setTrendingRows(popularItems);
-    setVerifiedRows(verifiedItems);
+    setTrendingRows(prioritizePromoted(popularItems));
+    setVerifiedRows(prioritizePromoted(verifiedItems));
     setLatestRows(latestItems);
     setRecommendedRows(recommended);
   }
@@ -155,7 +135,7 @@ export function BuyerHomeScreen() {
       chip?.catalog
         ? base.filter((item) => item.key === chip.catalog || (chip.catalog === "used" && item.key === "electronics"))
         : base;
-    return [...pool].sort((a, b) => (b.viewCount || 0) - (a.viewCount || 0)).slice(0, SECTION_LIMIT);
+    return pool.slice(0, SECTION_LIMIT);
   }, [trendingRows, trendChip]);
 
   const verifiedSellers = useMemo(() => verifiedRows.slice(0, SECTION_LIMIT), [verifiedRows]);

@@ -36,6 +36,7 @@ export type CatalogItem = {
   distanceKm?: number;
   viewCount?: number;
   apiCategory?: string;
+  promoted?: boolean;
 };
 
 export const catalogMeta: Record<

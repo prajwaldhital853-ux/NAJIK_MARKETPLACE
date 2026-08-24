@@ -42,6 +42,23 @@ LOCATIONS = [
     ("Hetauda, Makwanpur", "Hetauda", "Makwanpur"),
 ]
 
+CITY_COORDS = {
+    "Kathmandu": (27.7172, 85.3240),
+    "Lalitpur": (27.6588, 85.3247),
+    "Bhaktapur": (27.6727, 85.4298),
+    "Pokhara": (28.2096, 83.9856),
+    "Chitwan": (27.5833, 84.4167),
+    "Biratnagar": (26.4525, 87.2718),
+    "Butwal": (27.7000, 83.4500),
+    "Dharan": (26.8147, 87.2797),
+    "Hetauda": (27.4314, 85.0319),
+}
+
+
+def _coords_for_city(city: str) -> tuple[float, float]:
+    lat, lng = CITY_COORDS.get(city, (27.7172, 85.3240))
+    return lat + random.uniform(-0.015, 0.015), lng + random.uniform(-0.015, 0.015)
+
 SERVICE_TYPES = [
     "Electronics Repair", "Clothing & Accessories", "Vehicle Service", "Property Consultant",
     "Furniture Making", "Handicrafts", "Bakery & Sweets", "Beauty Services", "IT Services",
@@ -361,6 +378,7 @@ class Command(BaseCommand):
 
             listing_1, listing_2 = _pick_listing_pair(idx)
             for listing_data in [listing_1, listing_2]:
+                lat, lng = _coords_for_city(listing_data["city"])
                 listing, created = Listing.objects.get_or_create(
                     owner=user,
                     title=listing_data["title"],
@@ -372,6 +390,8 @@ class Command(BaseCommand):
                         "location": listing_data["location"],
                         "city": listing_data["city"],
                         "district": listing_data["district"],
+                        "lat": lat,
+                        "lng": lng,
                         "contact_name": seller_data["full_name"],
                         "contact_phone": seller_data["phone"],
                         "contact_email": seller_data["email"],
@@ -382,8 +402,20 @@ class Command(BaseCommand):
                         "extras": {"dealType": listing_data["subcategory"]},
                     },
                 )
+                if not created and (listing.lat is None or listing.lng is None):
+                    listing.lat = lat
+                    listing.lng = lng
+                    listing.save(update_fields=["lat", "lng", "updated_at"])
                 if created:
                     created_listings += 1
+
+        # Backfill coordinates on any demo listing still missing map pins
+        demo_phones = [f"+{PHONE_BASE + i}" for i in range(count)]
+        for listing in Listing.objects.filter(owner__phone__in=demo_phones, lat__isnull=True):
+            lat, lng = _coords_for_city(listing.city or "Kathmandu")
+            listing.lat = lat
+            listing.lng = lng
+            listing.save(update_fields=["lat", "lng", "updated_at"])
 
         demo_phones = [f"+{PHONE_BASE + i}" for i in range(count)]
         total_sellers = AppUser.objects.filter(

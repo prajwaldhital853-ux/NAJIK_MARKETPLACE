@@ -1,4 +1,8 @@
-"""Seed 100 demo seller accounts with 2 approved listings each."""
+"""Seed 100 demo seller accounts with 2 approved listings each.
+
+Idempotent. Safe to run on every Render deploy. Adds mix-and-match photos
+to listings that still have none (no SSH required).
+"""
 
 import random
 from io import BytesIO
@@ -55,18 +59,12 @@ CITY_COORDS = {
     "Hetauda": (27.4314, 85.0319),
 }
 
-
-def _coords_for_city(city: str) -> tuple[float, float]:
-    lat, lng = CITY_COORDS.get(city, (27.7172, 85.3240))
-    return lat + random.uniform(-0.015, 0.015), lng + random.uniform(-0.015, 0.015)
-
 SERVICE_TYPES = [
     "Electronics Repair", "Clothing & Accessories", "Vehicle Service", "Property Consultant",
     "Furniture Making", "Handicrafts", "Bakery & Sweets", "Beauty Services", "IT Services",
     "Event Management", "Plumbing", "Electrical Work", "Catering", "Photography", "Tutoring",
 ]
 
-# Valid Listing.category values
 LISTING_TEMPLATES = [
     {
         "category": Listing.CATEGORY_MARKETPLACE,
@@ -243,18 +241,67 @@ LISTING_TEMPLATES = [
     },
 ]
 
+PHOTO_COLORS = [
+    (30, 125, 44),
+    (29, 78, 216),
+    (194, 65, 12),
+    (126, 34, 206),
+    (185, 28, 28),
+]
+_JPEG_CACHE: list[bytes] = []
 
-def _demo_jpeg(name: str) -> ContentFile:
-    """Minimal valid JPEG for Cloudinary (placeholder text is rejected as Invalid image file)."""
-    from PIL import Image
 
+def _coords_for_city(city: str) -> tuple[float, float]:
+    lat, lng = CITY_COORDS.get(city, (27.7172, 85.3240))
+    return lat + random.uniform(-0.015, 0.015), lng + random.uniform(-0.015, 0.015)
+
+
+def _jpeg_bytes(color: tuple[int, int, int]) -> bytes:
+    from PIL import Image, ImageDraw
+
+    img = Image.new("RGB", (640, 480), color=color)
+    draw = ImageDraw.Draw(img)
+    draw.rectangle((24, 24, 616, 456), outline=(255, 255, 255), width=8)
+    draw.ellipse((220, 140, 420, 340), fill=(255, 255, 255))
     buf = BytesIO()
-    Image.new("RGB", (64, 64), color=(30, 125, 44)).save(buf, format="JPEG", quality=85)
-    return ContentFile(buf.getvalue(), name=name)
+    img.save(buf, format="JPEG", quality=82)
+    return buf.getvalue()
+
+
+def _photo_pool() -> list[bytes]:
+    global _JPEG_CACHE
+    if not _JPEG_CACHE:
+        _JPEG_CACHE = [_jpeg_bytes(c) for c in PHOTO_COLORS]
+    return _JPEG_CACHE
+
+
+def _demo_jpeg(name: str, color_index: int = 0) -> ContentFile:
+    pool = _photo_pool()
+    return ContentFile(pool[color_index % len(pool)], name=name)
+
+
+def _attach_listing_photos(listing: Listing) -> int:
+    """Add 4–5 mixed photos if the listing has none."""
+    if listing.photos.exists():
+        return 0
+    pool = _photo_pool()
+    start = hash(str(listing.id)) % len(pool)
+    count = 4 + (start % 2)
+    saved = 0
+    for i in range(count):
+        photo = ListingPhoto(listing=listing, sort_order=i)
+        filename = f"g_{listing.id}_photo_{i}.jpg"
+        photo.image.save(
+            filename,
+            ContentFile(pool[(start + i) % len(pool)], name=filename),
+            save=False,
+        )
+        photo.save()
+        saved += 1
+    return saved
 
 
 def _pick_listing_pair(seller_index: int):
-    """Two listings in different categories/locations for each seller."""
     templates = list(LISTING_TEMPLATES)
     t1 = templates[seller_index % len(templates)]
     t2 = templates[(seller_index + 7) % len(templates)]
@@ -332,6 +379,7 @@ class Command(BaseCommand):
         created_users = 0
         created_listings = 0
         created_apps = 0
+        photos_added = 0
 
         self.stdout.write(f"Seeding {count} demo sellers ({LISTINGS_PER_SELLER} listings each)...")
 
@@ -355,7 +403,6 @@ class Command(BaseCommand):
             else:
                 self.stdout.write(f"[=] Seller {idx + 1}/{count}: {user.full_name} (exists)")
 
-            # Verified provider application (required for admin + verified feed)
             if not ProviderApplication.objects.filter(owner=user).exists():
                 try:
                     app = ProviderApplication(
@@ -373,8 +420,8 @@ class Command(BaseCommand):
                             "demo_seed": True,
                         },
                     )
-                    app.nagrita.save(f"nagrita_{user.id}.jpg", _demo_jpeg("nagrita_demo.jpg"), save=False)
-                    app.photo.save(f"photo_{user.id}.jpg", _demo_jpeg("photo_demo.jpg"), save=False)
+                    app.nagrita.save(f"nagrita_{user.id}.jpg", _demo_jpeg("nagrita_demo.jpg", 0), save=False)
+                    app.photo.save(f"photo_{user.id}.jpg", _demo_jpeg("photo_demo.jpg", 1), save=False)
                     app.save()
                     created_apps += 1
                 except Exception as exc:
@@ -419,25 +466,15 @@ class Command(BaseCommand):
                     listing.save(update_fields=["lat", "lng", "updated_at"])
                 if created:
                     created_listings += 1
-                
-                # Add 3-5 demo photos per listing (even if listing existed)
-                if listing.photos.count() == 0:
-                    photo_count = random.randint(3, 5)
-                    for p_idx in range(photo_count):
-                        try:
-                            photo = ListingPhoto(listing=listing, sort_order=p_idx)
-                            photo.image.save(
-                                f"listing_{listing.id}_photo_{p_idx}.jpg",
-                                _demo_jpeg(f"demo_listing_{listing.category}_{p_idx}.jpg"),
-                                save=False
-                            )
-                            photo.save()
-                        except Exception as photo_exc:
-                            self.stdout.write(
-                                self.style.WARNING(f"  [!] Photo {p_idx} skipped for {listing.title}: {photo_exc}")
-                            )
+                try:
+                    added = _attach_listing_photos(listing)
+                    if added:
+                        photos_added += added
+                except Exception as photo_exc:
+                    self.stdout.write(
+                        self.style.WARNING(f"  [!] Photos skipped for {listing.title}: {photo_exc}")
+                    )
 
-        # Backfill coordinates on any demo listing still missing map pins
         demo_phones = [f"+{PHONE_BASE + i}" for i in range(count)]
         for listing in Listing.objects.filter(owner__phone__in=demo_phones, lat__isnull=True):
             lat, lng = _coords_for_city(listing.city or "Kathmandu")
@@ -445,7 +482,6 @@ class Command(BaseCommand):
             listing.lng = lng
             listing.save(update_fields=["lat", "lng", "updated_at"])
 
-        demo_phones = [f"+{PHONE_BASE + i}" for i in range(count)]
         total_sellers = AppUser.objects.filter(
             account_type=AppUser.ACCOUNT_PROVIDER,
             phone__in=demo_phones,
@@ -456,6 +492,7 @@ class Command(BaseCommand):
         self.stdout.write(f"  New sellers this run: {created_users}")
         self.stdout.write(f"  New verified apps: {created_apps}")
         self.stdout.write(f"  New listings this run: {created_listings}")
+        self.stdout.write(f"  Photos added this run: {photos_added}")
         self.stdout.write(f"  Total demo sellers in DB: {total_sellers}")
         self.stdout.write(f"  Total demo listings in DB: {total_listings}")
         self.stdout.write("\nSample login:")

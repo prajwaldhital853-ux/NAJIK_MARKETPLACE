@@ -4,13 +4,14 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, ScrollView, Text, View, ActivityIndicator } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ListingGrid } from "../components/ClassifiedCard";
+import { InfiniteListingGrid } from "../components/InfiniteListingGrid";
 import { useAppRefreshControl } from "../components/KeyboardScreen";
 import { useAuth } from "../context/AuthContext";
 import { useBuyerLocation } from "../context/BuyerLocationContext";
 import { type CatalogItem, type CatalogKey } from "../data/catalog";
 import { catalogFromFeed, buildRecommendedFromFeed, prioritizePromoted } from "../data/feedOrdering";
 import { listingsToCatalog, liveListingById } from "../data/liveListings";
-import { fetchListingFeed, fetchSavedListings, type ApiListing } from "../listingsApi";
+import { fetchListingFeed, fetchListingFeedPaginated, fetchSavedListings, type ApiListing } from "../listingsApi";
 import { getRecentViewIds } from "../listingViews";
 import { subscribeListingsChanged } from "../listingsRefresh";
 import { colors } from "../theme";
@@ -121,15 +122,30 @@ export function HomeSectionScreen() {
           </View>
         </View>
       </View>
-      <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 32 }} refreshControl={refreshControl}>
-        {items.length ? (
-          <ListingGrid items={items} />
-        ) : loading ? (
-          <ActivityIndicator color={colors.greenDeep} style={{ marginTop: 24 }} />
-        ) : (
-          <Text style={{ color: colors.muted, textAlign: "center", marginTop: 24 }}>No listings in this section yet.</Text>
-        )}
-      </ScrollView>
+      <View style={{ flex: 1 }}>
+        <InfiniteListingGrid
+          fetchData={async (page, page_size) => {
+            const base = { ...feedParams };
+            if (section === "verified") {
+              const response = await fetchListingFeedPaginated({ ...base, verified: true, sort: "new", page, page_size });
+              return response;
+            } else if (section === "latest") {
+              const response = await fetchListingFeedPaginated({ ...base, sort: "new", page, page_size });
+              return response;
+            } else if (section === "trending") {
+              const response = await fetchListingFeedPaginated({ ...base, sort: "popular", page, page_size });
+              return response;
+            } else {
+              // Recommended section - use latest as fallback
+              const response = await fetchListingFeedPaginated({ ...base, sort: "new", page, page_size });
+              return response;
+            }
+          }}
+          initialData={items}
+          emptyText={`No ${heading.toLowerCase()} found.`}
+          pageSize={20}
+        />
+      </View>
     </View>
   );
 }

@@ -214,8 +214,19 @@ export async function recordListingViewOnServer(id: string) {
   }
 }
 
-export async function fetchMyListings() {
-  return withAppAuth((token) => api<ApiListing[]>("/api/listings/me/", { token }));
+export async function fetchMyListings(page?: number, page_size?: number): Promise<ApiListing[]> {
+  const params = new URLSearchParams();
+  if (page) params.set("page", String(page));
+  if (page_size) params.set("page_size", String(page_size));
+  const query = params.toString() ? `?${params.toString()}` : "";
+  
+  const response = await withAppAuth((token) => api<ApiListing[] | FeedResponse>(`/api/listings/me/${query}`, { token }));
+  return Array.isArray(response) ? response : response.results;
+}
+
+export async function fetchMyListingsPaginated(page = 1, page_size = 20): Promise<FeedResponse> {
+  const params = new URLSearchParams({ page: String(page), page_size: String(page_size) });
+  return withAppAuth((token) => api<FeedResponse>(`/api/listings/me/?${params.toString()}`, { token }));
 }
 
 export async function createListing(payload: ListingWritePayload) {

@@ -409,8 +409,44 @@ class ListingMineView(APIView):
     permission_classes = [IsAppUser]
 
     def get(self, request):
-        items = listing_queryset().filter(owner=request.user)
-        return Response(ListingSerializer(items, many=True, context={"request": request}).data)
+        # Add pagination for seller's listings
+        try:
+            page = max(1, int(request.query_params.get("page") or 1))
+            page_size = min(max(int(request.query_params.get("page_size") or 20), 1), 50)
+        except (TypeError, ValueError):
+            page = 1
+            page_size = 20
+        
+        # Legacy limit param support
+        legacy_limit = request.query_params.get("limit")
+        if legacy_limit:
+            try:
+                page_size = min(max(int(legacy_limit), 1), 200)
+                page = 1
+            except (TypeError, ValueError):
+                pass
+        
+        items = listing_queryset().filter(owner=request.user).select_related(
+            "owner", "owner__provider_application"
+        ).prefetch_related("photos")
+        
+        start_idx = (page - 1) * page_size
+        end_idx = start_idx + page_size
+        
+        paginated = items[start_idx:end_idx]
+        has_next = items[end_idx:end_idx+1].exists()
+        
+        serialized = ListingSerializer(paginated, many=True, context={"request": request}).data
+        
+        # Return paginated response (backward compat: if legacy limit used, return array; else object)
+        if legacy_limit:
+            return Response(serialized)
+        return Response({
+            "results": serialized,
+            "page": page,
+            "page_size": page_size,
+            "has_next": has_next,
+        })
 
     def post(self, request):
         if not seller_can_post(request.user):

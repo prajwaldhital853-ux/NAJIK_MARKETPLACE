@@ -50,9 +50,10 @@ export function postedLabel(time: string) {
   return `Posted ${t}`;
 }
 
-export function listingTags(item: CatalogItem) {
+export function listingTags(item: CatalogItem, showPromoted = false) {
   const tags: string[] = [];
-  if (item.badge === "BOOSTED" || item.badge === "FEATURED") tags.push("Boosted");
+  // Only show "Boosted" tag to sellers, not buyers
+  if (showPromoted && (item.badge === "BOOSTED" || item.badge === "FEATURED")) tags.push("Boosted");
   if (item.badge === "VERIFIED") tags.push("Verified");
   item.tags.forEach((tag) => {
     if (tag !== "All" && !tags.includes(tag)) tags.push(tag);
@@ -179,15 +180,15 @@ export function ClassifiedCard({ item }: { item: CatalogItem }) {
   return <ClassifiedGridCard item={item} width={LISTING_CARD_W} />;
 }
 
-export function ClassifiedGridCard({ item, width }: { item: CatalogItem; width: number }) {
-  return <ListingAdCard item={item} width={width} photoH={Math.round(width * 0.68)} compact />;
+export function ClassifiedGridCard({ item, width, showPromoted }: { item: CatalogItem; width: number; showPromoted?: boolean }) {
+  return <ListingAdCard item={item} width={width} photoH={Math.round(width * 0.68)} compact showPromoted={showPromoted} />;
 }
 
-export function UrgentListingCard({ item }: { item: CatalogItem }) {
+export function UrgentListingCard({ item, showPromoted }: { item: CatalogItem; showPromoted?: boolean }) {
   const width = Math.min(200, LISTING_CARD_W + 24);
   return (
     <View style={{ width }}>
-      <ListingAdCard item={item} width={width} photoH={Math.round(width * 0.62)} compact urgent />
+      <ListingAdCard item={item} width={width} photoH={Math.round(width * 0.62)} compact urgent showPromoted={showPromoted} />
     </View>
   );
 }
@@ -286,6 +287,7 @@ function ListingAdCard({
   compact,
   flush,
   urgent,
+  showPromoted = false,
 }: {
   item: CatalogItem;
   width?: number;
@@ -293,13 +295,14 @@ function ListingAdCard({
   compact?: boolean;
   flush?: boolean;
   urgent?: boolean;
+  showPromoted?: boolean;
 }) {
   const navigation = useNavigation<any>();
   const blurb = listingBlurb(item);
   const { amount, unit } = splitPrice(item.price);
   const badge = item.urgent
     ? "URGENT"
-    : item.badge === "BOOSTED" || item.badge === "FEATURED"
+    : showPromoted && (item.badge === "BOOSTED" || item.badge === "FEATURED")
       ? "BOOSTED"
       : item.badge === "VERIFIED"
         ? "VERIFIED"

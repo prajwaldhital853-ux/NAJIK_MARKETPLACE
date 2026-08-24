@@ -14,7 +14,7 @@ import { AccountStatusCard, ListingAdminNotesCard, StaffWarningCard } from "../c
 import { useAuth } from "../context/AuthContext";
 import { isPendingProvider, isProvider, isRejectedProvider, isVerifiedProvider } from "../demo";
 import { discountedAmount, listingDiscountPercent } from "../data/liveListings";
-import { fetchMyListings, deleteMyListing, type ApiListing } from "../listingsApi";
+import { fetchMyListingsPaginated, fetchMyListings, deleteMyListing, type ApiListing } from "../listingsApi";
 import { subscribeListingsChanged } from "../listingsRefresh";
 import { openListing } from "../navigation/browse";
 import { colors, shadow } from "../theme";
@@ -35,6 +35,7 @@ function SellerHomeScreen() {
   const { user } = useAuth();
   const navigation = useNavigation<any>();
   const [posts, setPosts] = useState<ApiListing[]>([]);
+  const [loading, setLoading] = useState(true);
   const name = user?.full_name || "Account";
   const pending = isPendingProvider(user);
   const verified = isVerifiedProvider(user);
@@ -43,10 +44,17 @@ function SellerHomeScreen() {
   const serviceLabel = user?.service_type || "Real Estate & Property Service";
   const liveHomePosts = posts.filter((item) => item.extras?.sold !== true && String(item.extras?.sold || "") !== "true");
 
-  const loadPosts = useCallback(() => {
-    void fetchMyListings()
-      .then(setPosts)
-      .catch(() => setPosts([]));
+  const loadPosts = useCallback(async () => {
+    try {
+      setLoading(true);
+      // Load only first 10 listings for home screen
+      const result = await fetchMyListings(1, 10);
+      setPosts(result);
+    } catch (err) {
+      setPosts([]);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useFocusEffect(

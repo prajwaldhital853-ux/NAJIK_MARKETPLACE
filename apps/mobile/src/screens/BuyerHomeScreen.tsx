@@ -16,10 +16,12 @@ import { listingsToCatalog, liveListingById } from "../data/liveListings";
 import { HomeBannerCarousel } from "../components/HomeBannerCarousel";
 import { UrgentSellSection } from "../components/UrgentSellSection";
 import { fetchListingFeed, fetchListingFeedPaginated, fetchSavedListings, type ApiListing } from "../listingsApi";
+import { getCachedHomeData, setCachedHomeData, clearHomeCache } from "../cache/homeCache";
 import { getRecentViewIds } from "../listingViews";
 import { subscribeListingsChanged } from "../listingsRefresh";
 import { openCategory, openHomeSection } from "../navigation/browse";
 import { colors, shadow } from "../theme";
+import { InfiniteListingGrid } from "../components/InfiniteListingGrid";
 
 const { width: SCREEN_W } = Dimensions.get("window");
 const PAD = 16;
@@ -69,26 +71,46 @@ export function BuyerHomeScreen() {
 
   async function loadSections() {
     const base = { ...feedParams };
-    setLoadingHome(true);
+    
+    // Load cached data first to show immediately
+    const cachedData = getCachedHomeData();
+    if (cachedData) {
+      setLatestRows(cachedData.latest);
+      setTrendingRows(cachedData.trending);
+      setRecommendedRows(cachedData.recommended);
+      setVerifiedRows(cachedData.verified);
+      setLoadingHome(false);
+    } else {
+      setLoadingHome(true);
+    }
+
     try {
-      const quick = await fetchListingFeed({ ...base, sort: "new", page_size: QUICK_FEED_LIMIT }).catch(() => [] as ApiListing[]);
+      // Load minimal data first (only 10 items for immediate display)
+      const quick = await fetchListingFeed({ ...base, sort: "new", page_size: 10 }).catch(() => [] as ApiListing[]);
       const quickItems = catalogFromFeed(quick);
       if (quickItems.length) {
         setLatestRows(quickItems);
         setTrendingRows(quickItems);
         setRecommendedRows(quickItems.slice(0, SECTION_LIMIT));
+        setLoadingHome(false);
+        
+        // Cache this quick data
+        setCachedHomeData({
+          latest: quickItems,
+          trending: quickItems,
+          recommended: quickItems.slice(0, SECTION_LIMIT),
+          verified: [],
+        });
       }
-    } finally {
-      setLoadingHome(false);
-    }
 
-    const [popular, verified, latest, saved, recentIds] = await Promise.all([
-      fetchListingFeed({ ...base, sort: "popular", page_size: 30 }).catch(() => [] as ApiListing[]),
-      fetchListingFeed({ ...base, verified: true, sort: "new", page_size: 20 }).catch(() => [] as ApiListing[]),
-      fetchListingFeed({ ...base, sort: "new", page_size: 30 }).catch(() => [] as ApiListing[]),
-      user ? fetchSavedListings().catch(() => [] as ApiListing[]) : Promise.resolve([] as ApiListing[]),
-      getRecentViewIds(),
-    ]);
+      // Load full data in background without blocking UI
+      const [popular, verified, latest, saved, recentIds] = await Promise.all([
+        fetchListingFeed({ ...base, sort: "popular", page_size: 20 }).catch(() => [] as ApiListing[]),
+        fetchListingFeed({ ...base, verified: true, sort: "new", page_size: 15 }).catch(() => [] as ApiListing[]),
+        fetchListingFeed({ ...base, sort: "new", page_size: 20 }).catch(() => [] as ApiListing[]),
+        user ? fetchSavedListings().catch(() => [] as ApiListing[]) : Promise.resolve([] as ApiListing[]),
+        getRecentViewIds(),
+      ]);
     const popularItems = catalogFromFeed(popular);
     const verifiedItems = catalogFromFeed(verified).filter((item) => item.verified);
     const latestItems = catalogFromFeed(latest);
@@ -243,18 +265,30 @@ export function BuyerHomeScreen() {
                   <ActivityIndicator size="large" color={colors.primary} />
                 </View>
               ) : (
-                <>
+                <ScrollView
+                  style={{ maxHeight: 600 }}
+                  showsVerticalScrollIndicator={false}
+                  onScroll={(e) => {
+                    const { contentOffset, layoutMeasurement, contentSize } = e.nativeEvent;
+                    const paddingToBottom = 20;
+                    if (contentOffset.y >= contentSize.height - layoutMeasurement.height - paddingToBottom) {
+                      void loadMoreLatest();
+                    }
+                  }}
+                  scrollEventThrottle={400}
+                >
                   <ListingGrid items={latest} />
-                  {latestHasMore && (
-                    <PressScale onPress={() => void loadMoreLatest()} style={{ backgroundColor: "#fff", borderRadius: 12, padding: 14, marginTop: 12, alignItems: "center", ...shadow.card }}>
-                      {loadingMore ? (
-                        <ActivityIndicator size="small" color={colors.primary} />
-                      ) : (
-                        <Text style={{ color: colors.primary, fontWeight: "700", fontSize: 15 }}>Load More</Text>
-                      )}
-                    </PressScale>
+                  {loadingMore && (
+                    <View style={{ padding: 20, alignItems: "center" }}>
+                      <ActivityIndicator size="small" color={colors.primary} />
+                    </View>
                   )}
-                </>
+                  {!latestHasMore && latest.length > 20 && (
+                    <View style={{ backgroundColor: "#fff", borderRadius: 12, padding: 14, marginTop: 12, alignItems: "center", ...shadow.card }}>
+                      <Text style={{ color: colors.muted, fontSize: 14 }}>No more listings</Text>
+                    </View>
+                  )}
+                </ScrollView>
               )}
             </View>
           </>

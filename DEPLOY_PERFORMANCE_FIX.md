@@ -18,19 +18,24 @@ Fixed app slowness (30-40 second load) by adding API pagination and reducing ini
 
 ## Deployment Steps
 
-### 1. Backend (Render)
-```bash
-# Already deployed via git push
-# Migration will run automatically via render_start.sh
+### 1. Backend (Render) — no SSH / shell needed
 
-# After deploy, SSH to Render and run:
-python manage.py seed_demo_sellers --count 100
-```
+Push this code. On every deploy, `scripts/render_start.sh` already:
 
-This will:
-- Add photos to existing demo listings (if missing)
-- Create any new demo sellers needed up to 100 total
-- Idempotent (safe to run multiple times)
+1. Runs database migrations
+2. Starts the API immediately
+3. Seeds 100 demo sellers **in the background** (adds missing photos to existing listings)
+
+You do **not** run `python manage.py seed_demo_sellers` yourself.
+
+Optional env vars on the Render web service:
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `SEED_DEMO_SELLERS` | `1` | Set to `0` to skip seeding |
+| `DEMO_SELLER_COUNT` | `100` | How many demo sellers to keep |
+
+After deploy, wait 2–5 minutes for photos to finish uploading to Cloudinary, then pull-to-refresh the app.
 
 ### 2. Mobile (EAS)
 ```bash

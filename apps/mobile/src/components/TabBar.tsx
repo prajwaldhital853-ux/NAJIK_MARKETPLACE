@@ -7,7 +7,7 @@ import { Pressable, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "../context/AuthContext";
 import { isProvider } from "../demo";
-import { colors, shadow } from "../theme";
+import { colors } from "../theme";
 
 const buyerTabs = [
   { key: "Home", label: "Home", icon: "home-outline", activeIcon: "home" },
@@ -51,25 +51,18 @@ export function TabBar({ state, navigation }: BottomTabBarProps) {
   return (
     <View
       style={{
-        backgroundColor: "#F7F8FA",
-        paddingHorizontal: 16,
-        paddingTop: 22,
-        paddingBottom: Math.max(insets.bottom, 12),
+        backgroundColor: colors.white,
+        borderTopWidth: 1,
+        borderTopColor: "#E8EAED",
+        paddingHorizontal: 4,
+        paddingTop: 6,
+        paddingBottom: Math.max(insets.bottom, 8),
       }}
     >
       <View
         style={{
-          backgroundColor: colors.white,
-          borderRadius: 999,
           flexDirection: "row",
           alignItems: "flex-end",
-          paddingHorizontal: 8,
-          paddingTop: 10,
-          paddingBottom: 8,
-          ...shadow.card,
-          shadowOpacity: 0.14,
-          shadowRadius: 16,
-          elevation: 10,
         }}
       >
         {tabs.map((tab) => {
@@ -87,7 +80,11 @@ export function TabBar({ state, navigation }: BottomTabBarProps) {
                     borderRadius: FAB / 2,
                     marginTop: -28,
                     overflow: "hidden",
-                    ...shadow.fab,
+                    elevation: 4,
+                    shadowColor: "#000",
+                    shadowOpacity: 0.12,
+                    shadowRadius: 6,
+                    shadowOffset: { width: 0, height: 3 },
                   }}
                 >
                   <LinearGradient

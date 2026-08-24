@@ -55,7 +55,12 @@ export function UserListingsPanel({
           <button type="button" onClick={onClose} className="text-muted hover:text-ink">✕</button>
         </div>
         <div className="max-h-[60vh] overflow-y-auto px-2 py-2">
-          {loading ? <p className="px-2 py-6 text-center text-sm text-muted">Loading…</p> : null}
+          {loading ? (
+            <div className="flex items-center justify-center gap-2 px-2 py-10 text-sm text-muted">
+              <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-brand border-t-transparent" />
+              Loading listings…
+            </div>
+          ) : null}
           {error ? <p className="px-2 py-4 text-sm text-red">{error}</p> : null}
           {!loading && !error && rows.length === 0 ? (
             <p className="px-2 py-6 text-center text-sm text-muted">No listings posted yet.</p>

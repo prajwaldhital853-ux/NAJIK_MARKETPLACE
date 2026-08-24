@@ -51,6 +51,7 @@ export function ListingModeration({
     deactivated?: number;
   } | null>(null);
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<(typeof TABS)[number]>(() => tabFromParam(params.get("status")));
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
   const [reason, setReason] = useState("");
@@ -67,6 +68,7 @@ export function ListingModeration({
 
   async function load() {
     if (!apiSession) return;
+    setLoading(true);
     try {
       const status =
         tab === "Pending"
@@ -93,6 +95,8 @@ export function ListingModeration({
     } catch (err) {
       setItems([]);
       setError(err instanceof Error ? err.message : "Could not load listings.");
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -104,6 +108,7 @@ export function ListingModeration({
   useEffect(() => {
     if (!apiSession) {
       setItems([]);
+      setLoading(false);
       setError("Sign in with a staff account to review live listings.");
       return;
     }
@@ -335,6 +340,9 @@ export function ListingModeration({
         onRow={setOpen}
         rowActions={rowActions}
         searchPlaceholder="Filter listings…"
+        loading={loading}
+        loadingLabel="Loading listings…"
+        emptyLabel="No listings in this view."
       />
       <div className="mt-3 flex items-center justify-between">
         <p className="text-[11px] text-muted">Page {page}</p>

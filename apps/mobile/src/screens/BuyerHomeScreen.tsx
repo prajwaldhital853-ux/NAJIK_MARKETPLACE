@@ -6,12 +6,13 @@ import { AppHeader } from "../components/AppHeader";
 import { ClassifiedGridCard, LISTING_CARD_W } from "../components/ClassifiedCard";
 import { useAppRefreshControl } from "../components/KeyboardScreen";
 import { MarketplaceSection } from "../components/MarketplaceSection";
+import { CategoryGrid } from "../components/CategoryGrid";
 import { PressScale } from "../components/PressScale";
 import { ProductSkeleton } from "../components/ProductSkeleton";
 import { StaffWarningCard, AccountStatusCard } from "../components/StaffWarningBanner";
 import { useAuth } from "../context/AuthContext";
 import { useBuyerLocation } from "../context/BuyerLocationContext";
-import { homeCategoryKey, type CatalogItem, type CatalogKey } from "../data/catalog";
+import { type CatalogItem, type CatalogKey } from "../data/catalog";
 import { catalogFromFeed, buildRecommendedFromFeed, prioritizePromoted } from "../data/feedOrdering";
 import { listingsToCatalog, liveListingById } from "../data/liveListings";
 import { HomeBannerCarousel } from "../components/HomeBannerCarousel";
@@ -26,21 +27,9 @@ import { colors, shadow } from "../theme";
 const { width: SCREEN_W } = Dimensions.get("window");
 const PAD = 16;
 const GAP = 11;
-const TILE = (SCREEN_W - PAD * 2 - GAP * 3) / 4;
 const GREEN = "#1B7D2C";
 const SECTION_LIMIT = 10;
 const PAGE_SIZE = 10;
-
-const categories: { label: string; icon: keyof typeof Ionicons.glyphMap; bg: string; color: string }[] = [
-  { label: "Property", icon: "home", bg: "#E8F1FE", color: "#1D4ED8" },
-  { label: "Vehicles", icon: "car", bg: "#E8F1FE", color: "#1D4ED8" },
-  { label: "Jobs", icon: "briefcase", bg: "#FFF1E0", color: "#C2410C" },
-  { label: "Services", icon: "construct", bg: "#FFF1E8", color: "#C2410C" },
-  { label: "Used Items", icon: "bed", bg: "#EAF8EE", color: "#166534" },
-  { label: "Shops", icon: "storefront", bg: "#FDECEC", color: "#DC2626" },
-  { label: "Electronics", icon: "phone-portrait", bg: "#EEF4FF", color: "#1D4ED8" },
-  { label: "Others", icon: "apps", bg: "#EEF4FF", color: "#1D4ED8" },
-];
 
 const TREND_CHIPS: { key: string; label: string; catalog?: CatalogKey }[] = [
   { key: "all", label: "All Products" },
@@ -221,26 +210,10 @@ export function BuyerHomeScreen() {
       <HomeBannerCarousel audience="buyer" />
       <UrgentSellSection />
 
-      <View style={{ marginTop: 4 }}>
-        <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 12 }}>
-          <Ionicons name="grid-outline" size={22} color="#2563EB" />
-          <Text style={{ marginLeft: 8, fontSize: 20, fontWeight: "900", color: "#111827" }}>Browse categories</Text>
-        </View>
-        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: GAP }}>
-          {categories.map((item) => (
-            <PressScale
-              key={item.label}
-              onPress={() => openCategory(navigation, homeCategoryKey[item.label] ?? "property")}
-              style={{ width: TILE, backgroundColor: item.bg, borderRadius: 16, paddingVertical: 14, paddingHorizontal: 2, alignItems: "center" }}
-            >
-              <Ionicons name={item.icon} size={34} color={item.color} />
-              <Text style={{ fontSize: 10, fontWeight: "700", marginTop: 4, color: "#111827" }} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
-                {item.label}
-              </Text>
-            </PressScale>
-          ))}
-        </View>
-      </View>
+      <CategoryGrid
+        onPress={(key) => openCategory(navigation, key)}
+        onSeeAll={() => openHomeSection(navigation, "latest", { title: "All listings" })}
+      />
 
       <MarketplaceSection
         title="Recommended"

@@ -28,6 +28,9 @@ export function DataTable<T extends { id: string }>({
   rowActions,
   searchPlaceholder = "Filter rows…",
   hideSearch = false,
+  loading = false,
+  loadingLabel = "Loading…",
+  emptyLabel = "No records found.",
 }: {
   rows: T[];
   columns: Column<T>[];
@@ -40,6 +43,9 @@ export function DataTable<T extends { id: string }>({
   rowActions?: RowMenuAction<T>[];
   searchPlaceholder?: string;
   hideSearch?: boolean;
+  loading?: boolean;
+  loadingLabel?: string;
+  emptyLabel?: string;
 }) {
   const [q, setQ] = useState("");
   const [sortKey, setSortKey] = useState<string | null>(null);
@@ -154,7 +160,23 @@ export function DataTable<T extends { id: string }>({
             </tr>
           </thead>
           <tbody>
-            {slice.map((row) => (
+            {loading ? (
+              <tr>
+                <td colSpan={columns.length + 2} className="px-4 py-14 text-center">
+                  <span className="inline-flex items-center gap-2 text-sm text-muted">
+                    <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-brand border-t-transparent" />
+                    {loadingLabel}
+                  </span>
+                </td>
+              </tr>
+            ) : slice.length === 0 ? (
+              <tr>
+                <td colSpan={columns.length + 2} className="px-4 py-14 text-center text-sm text-muted">
+                  {emptyLabel}
+                </td>
+              </tr>
+            ) : (
+              slice.map((row) => (
               <tr
                 key={row.id}
                 className="cursor-pointer border-b border-line/80 hover:bg-elevated/70"
@@ -223,7 +245,8 @@ export function DataTable<T extends { id: string }>({
                   ) : null}
                 </td>
               </tr>
-            ))}
+              ))
+            )}
           </tbody>
         </table>
       </div>

@@ -89,10 +89,10 @@ function MainDrawer() {
         overlayColor: "rgba(0,0,0,0.35)",
         swipeEnabled: true,
         drawerStyle: {
-          width: Math.min(Dimensions.get("window").width * 0.85, 340),
+          width: Math.min(Dimensions.get("window").width * 0.78, 300),
           backgroundColor: colors.white,
-          borderTopRightRadius: 24,
-          borderBottomRightRadius: 24,
+          borderTopRightRadius: 20,
+          borderBottomRightRadius: 20,
           overflow: "hidden",
         },
       }}

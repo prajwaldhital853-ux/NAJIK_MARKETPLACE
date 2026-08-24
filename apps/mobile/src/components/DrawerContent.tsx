@@ -4,7 +4,7 @@ import { fetchSellerEarningsSummary } from "../earningsApi";
 import { emitWalletChanged, subscribeWalletChanged } from "../walletRefresh";
 import type { DrawerContentComponentProps } from "@react-navigation/drawer";
 import { useDrawerStatus } from "@react-navigation/drawer";
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { Pressable, ScrollView, Text, View, Dimensions } from "react-native";
 import Svg, { Path } from "react-native-svg";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "../context/AuthContext";
@@ -409,6 +409,11 @@ function BuyerDrawer({ navigation }: { navigation: DrawerContentComponentProps["
   const activeCatalog = current.name === "CategoryBrowse" ? (current.params as { key?: CatalogKey } | undefined)?.key : undefined;
   const onHome = current.name === "Tabs";
 
+  const drawerW = Math.min(Dimensions.get("window").width * 0.78, 300);
+  const scale = drawerW / 300;
+  const s = (v: number) => Math.round(v * scale);
+  const headerH = s(72);
+
   function goTab(tab: string) {
     navigation.navigate("Tabs", { screen: tab } as never);
     navigation.closeDrawer();
@@ -421,19 +426,19 @@ function BuyerDrawer({ navigation }: { navigation: DrawerContentComponentProps["
 
   return (
     <View style={{ flex: 1, backgroundColor: "#fff" }}>
-      <View style={{ height: insets.top + 108, overflow: "hidden", backgroundColor: "#fff" }}>
+      <View style={{ height: insets.top + headerH, overflow: "hidden", backgroundColor: "#fff" }}>
         <Svg
           width="100%"
-          height={108}
-          viewBox="0 0 340 108"
+          height={headerH}
+          viewBox="0 0 340 72"
           preserveAspectRatio="xMidYMax slice"
           style={{ position: "absolute", left: 0, right: 0, bottom: 0 }}
         >
-          <Path d="M0 108 L0 70 L36 46 L68 62 L108 26 L148 54 L188 18 L228 50 L264 30 L304 58 L340 36 L340 108 Z" fill="#E8F2F8" />
-          <Path d="M0 108 L0 80 L48 56 L86 72 L128 40 L172 66 L214 36 L258 68 L300 50 L340 60 L340 108 Z" fill="#D5E6F2" />
-          <Path d="M0 108 L0 90 L54 76 L96 88 L150 64 L196 84 L248 70 L298 86 L340 76 L340 108 Z" fill="#C5DCEC" />
+          <Path d="M0 72 L0 46 L36 30 L68 42 L108 18 L148 38 L188 12 L228 34 L264 20 L304 38 L340 24 L340 72 Z" fill="#E8F2F8" />
+          <Path d="M0 72 L0 54 L48 38 L86 48 L128 28 L172 44 L214 24 L258 46 L300 34 L340 40 L340 72 Z" fill="#D5E6F2" />
+          <Path d="M0 72 L0 60 L54 50 L96 58 L150 42 L196 56 L248 46 L298 58 L340 50 L340 72 Z" fill="#C5DCEC" />
         </Svg>
-        <View style={{ paddingTop: insets.top + 10, alignItems: "center" }}>
+        <View style={{ paddingTop: insets.top + s(6), alignItems: "center" }}>
           <NajikLogo size="sm" showTagline={false} layout="row" />
         </View>
       </View>
@@ -441,13 +446,13 @@ function BuyerDrawer({ navigation }: { navigation: DrawerContentComponentProps["
       <Pressable
         onPress={() => goTab("Profile")}
         style={{
-          marginHorizontal: 14,
-          marginTop: 4,
-          marginBottom: 10,
+          marginHorizontal: s(12),
+          marginTop: s(2),
+          marginBottom: s(8),
           backgroundColor: "#fff",
-          borderRadius: 18,
-          paddingVertical: 12,
-          paddingHorizontal: 12,
+          borderRadius: s(14),
+          paddingVertical: s(8),
+          paddingHorizontal: s(10),
           flexDirection: "row",
           alignItems: "center",
           borderWidth: 1,
@@ -455,22 +460,22 @@ function BuyerDrawer({ navigation }: { navigation: DrawerContentComponentProps["
           ...shadow.card,
         }}
       >
-        <Avatar name={name} uri={photo || undefined} size={80} borderColor="#22A34A" borderWidth={2.5} />
-        <View style={{ flex: 1, marginLeft: 14 }}>
-          <Text style={{ fontWeight: "800", fontSize: 17, color: "#111827" }} numberOfLines={1}>
+        <Avatar name={name} uri={photo || undefined} size={s(52)} borderColor="#22A34A" borderWidth={2} />
+        <View style={{ flex: 1, marginLeft: s(10) }}>
+          <Text style={{ fontWeight: "800", fontSize: s(14), color: "#111827" }} numberOfLines={1}>
             {name}
           </Text>
-          <Text style={{ color: "#6B7280", fontSize: 13, marginTop: 3 }} numberOfLines={1}>
+          <Text style={{ color: "#6B7280", fontSize: s(11), marginTop: 2 }} numberOfLines={1}>
             {phone}
           </Text>
-          <Text style={{ color: "#6B7280", fontSize: 12, marginTop: 2 }} numberOfLines={1}>
+          <Text style={{ color: "#6B7280", fontSize: s(10), marginTop: 1 }} numberOfLines={1}>
             {email}
           </Text>
         </View>
-        <Ionicons name="chevron-forward" size={20} color="#C4C7CC" />
+        <Ionicons name="chevron-forward" size={s(16)} color="#C4C7CC" />
       </Pressable>
 
-      <ScrollView contentContainerStyle={{ paddingTop: 2, paddingBottom: 20 }} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={{ paddingTop: 2, paddingBottom: s(16) }} showsVerticalScrollIndicator={false}>
         {buyerPrimary.map((item) => {
           const active = item.catalog ? item.catalog === activeCatalog : item.title === "Home" && onHome && !activeCatalog;
           return (
@@ -490,35 +495,35 @@ function BuyerDrawer({ navigation }: { navigation: DrawerContentComponentProps["
                 item.catalog ? goCategory(item.catalog) : goTab(item.tab);
               }}
               style={{
-                marginHorizontal: 12,
-                borderRadius: 14,
+                marginHorizontal: s(10),
+                borderRadius: s(12),
                 backgroundColor: active ? "#E7F6EC" : "transparent",
               }}
             >
-              <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 12, paddingVertical: 11 }}>
+              <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: s(10), paddingVertical: s(8) }}>
                 <View
                   style={{
-                    width: 36,
-                    height: 36,
-                    borderRadius: 10,
+                    width: s(30),
+                    height: s(30),
+                    borderRadius: s(8),
                     backgroundColor: active ? "transparent" : item.bg,
                     alignItems: "center",
                     justifyContent: "center",
                   }}
                 >
-                  <Ionicons name={item.icon} size={20} color={item.color} />
+                  <Ionicons name={item.icon} size={s(17)} color={item.color} />
                 </View>
-                <View style={{ flex: 1, marginLeft: 12 }}>
-                  <Text style={{ fontWeight: "800", fontSize: 15, color: active ? "#068A22" : "#111827" }}>{item.title}</Text>
-                  {!active && item.sub ? <Text style={{ color: "#8A8F98", fontSize: 12, marginTop: 1 }}>{item.sub}</Text> : null}
+                <View style={{ flex: 1, marginLeft: s(10) }}>
+                  <Text style={{ fontWeight: "800", fontSize: s(13), color: active ? "#068A22" : "#111827" }}>{item.title}</Text>
+                  {!active && item.sub ? <Text style={{ color: "#8A8F98", fontSize: s(10), marginTop: 1 }}>{item.sub}</Text> : null}
                 </View>
-                <Ionicons name="chevron-forward" size={18} color={active ? "#068A22" : "#C4C7CC" } />
+                <Ionicons name="chevron-forward" size={s(15)} color={active ? "#068A22" : "#C4C7CC" } />
               </View>
             </Pressable>
           );
         })}
 
-        <View style={{ height: 1, backgroundColor: "#EFF1F2", marginHorizontal: 16, marginVertical: 8 }} />
+        <View style={{ height: 1, backgroundColor: "#EFF1F2", marginHorizontal: s(14), marginVertical: s(6) }} />
 
         {buyerSecondary.map((item) => (
           <PressScale
@@ -536,81 +541,37 @@ function BuyerDrawer({ navigation }: { navigation: DrawerContentComponentProps["
               }
               goTab(item.tab);
             }}
-            style={{ marginHorizontal: 12, borderRadius: 12 }}
+            style={{ marginHorizontal: s(10), borderRadius: s(10) }}
           >
-            <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 10, paddingVertical: 10 }}>
-              <View style={{ width: 34, alignItems: "center" }}>
-                <Ionicons name={item.icon} size={20} color={item.color} />
+            <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: s(8), paddingVertical: s(8) }}>
+              <View style={{ width: s(28), alignItems: "center" }}>
+                <Ionicons name={item.icon} size={s(18)} color={item.color} />
               </View>
-              <Text style={{ flex: 1, marginLeft: 10, fontSize: 14, fontWeight: "600", color: item.danger ? "#E53935" : "#242326" }}>
+              <Text style={{ flex: 1, marginLeft: s(8), fontSize: s(12), fontWeight: "600", color: item.danger ? "#E53935" : "#242326" }}>
                 {item.title}
               </Text>
               {item.badge ? (
                 <View
                   style={{
                     backgroundColor: "#E93B3B",
-                    minWidth: 18,
-                    height: 18,
-                    borderRadius: 9,
+                    minWidth: s(16),
+                    height: s(16),
+                    borderRadius: s(8),
                     alignItems: "center",
                     justifyContent: "center",
-                    paddingHorizontal: 5,
-                    marginRight: 8,
+                    paddingHorizontal: s(4),
+                    marginRight: s(6),
                   }}
                 >
-                  <Text style={{ color: "#fff", fontSize: 10, fontWeight: "800" }}>{item.badge}</Text>
+                  <Text style={{ color: "#fff", fontSize: s(9), fontWeight: "800" }}>{item.badge}</Text>
                 </View>
               ) : null}
-              {item.danger ? null : <Ionicons name="chevron-forward" size={16} color="#C4C7CC" />}
+              {item.danger ? null : <Ionicons name="chevron-forward" size={s(14)} color="#C4C7CC" />}
             </View>
           </PressScale>
         ))}
 
-        <View
-          style={{
-            marginHorizontal: 16,
-            marginTop: 12,
-            backgroundColor: "#F3F4F6",
-            borderRadius: 14,
-            padding: 14,
-            flexDirection: "row",
-            alignItems: "center",
-          }}
-        >
-          <View style={{ flex: 1, paddingRight: 8 }}>
-            <Text style={{ fontWeight: "800", color: "#0C110E", fontSize: 14 }}>Find services near you</Text>
-            <Text style={{ color: "#6B7280", fontSize: 11, marginTop: 3, lineHeight: 15 }}>
-              Browse listings and message verified providers.
-            </Text>
-            <PressScale
-              onPress={() => goTab("Explore")}
-              style={{
-                marginTop: 10,
-                alignSelf: "flex-start",
-                backgroundColor: "#018821",
-                paddingHorizontal: 14,
-                paddingVertical: 8,
-                borderRadius: 8,
-              }}
-            >
-              <Text style={{ color: "#fff", fontWeight: "800", fontSize: 12 }}>Explore now</Text>
-            </PressScale>
-          </View>
-          <View
-            style={{
-              width: 52,
-              height: 52,
-              borderRadius: 26,
-              backgroundColor: "#DCEAF4",
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            <Ionicons name="search" size={26} color="#2563EB" />
-          </View>
-        </View>
-
-        <Text style={{ textAlign: "center", color: "#9AA0A6", fontSize: 11, marginTop: 16 }}>Version 1.0.0</Text>
+        <Text style={{ textAlign: "center", color: "#9AA0A6", fontSize: s(10), marginTop: s(12) }}>Version 1.0.4</Text>
       </ScrollView>
     </View>
   );

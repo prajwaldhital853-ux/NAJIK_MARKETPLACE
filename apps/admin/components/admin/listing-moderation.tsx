@@ -9,7 +9,7 @@ import { DetailKv, DetailOverlay } from "@/components/admin/detail-overlay";
 import { Avatar, Btn, StatusBadge, inputClass } from "@/components/admin/ui";
 import { formatNptDateTime, formatNptTime, relativeTime } from "@/lib/format";
 import { useSession } from "@/lib/session";
-import { ADMIN_POLL_MS } from "@/lib/live-inbox";
+import { ADMIN_POLL_FALLBACK_MS } from "@/lib/event-stream";
 import { deleteStaffListing, listStaffListingsPage, patchStaffListing, type StaffListing } from "@/lib/staff-api";
 import { UrgentListingControls } from "./urgent-listing-controls";
 
@@ -108,7 +108,7 @@ export function ListingModeration({
       return;
     }
     void load();
-    const id = window.setInterval(() => void load(), ADMIN_POLL_MS);
+    const id = window.setInterval(() => void load(), ADMIN_POLL_FALLBACK_MS);
     return () => window.clearInterval(id);
   }, [apiSession, category, tab, page]);
 

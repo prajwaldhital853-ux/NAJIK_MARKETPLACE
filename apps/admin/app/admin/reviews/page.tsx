@@ -6,7 +6,7 @@ import { X } from "lucide-react";
 import { PageHeader, SummaryStrip } from "@/components/admin/page-frame";
 import { Btn, StatusBadge } from "@/components/admin/ui";
 import { formatNptDateTime } from "@/lib/format";
-import { ADMIN_POLL_MS } from "@/lib/live-inbox";
+import { ADMIN_POLL_FALLBACK_MS } from "@/lib/event-stream";
 import { useAdmin } from "@/lib/store";
 import { useSession } from "@/lib/session";
 import {
@@ -82,7 +82,7 @@ export default function ReviewsPage() {
       return;
     }
     void load();
-    const id = window.setInterval(() => void load(), ADMIN_POLL_MS);
+    const id = window.setInterval(() => void load(), ADMIN_POLL_FALLBACK_MS);
     return () => window.clearInterval(id);
   }, [apiSession, tab]);
 

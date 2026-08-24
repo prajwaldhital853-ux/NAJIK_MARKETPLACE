@@ -19,7 +19,7 @@ export function mapDirectoryUser(row: AppDirectoryUser): User {
     role: provider ? "provider" : "buyer",
     status,
     joined: formatNptDate(row.date_joined),
-    listings: 0,
+    listings: row.listing_count ?? 0,
     lastActive: relativeTime(row.date_joined),
     kyc,
     category: provider ? row.service_type || "Provider" : "User",

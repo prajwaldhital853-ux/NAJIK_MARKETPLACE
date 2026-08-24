@@ -5,7 +5,7 @@ import { PageHeader, SummaryStrip } from "@/components/admin/page-frame";
 import { Btn, Field, StatusBadge, inputClass } from "@/components/admin/ui";
 import { InboxList } from "@/components/admin/inbox-list";
 import { formatNptDateTime } from "@/lib/format";
-import { ADMIN_POLL_MS } from "@/lib/live-inbox";
+import { ADMIN_POLL_FALLBACK_MS } from "@/lib/event-stream";
 import { useSession } from "@/lib/session";
 import { useAdmin } from "@/lib/store";
 import {
@@ -63,7 +63,7 @@ export default function NotificationsPage() {
       return;
     }
     void load();
-    const id = window.setInterval(() => void load(), ADMIN_POLL_MS);
+    const id = window.setInterval(() => void load(), ADMIN_POLL_FALLBACK_MS);
     return () => window.clearInterval(id);
   }, [apiSession, load]);
 

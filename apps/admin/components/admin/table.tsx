@@ -27,6 +27,7 @@ export function DataTable<T extends { id: string }>({
   onAction,
   rowActions,
   searchPlaceholder = "Filter rows…",
+  hideSearch = false,
 }: {
   rows: T[];
   columns: Column<T>[];
@@ -38,6 +39,7 @@ export function DataTable<T extends { id: string }>({
   onAction?: (row: T) => void;
   rowActions?: RowMenuAction<T>[];
   searchPlaceholder?: string;
+  hideSearch?: boolean;
 }) {
   const [q, setQ] = useState("");
   const [sortKey, setSortKey] = useState<string | null>(null);
@@ -111,18 +113,20 @@ export function DataTable<T extends { id: string }>({
         ) : (
           <p className="text-sm font-semibold text-ink">Records</p>
         )}
-        <div className="relative">
-          <Search size={14} className="absolute top-2.5 left-2.5 text-faint" />
-          <input
-            value={q}
-            onChange={(e) => {
-              setQ(e.target.value);
-              setPage(0);
-            }}
-            placeholder={searchPlaceholder}
-            className="w-52 rounded-lg border border-line bg-elevated py-1.5 pr-3 pl-8 text-xs text-ink outline-none"
-          />
-        </div>
+        {!hideSearch ? (
+          <div className="relative">
+            <Search size={14} className="absolute top-2.5 left-2.5 text-faint" />
+            <input
+              value={q}
+              onChange={(e) => {
+                setQ(e.target.value);
+                setPage(0);
+              }}
+              placeholder={searchPlaceholder}
+              className="w-52 rounded-lg border border-line bg-elevated py-1.5 pr-3 pl-8 text-xs text-ink outline-none"
+            />
+          </div>
+        ) : null}
       </div>
       <div className="overflow-x-auto">
         <table className="w-full min-w-[880px] text-left text-sm">

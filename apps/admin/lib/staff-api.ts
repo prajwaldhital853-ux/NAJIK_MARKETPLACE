@@ -198,6 +198,7 @@ export type AppDirectoryUser = {
   account_status?: "active" | "blocked" | "deactivated";
   staff_warning?: string;
   staff_warning_at?: string | null;
+  listing_count?: number;
   photo_uri?: string | null;
   avatar_uri?: string | null;
   nagrita_uri?: string | null;
@@ -237,12 +238,21 @@ function unwrapStaffPage<T>(data: T[] | StaffPage<T> | undefined, page = 1, page
   };
 }
 
-export async function listAppUsersPage(query?: { page?: number; page_size?: number }) {
+export async function listAppUsersPage(query?: {
+  page?: number;
+  page_size?: number;
+  q?: string;
+  role?: "buyer" | "provider" | "user" | "seller";
+  status?: "active" | "pending" | "verified" | "blocked" | "deactivated";
+}) {
   const params = new URLSearchParams();
   params.set("page", String(query?.page || 1));
-  params.set("page_size", String(query?.page_size || 100));
+  params.set("page_size", String(query?.page_size || 25));
+  if (query?.q?.trim()) params.set("q", query.q.trim());
+  if (query?.role) params.set("role", query.role === "buyer" ? "buyer" : query.role === "provider" ? "provider" : query.role);
+  if (query?.status) params.set("status", query.status);
   const data = await staffRequest<AppDirectoryUser[] | StaffPage<AppDirectoryUser>>(`/api/admin/users/?${params.toString()}`);
-  return unwrapStaffPage(data, query?.page || 1, query?.page_size || 100);
+  return unwrapStaffPage(data, query?.page || 1, query?.page_size || 25);
 }
 
 export async function listAppUsers(query?: { page?: number; page_size?: number }) {

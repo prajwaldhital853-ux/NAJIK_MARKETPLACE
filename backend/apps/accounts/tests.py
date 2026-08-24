@@ -528,6 +528,26 @@ class AuthFlowTests(TestCase):
         self.assertEqual(row["account_type"], "provider")
         self.assertIn("date_joined", row)
 
+    def test_staff_can_search_app_users(self):
+        target_email = email("findme")
+        other_email = email("other")
+        self.register("user", phone=phone(), email=target_email)
+        self.register("user", phone=phone(), email=other_email)
+        staff = StaffUser(email=email("search"), full_name="Search Staff")
+        staff.set_password(PASS)
+        staff.save()
+        login = self.client.post(
+            "/api/admin/auth/login/",
+            {"email": staff.email, "password": PASS},
+            format="json",
+        )
+        self.auth(login.data["access"])
+        listed = self.client.get("/api/admin/users/", {"q": "findme"})
+        self.assertEqual(listed.status_code, 200, listed.data)
+        emails = [row["email"] for row in user_rows(listed.data)]
+        self.assertIn(target_email, emails)
+        self.assertNotIn(other_email, emails)
+
     def test_staff_can_delete_app_user(self):
         res, body = self.register("user", phone=phone(), email=email("del"))
         self.assertEqual(res.status_code, 201, res.data)

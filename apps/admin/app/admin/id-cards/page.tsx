@@ -6,7 +6,7 @@ import { StaffIdCardVisual } from "@/components/admin/staff-id-card-visual";
 import { PageHeader, SummaryStrip } from "@/components/admin/page-frame";
 import { Btn, Field, StatusBadge, inputClass } from "@/components/admin/ui";
 import { formatNptDateTime, formatNptTime } from "@/lib/format";
-import { ADMIN_POLL_MS } from "@/lib/live-inbox";
+import { ADMIN_POLL_FALLBACK_MS } from "@/lib/event-stream";
 import { useSession } from "@/lib/session";
 import { useAdmin } from "@/lib/store";
 import {
@@ -118,7 +118,7 @@ export default function IdCardsPage() {
     }
     void load();
     void loadBranding();
-    const id = window.setInterval(() => void load(), ADMIN_POLL_MS);
+    const id = window.setInterval(() => void load(), ADMIN_POLL_FALLBACK_MS);
     return () => window.clearInterval(id);
   }, [apiSession]);
 

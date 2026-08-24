@@ -1,6 +1,7 @@
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404
 
 from apps.accounts.models import AppUser
@@ -11,6 +12,7 @@ from rest_framework import serializers
 
 
 class StaffAppUserSerializer(AppUserPublicSerializer):
+    listing_count = serializers.IntegerField(read_only=True, required=False)
     nagrita_uri = serializers.SerializerMethodField()
     nagrita_back_uri = serializers.SerializerMethodField()
     nation_card_uri = serializers.SerializerMethodField()
@@ -20,6 +22,7 @@ class StaffAppUserSerializer(AppUserPublicSerializer):
     class Meta(AppUserPublicSerializer.Meta):
         fields = (
             *AppUserPublicSerializer.Meta.fields,
+            "listing_count",
             "is_active",
             "account_status",
             "nagrita_uri",
@@ -78,15 +81,59 @@ def revoke_app_tokens(user):
         pass
 
 
+def filter_staff_users(qs, request):
+    q = (request.query_params.get("q") or "").strip()
+    if q:
+        qs = qs.filter(
+            Q(full_name__icontains=q)
+            | Q(email__icontains=q)
+            | Q(phone__icontains=q)
+            | Q(username__icontains=q)
+        )
+
+    role = (request.query_params.get("role") or "").strip().lower()
+    if role in {"buyer", "user"}:
+        qs = qs.filter(account_type=AppUser.ACCOUNT_USER)
+    elif role in {"provider", "seller"}:
+        qs = qs.filter(account_type=AppUser.ACCOUNT_PROVIDER)
+
+    status_filter = (request.query_params.get("status") or "").strip().lower()
+    if status_filter == "blocked":
+        qs = qs.filter(account_status=AppUser.STATUS_BLOCKED)
+    elif status_filter == "deactivated":
+        qs = qs.filter(account_status=AppUser.STATUS_DEACTIVATED)
+    elif status_filter == "pending":
+        from apps.verification.models import ProviderApplication
+
+        qs = qs.filter(provider_application__status=ProviderApplication.STATUS_PENDING)
+    elif status_filter == "verified":
+        from apps.verification.models import ProviderApplication
+
+        qs = qs.filter(provider_application__status=ProviderApplication.STATUS_VERIFIED)
+    elif status_filter == "active":
+        from apps.verification.models import ProviderApplication
+
+        qs = qs.filter(is_active=True, account_status=AppUser.STATUS_ACTIVE).exclude(
+            provider_application__status=ProviderApplication.STATUS_PENDING
+        )
+
+    return qs
+
+
 class StaffAppUserListView(APIView):
     authentication_classes = [StaffJWTAuthentication]
     permission_classes = [IsStaffUser]
 
     def get(self, request):
-        items = AppUser.objects.select_related("provider_application").order_by("-date_joined")
+        items = (
+            AppUser.objects.select_related("provider_application")
+            .annotate(listing_count=Count("listings", distinct=True))
+            .order_by("-date_joined")
+        )
+        items = filter_staff_users(items, request)
         from apps.listings.listing_cards import paginate_queryset, parse_page
 
-        page, page_size = parse_page(request, default_size=50, max_size=100)
+        page, page_size = parse_page(request, default_size=25, max_size=100)
         page_items, meta = paginate_queryset(items, page, page_size)
         return Response(
             {

@@ -18,12 +18,11 @@ import { BookingsBody } from "./BookingsScreen";
 import {
   helpFaqs,
   payouts,
-  promoPacks,
   sellerPageMeta,
   sellerSaved,
-  weekBars,
   type SellerPage,
 } from "../data/sellerHub";
+import { PromotionsBody } from "./PromotionsBody";
 import { ChatInboxList } from "./ChatInboxScreen";
 import { choosePhoto } from "../pickPhoto";
 import { openChatThread, openListing, openSellerPage } from "../navigation/browse";
@@ -111,7 +110,7 @@ function PageBody({ page }: { page: SellerPage }) {
   if (page === "bookings") return <BookingsBody showSellers={false} />;
   if (page === "reviews") return <ReviewsBody />;
   if (page === "earnings") return <EarningsBody />;
-  if (page === "promotions") return <PromosBody />;
+  if (page === "promotions") return <PromotionsBody />;
   if (page === "services") return <ServicesBody />;
   if (page === "saved") return <SavedBody />;
   if (page === "kyc") return <KycBody />;
@@ -842,67 +841,6 @@ function AddFundBody() {
           <Text style={{ fontWeight: "700", color: "#C2410C" }}>You already have a pending request. Wait for admin approval.</Text>
         </View>
       )}
-    </>
-  );
-}
-
-function PromosBody() {
-  const [on, setOn] = useState("g1");
-  return (
-    <>
-      <QuickRow
-        items={[
-          { icon: "flash-outline", label: "Boost now", onPress: () => setOn("g1") },
-          { icon: "eye-outline", label: "Reach", onPress: () => Alert.alert("Reach", "Last boost: 3.2k extra views.") },
-          { icon: "pause-outline", label: "Pause", onPress: () => Alert.alert("Paused", "Demo campaign paused.") },
-          { icon: "create-outline", label: "New ad", onPress: () => Alert.alert("New ad", "Pick a listing to promote.") },
-        ]}
-      />
-      <Text style={{ fontWeight: "800", fontSize: 16, paddingHorizontal: 16, marginTop: 16 }}>Reach this week</Text>
-      <View style={{ flexDirection: "row", alignItems: "flex-end", height: 100, marginHorizontal: 16, marginTop: 10, gap: 8 }}>
-        {weekBars.map((bar) => (
-          <View key={bar.d} style={{ flex: 1, alignItems: "center" }}>
-            <View style={{ width: "100%", height: 72, justifyContent: "flex-end" }}>
-              <View style={{ height: 72 * bar.v, backgroundColor: "#EA580C", borderRadius: 8 }} />
-            </View>
-            <Text style={{ fontSize: 10, fontWeight: "700", marginTop: 6 }}>{bar.d}</Text>
-          </View>
-        ))}
-      </View>
-      <Text style={{ fontWeight: "800", fontSize: 16, paddingHorizontal: 16, marginTop: 18 }}>Boost packs</Text>
-      {promoPacks.map((pack) => {
-        const active = on === pack.id;
-        return (
-          <PressScale
-            key={pack.id}
-            onPress={() => setOn(pack.id)}
-            style={{
-              marginHorizontal: 16,
-              marginTop: 12,
-              backgroundColor: "#fff",
-              borderRadius: 18,
-              padding: 16,
-              borderWidth: 2,
-              borderColor: active ? GREEN : "transparent",
-              ...shadow.card,
-            }}
-          >
-            <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
-              <Text style={{ fontWeight: "800", fontSize: 16 }}>{pack.name}</Text>
-              {pack.popular ? (
-                <View style={{ backgroundColor: "#FFF1E0", paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 }}>
-                  <Text style={{ color: "#C2410C", fontWeight: "800", fontSize: 10 }}>Popular</Text>
-                </View>
-              ) : null}
-            </View>
-            <Text style={{ color: GREEN, fontWeight: "800", fontSize: 22, marginTop: 8 }}>{pack.price}</Text>
-            <Text style={{ color: "#6B7280", marginTop: 4 }}>
-              {pack.days} · {pack.reach}
-            </Text>
-            <MiniBtn label={active ? "Selected" : "Use this pack"} fill={active} onPress={() => setOn(pack.id)} />
-          </PressScale>
-        );
-      })}
     </>
   );
 }

@@ -218,6 +218,13 @@ class BookingListCreateView(APIView):
             note=(serializer.validated_data.get("note") or "").strip(),
         )
         post_booking_message(booking, user, "request", "Booking request")
+        if user.id == buyer.id:
+            try:
+                from apps.promotions.boost_service import record_boost_inquiry_for_listing
+
+                record_boost_inquiry_for_listing(listing.id, sender=user)
+            except Exception:
+                pass
         maybe_notify_booking(
             recipient,
             booking,

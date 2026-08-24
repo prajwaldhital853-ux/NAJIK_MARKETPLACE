@@ -102,6 +102,7 @@ class SellerLoadRequest(models.Model):
 class SellerWalletTransaction(models.Model):
     KIND_LOAD = "load"
     KIND_LISTING_FEE = "listing_fee"
+    KIND_BOOST_FEE = "boost_fee"
     KIND_ADMIN_CREDIT = "admin_credit"
     KIND_ADMIN_DEBIT = "admin_debit"
     KIND_REFUND = "refund"
@@ -109,6 +110,7 @@ class SellerWalletTransaction(models.Model):
     KIND_CHOICES = (
         (KIND_LOAD, "Load approved"),
         (KIND_LISTING_FEE, "Listing fee"),
+        (KIND_BOOST_FEE, "Boost promotion"),
         (KIND_ADMIN_CREDIT, "Admin credit"),
         (KIND_ADMIN_DEBIT, "Admin debit"),
         (KIND_REFUND, "Refund"),
@@ -129,6 +131,13 @@ class SellerWalletTransaction(models.Model):
     )
     load_request = models.ForeignKey(
         SellerLoadRequest,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="wallet_transactions",
+    )
+    boost_campaign = models.ForeignKey(
+        "promotions.BoostCampaign",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,

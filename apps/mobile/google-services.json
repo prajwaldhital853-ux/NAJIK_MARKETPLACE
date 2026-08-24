@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "836723846353",
+    "project_id": "najik-7d017",
+    "storage_bucket": "najik-7d017.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:836723846353:android:79945e252e5c6687ede9f0",
+        "android_client_info": {
+          "package_name": "com.najik.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBRAhU5jaNVn33d26HxUS1CLbMdiziXVUg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

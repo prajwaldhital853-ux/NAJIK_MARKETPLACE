@@ -58,6 +58,41 @@ def listing_queryset():
 from apps.listings.urgent import active_urgent_filter, exclude_sold_listings, expire_urgent_listings, is_sold_extras
 
 
+def apply_boost_priority(items, category: str | None, limit: int) -> list:
+    """
+    Inject boosted listings at top of results using category rotation.
+    Returns list of serialized listing data with boosted items first.
+    """
+    from apps.promotions.boost_service import get_boosted_listings_for_category, expire_campaigns
+    from apps.promotions.models import BoostPricing
+    
+    expire_campaigns()
+    
+    if not category:
+        # Multi-category or no category: take from queryset without boost priority
+        return items
+    
+    pricing = BoostPricing.get_solo()
+    if not pricing.is_active:
+        return items
+    
+    # Get boosted listing IDs for this category (already rotated and sorted)
+    boosted_ids = get_boosted_listings_for_category(category, limit=pricing.max_slots_per_category_feed)
+    
+    if not boosted_ids:
+        return items
+    
+    # Split: boosted items first, then organic
+    boosted_qs = items.filter(id__in=boosted_ids)
+    organic_qs = items.exclude(id__in=boosted_ids)
+    
+    # Preserve boost rotation order
+    boosted_map = {str(lid): idx for idx, lid in enumerate(boosted_ids)}
+    boosted_items = sorted(list(boosted_qs), key=lambda x: boosted_map.get(str(x.id), 999))
+    
+    return list(boosted_items) + list(organic_qs)
+
+
 class ListingFeedView(APIView):
     authentication_classes = []
     permission_classes = [AllowAny]
@@ -149,7 +184,27 @@ class ListingFeedView(APIView):
             limit = min(max(int(request.query_params.get("limit") or 200), 1), 200)
         except (TypeError, ValueError):
             limit = 200
-        rows = ListingSerializer(items[:limit], many=True, context={"request": request}).data
+        
+        # Apply boost priority for single-category feeds/searches
+        single_cat = None
+        if category:
+            cats = [item.strip() for item in category.split(",") if item.strip()]
+            if len(cats) == 1:
+                single_cat = cats[0]
+        
+        # Get items with boost priority if applicable
+        if single_cat and sort in ("new", "popular"):
+            from apps.promotions.models import BoostPricing
+            from apps.promotions.boost_service import record_boost_impressions_for_listing_ids
+
+            pricing = BoostPricing.get_solo()
+            items_with_boost = apply_boost_priority(items, single_cat, limit)
+            slice_items = items_with_boost[:limit]
+            impression_ids = [str(item.id) for item in slice_items[:pricing.max_slots_per_category_feed]]
+            record_boost_impressions_for_listing_ids(impression_ids)
+            rows = ListingSerializer(slice_items, many=True, context={"request": request}).data
+        else:
+            rows = ListingSerializer(items[:limit], many=True, context={"request": request}).data
         min_price = request.query_params.get("min_price")
         max_price = request.query_params.get("max_price")
         if min_price or max_price:
@@ -178,6 +233,23 @@ class ListingPublicDetailView(APIView):
         if listing.status == Listing.STATUS_APPROVED and not is_owner:
             Listing.objects.filter(pk=listing.pk).update(view_count=F("view_count") + 1)
             listing.view_count += 1
+            
+            # Track boost campaign view if active
+            try:
+                from apps.promotions.models import BoostCampaign
+                from apps.promotions.boost_service import record_boost_view
+                
+                active_campaign = BoostCampaign.objects.filter(
+                    listing=listing,
+                    status=BoostCampaign.STATUS_ACTIVE,
+                    ends_at__gt=timezone.now(),
+                ).first()
+                
+                if active_campaign:
+                    record_boost_view(active_campaign)
+            except Exception:
+                pass
+        
         return Response(ListingSerializer(listing, context={"request": request}).data)
 
 

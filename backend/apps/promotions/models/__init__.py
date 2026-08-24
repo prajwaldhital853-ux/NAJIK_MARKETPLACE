@@ -1,1 +1,3 @@
-# Models for this feature will be added when the feature is built.
+from apps.promotions.models.boost import BoostCampaign, BoostPricing
+
+__all__ = ["BoostCampaign", "BoostPricing"]

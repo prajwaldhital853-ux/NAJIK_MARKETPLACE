@@ -28,6 +28,8 @@ urlpatterns = [
     path("api/admin/reports/", include("apps.reports.staff_urls")),
     path("api/notices/", include("apps.notifications.urls")),
     path("api/admin/notices/", include("apps.notifications.staff_urls")),
+    path("api/promotions/", include("apps.promotions.urls")),
+    path("api/admin/ads/", include("apps.promotions.staff_urls")),
 ]
 
 # Local disk media (Render MEDIA_ROOT). Works with DEBUG=False.

@@ -920,6 +920,69 @@ export async function patchEngagementReview(id: string, action: "hide" | "show" 
   });
 }
 
+export type BoostPricing = {
+  boost_3d_rupees: number;
+  boost_7d_rupees: number;
+  boost_14d_rupees: number;
+  boost_30d_rupees: number;
+  max_active_boosts_per_seller: number;
+  max_active_boosts_per_category: number;
+  max_active_boosts_platform: number;
+  rotation_interval_minutes: number;
+  max_slots_per_category_feed: number;
+  seller_view_multiplier: number;
+  is_active: boolean;
+  packages?: {
+    days: number;
+    price_rupees: number;
+    price_label: string;
+    est_views: number;
+    est_inquiries: number;
+  }[];
+};
+
+export type BoostCampaignRow = {
+  id: string;
+  listing_title: string;
+  listing_category: string;
+  seller_name: string;
+  seller_id: string;
+  status: string;
+  duration_days: number;
+  price_paid_label: string;
+  days_remaining: number;
+  hours_remaining: number;
+  impression_count: number;
+  view_count: number;
+  inquiry_count: number;
+  starts_at: string;
+  ends_at: string;
+  created_at: string;
+};
+
+export async function getBoostPricing() {
+  return staffRequest<BoostPricing>("/api/admin/ads/boost-pricing/");
+}
+
+export async function patchBoostPricing(payload: Partial<BoostPricing>) {
+  return staffRequest<BoostPricing>("/api/admin/ads/boost-pricing/", {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function listBoostCampaigns(status: "active" | "all" | "paused" | "expired" | "cancelled" = "all") {
+  const suffix = status && status !== "all" ? `?status=${status}` : "";
+  return staffRequest<BoostCampaignRow[]>(`/api/admin/ads/boost-campaigns/${suffix}`);
+}
+
+export async function controlBoostCampaign(id: string, action: string, hours?: number) {
+  return staffRequest(`/api/admin/ads/boost-campaigns/${id}/`, {
+    method: "POST",
+    body: JSON.stringify({ action, hours }),
+  });
+}
+
 export type StaffBooking = {
   id: string;
   listing: string;

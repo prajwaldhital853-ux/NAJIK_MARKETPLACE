@@ -166,6 +166,13 @@ class ChatMessageCreateView(APIView):
             msg.voice = data["voice_file"]
         msg.save()
         thread.save(update_fields=["updated_at"])
+        if thread.listing_id and request.user.id != thread.seller_id:
+            try:
+                from apps.promotions.boost_service import record_boost_inquiry_for_listing
+
+                record_boost_inquiry_for_listing(thread.listing_id, sender=request.user)
+            except Exception:
+                pass
         preview = (data.get("text") or "").strip() or "New message"
         if data["kind"] == ChatMessage.KIND_IMAGE:
             preview = "Sent a photo"

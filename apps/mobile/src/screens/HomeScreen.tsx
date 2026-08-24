@@ -131,6 +131,8 @@ function RecentPostCard({ item }: { item: ApiListing }) {
   const deal = String(item.extras?.dealType || item.subcategory || item.category);
   const pending = item.status !== "approved";
   const urgent = Boolean(item.is_urgent);
+  const boosted = Boolean(item.is_boosted);
+  const boostPaused = Boolean(item.boost_paused);
   const beds = item.extras?.beds;
   const baths = item.extras?.baths;
   const area = item.extras?.area;
@@ -151,6 +153,13 @@ function RecentPostCard({ item }: { item: ApiListing }) {
         text: "Delete listing",
         style: "destructive",
         onPress: () => {
+          if (item.is_boosted) {
+            Alert.alert(
+              "Boost is live",
+              "Pause the boost first (Promotions → Pause boost), then delete this listing.",
+            );
+            return;
+          }
           Alert.alert("Delete listing", `Remove “${item.title}” permanently? This also removes it from the admin panel.`, [
             { text: "Cancel", style: "cancel" },
             {
@@ -177,8 +186,10 @@ function RecentPostCard({ item }: { item: ApiListing }) {
       {photoUrl ? (
       <View>
         <AuthImage uri={photoUrl} style={{ width: 102, height: 108, borderRadius: 12 }} />
-        <View style={{ position: "absolute", top: 6, left: 6, backgroundColor: urgent ? "#EAB308" : pending ? "#F59E0B" : "#1B7D2C", paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6 }}>
-          <Text style={{ color: urgent ? "#111827" : "#fff", fontSize: 9, fontWeight: "800" }}>{urgent ? "URGENT" : pending ? "PENDING" : "LIVE"}</Text>
+        <View style={{ position: "absolute", top: 6, left: 6, backgroundColor: urgent ? "#EAB308" : boosted ? "#EA580C" : boostPaused ? "#9CA3AF" : pending ? "#F59E0B" : "#1B7D2C", paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6 }}>
+          <Text style={{ color: urgent ? "#111827" : "#fff", fontSize: 9, fontWeight: "800" }}>
+            {urgent ? "URGENT" : boosted ? "BOOSTED" : boostPaused ? "BOOST PAUSED" : pending ? "PENDING" : "LIVE"}
+          </Text>
         </View>
         <View style={{ position: "absolute", left: 6, bottom: 6, backgroundColor: "rgba(0,0,0,0.55)", borderRadius: 10, paddingHorizontal: 6, paddingVertical: 2, flexDirection: "row", alignItems: "center", gap: 3 }}>
           <Ionicons name="eye" size={10} color="#fff" />

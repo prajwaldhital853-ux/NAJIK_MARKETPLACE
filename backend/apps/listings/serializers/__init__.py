@@ -219,6 +219,12 @@ class ListingSerializer(serializers.ModelSerializer):
     pending_edit = serializers.SerializerMethodField()
     saved_by_me = serializers.SerializerMethodField()
     is_urgent = serializers.SerializerMethodField()
+    is_boosted = serializers.SerializerMethodField()
+    boost_paused = serializers.SerializerMethodField()
+    has_live_boost = serializers.SerializerMethodField()
+    boost_campaign_id = serializers.SerializerMethodField()
+    boost_days_remaining = serializers.SerializerMethodField()
+    can_be_boosted = serializers.SerializerMethodField()
 
     class Meta:
         model = Listing
@@ -246,6 +252,12 @@ class ListingSerializer(serializers.ModelSerializer):
             "is_promoted",
             "is_urgent",
             "urgent_ends_at",
+            "is_boosted",
+            "boost_paused",
+            "has_live_boost",
+            "boost_campaign_id",
+            "boost_days_remaining",
+            "can_be_boosted",
             "admin_reason",
             "reviewed_at",
             "created_at",
@@ -350,6 +362,49 @@ class ListingSerializer(serializers.ModelSerializer):
         if not obj.is_urgent or not obj.urgent_ends_at:
             return False
         return obj.urgent_ends_at > timezone.now()
+
+    def _is_owner(self, obj):
+        request = self.context.get("request")
+        user = getattr(request, "user", None) if request else None
+        return bool(user and getattr(user, "is_authenticated", False) and getattr(user, "id", None) == obj.owner_id)
+
+    def get_is_boosted(self, obj):
+        from apps.promotions.boost_service import listing_is_actively_boosted
+
+        return listing_is_actively_boosted(obj.id)
+
+    def get_boost_paused(self, obj):
+        from apps.promotions.models import BoostCampaign
+
+        return BoostCampaign.objects.filter(listing_id=obj.id, status=BoostCampaign.STATUS_PAUSED).exists()
+
+    def get_has_live_boost(self, obj):
+        if not self._is_owner(obj):
+            return False
+        from apps.promotions.boost_service import listing_has_live_boost
+
+        return listing_has_live_boost(obj.id)
+
+    def get_boost_campaign_id(self, obj):
+        if not self._is_owner(obj):
+            return None
+        from apps.promotions.boost_service import get_live_boost_campaign
+
+        campaign = get_live_boost_campaign(obj.id)
+        return str(campaign.id) if campaign else None
+
+    def get_boost_days_remaining(self, obj):
+        from apps.promotions.boost_service import get_live_boost_campaign
+
+        campaign = get_live_boost_campaign(obj.id)
+        return campaign.days_remaining if campaign else 0
+
+    def get_can_be_boosted(self, obj):
+        if not self._is_owner(obj):
+            return False
+        from apps.promotions.boost_service import listing_can_be_boosted
+
+        return listing_can_be_boosted(obj)
 
     def get_photos(self, obj):
         request = self.context.get("request")
@@ -456,6 +511,15 @@ class ListingWriteSerializer(serializers.Serializer):
         was_approved = instance.status == Listing.STATUS_APPROVED
         if promote is not None:
             validated_data["promote_requested"] = promote
+        
+        # Block category change if listing has live boost
+        if "category" in validated_data and validated_data["category"] != instance.category:
+            from apps.promotions.boost_service import listing_has_live_boost
+            
+            if listing_has_live_boost(instance.id):
+                raise serializers.ValidationError(
+                    {"category": "Cannot change category while boost is active. Pause the boost first."}
+                )
 
         if instance.status == Listing.STATUS_APPROVED and publish:
             edit = dict(instance.pending_edit or {})

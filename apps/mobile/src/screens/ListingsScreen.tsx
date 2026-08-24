@@ -365,20 +365,7 @@ function VerifiedBody() {
                       Alert.alert("Update failed", err instanceof Error ? err.message : "Could not update listing."),
                     );
                   }}
-                  onDelete={() => {
-                    Alert.alert("Delete listing", `Remove “${item.title}” permanently? This also removes it from the admin panel.`, [
-                      { text: "Cancel", style: "cancel" },
-                      {
-                        text: "Delete",
-                        style: "destructive",
-                        onPress: () => {
-                          void deleteMyListing(item.id).catch((err) =>
-                            Alert.alert("Delete failed", err instanceof Error ? err.message : "Could not delete listing."),
-                          );
-                        },
-                      },
-                    ]);
-                  }}
+                  onDelete={() => confirmDeleteListing(item)}
                 />
               </View>
             ))}
@@ -396,20 +383,7 @@ function VerifiedBody() {
                   Alert.alert("Update failed", err instanceof Error ? err.message : "Could not update listing."),
                 );
               }}
-              onDelete={() => {
-                Alert.alert("Delete listing", `Remove “${item.title}” permanently? This also removes it from the admin panel.`, [
-                  { text: "Cancel", style: "cancel" },
-                  {
-                    text: "Delete",
-                    style: "destructive",
-                    onPress: () => {
-                      void deleteMyListing(item.id).catch((err) =>
-                        Alert.alert("Delete failed", err instanceof Error ? err.message : "Could not delete listing."),
-                      );
-                    },
-                  },
-                ]);
-              }}
+              onDelete={() => confirmDeleteListing(item)}
             />
           ))
         )
@@ -533,6 +507,28 @@ function Tool({
   );
 }
 
+function confirmDeleteListing(item: ApiListing) {
+  if (item.is_boosted) {
+    Alert.alert(
+      "Boost is live",
+      "Pause the boost first (Promotions → Pause boost), then you can delete this listing.",
+    );
+    return;
+  }
+  Alert.alert("Delete listing", `Remove “${item.title}” permanently? This also removes it from the admin panel.`, [
+    { text: "Cancel", style: "cancel" },
+    {
+      text: "Delete",
+      style: "destructive",
+      onPress: () => {
+        void deleteMyListing(item.id).catch((err) =>
+          Alert.alert("Delete failed", err instanceof Error ? err.message : "Could not delete listing."),
+        );
+      },
+    },
+  ]);
+}
+
 function ListingManageCard({
   item,
   onOpen,
@@ -555,8 +551,31 @@ function ListingManageCard({
   const statusColor = sold ? "#DC2626" : pending ? "#F59E0B" : rejected ? colors.red : GREEN;
   const deal = dealTypeOf(item);
   const sale = listingSale(item);
-  const badge = item.is_urgent ? "URGENT" : item.is_promoted ? "FEATURED" : item.status === "approved" ? "VERIFIED" : pending ? "PENDING" : undefined;
-  const badgeColor = badge === "URGENT" ? "#EAB308" : badge === "FEATURED" ? GREEN : badge === "VERIFIED" ? "#2563EB" : "#F59E0B";
+  const badge = item.is_urgent
+    ? "URGENT"
+    : item.is_boosted
+      ? "BOOSTED"
+      : item.boost_paused
+        ? "BOOST PAUSED"
+        : item.is_promoted
+          ? "FEATURED"
+          : item.status === "approved"
+            ? "VERIFIED"
+            : pending
+              ? "PENDING"
+              : undefined;
+  const badgeColor =
+    badge === "URGENT"
+      ? "#EAB308"
+      : badge === "BOOSTED"
+        ? "#EA580C"
+        : badge === "BOOST PAUSED"
+          ? "#9CA3AF"
+          : badge === "FEATURED"
+            ? GREEN
+            : badge === "VERIFIED"
+              ? "#2563EB"
+              : "#F59E0B";
   const beds = extraText(item, "beds");
   const baths = extraText(item, "baths");
   const area = extraText(item, "area");

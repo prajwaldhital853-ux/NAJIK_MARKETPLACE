@@ -185,24 +185,43 @@ class ListingFeedView(APIView):
         except (TypeError, ValueError):
             limit = 200
         
-        # Apply boost priority for single-category feeds/searches
+        # Apply boost priority
         single_cat = None
         if category:
             cats = [item.strip() for item in category.split(",") if item.strip()]
             if len(cats) == 1:
                 single_cat = cats[0]
         
-        # Get items with boost priority if applicable
-        if single_cat and sort in ("new", "popular"):
+        # Boost priority: category-specific for single cat, global for recommendation/trending
+        if sort in ("new", "popular"):
             from apps.promotions.models import BoostPricing
-            from apps.promotions.boost_service import record_boost_impressions_for_listing_ids
+            from apps.promotions.boost_service import (
+                get_all_boosted_listings,
+                get_boosted_listings_for_category,
+                record_boost_impressions_for_listing_ids,
+            )
 
             pricing = BoostPricing.get_solo()
-            items_with_boost = apply_boost_priority(items, single_cat, limit)
-            slice_items = items_with_boost[:limit]
-            impression_ids = [str(item.id) for item in slice_items[:pricing.max_slots_per_category_feed]]
-            record_boost_impressions_for_listing_ids(impression_ids)
-            rows = ListingSerializer(slice_items, many=True, context={"request": request}).data
+            
+            if single_cat:
+                # Category feed: category-scoped boost
+                boosted_ids = get_boosted_listings_for_category(single_cat, limit=pricing.max_slots_per_category_feed)
+            else:
+                # Global feed (recommendation/trending): all boosts with rotation
+                boosted_ids = get_all_boosted_listings(limit=10)
+            
+            if boosted_ids:
+                boosted_qs = items.filter(id__in=boosted_ids)
+                organic_qs = items.exclude(id__in=boosted_ids)
+                boosted_map = {str(lid): idx for idx, lid in enumerate(boosted_ids)}
+                boosted_items = sorted(list(boosted_qs), key=lambda x: boosted_map.get(str(x.id), 999))
+                items_with_boost = list(boosted_items) + list(organic_qs)
+                slice_items = items_with_boost[:limit]
+                impression_ids = [str(item.id) for item in slice_items if str(item.id) in boosted_map]
+                record_boost_impressions_for_listing_ids(impression_ids)
+                rows = ListingSerializer(slice_items, many=True, context={"request": request}).data
+            else:
+                rows = ListingSerializer(items[:limit], many=True, context={"request": request}).data
         else:
             rows = ListingSerializer(items[:limit], many=True, context={"request": request}).data
         min_price = request.query_params.get("min_price")
@@ -363,6 +382,31 @@ class ListingMineDetailView(APIView):
 
     def delete(self, request, pk):
         listing = get_object_or_404(Listing, pk=pk, owner=request.user)
+        from apps.promotions.boost_service import listing_is_actively_boosted, get_live_boost_campaign
+
+        if listing_is_actively_boosted(listing.id):
+            return Response(
+                {
+                    "detail": "Pause the boost on this listing before deleting it. "
+                    "Open Promotions → Pause boost, then delete from My Listings.",
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        
+        confirmed = request.query_params.get("confirm") == "1"
+        campaign = get_live_boost_campaign(listing.id)
+        if campaign and campaign.status == "paused":
+            days_left = campaign.days_remaining
+            if days_left > 0 and not confirmed:
+                return Response(
+                    {
+                        "detail": f"Deleting will forfeit {days_left} paid boost day{'s' if days_left != 1 else ''}. No refund is provided.",
+                        "confirm_required": True,
+                        "days_remaining": days_left,
+                    },
+                    status=status.HTTP_409_CONFLICT,
+                )
+        
         listing.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
@@ -382,6 +426,10 @@ class ListingSoldView(APIView):
             listing.urgent_ends_at = None
         listing.save(update_fields=["extras", "is_urgent", "urgent_ends_at", "updated_at"])
         if sold:
+            from apps.promotions.boost_service import pause_boosts_for_listing, sync_listing_promoted_flag
+
+            pause_boosts_for_listing(listing.id, reason="Listing marked sold")
+            sync_listing_promoted_flag(listing.id)
             from apps.chat.models import ChatThread
             from apps.notifications.models import InboxNotice
             from apps.notifications.services import notify_user
@@ -611,6 +659,14 @@ class StaffListingDetailView(APIView):
             if next_status == Listing.STATUS_APPROVED:
                 listing.pending_edit = {}
             listing.save(update_fields=["status", "admin_reason", "reviewed_at", "is_promoted", "pending_edit", "updated_at"])
+            if next_status in {Listing.STATUS_REJECTED, Listing.STATUS_DEACTIVATED}:
+                from apps.promotions.boost_service import pause_boosts_for_listing, sync_listing_promoted_flag
+
+                pause_boosts_for_listing(
+                    listing.id,
+                    reason=f"Listing {next_status} by admin",
+                )
+                sync_listing_promoted_flag(listing.id)
         listing = listing_queryset().get(pk=listing.pk)
         return Response(ListingSerializer(listing, context={"request": request}).data)
 

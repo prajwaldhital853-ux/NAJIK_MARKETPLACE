@@ -15,6 +15,7 @@ import { fetchMyListings, type ApiListing } from "../listingsApi";
 import { openSellerPage } from "../navigation/browse";
 import {
   createBoostCampaign,
+  controlBoostCampaign,
   fetchBoostPricing,
   fetchMyBoostCampaigns,
   type BoostCampaign,
@@ -68,7 +69,7 @@ export function PromotionsBody() {
       ]);
       setPricing(pricingRow);
       setCampaigns(campaignRows);
-      setListings(listingRows.filter((row) => row.status === "approved"));
+      setListings(listingRows.filter((row) => row.can_be_boosted));
       setBalanceLabel(payments?.balance_label ?? "—");
       if (!selectedPack && pricingRow.packages?.length) {
         setSelectedPack(pricingRow.packages.find((p) => p.days === 7) ?? pricingRow.packages[0]);
@@ -94,9 +95,22 @@ export function PromotionsBody() {
     const views = filteredCampaigns.reduce((sum, c) => sum + c.display_view_count, 0);
     const inquiries = filteredCampaigns.reduce((sum, c) => sum + c.inquiry_count, 0);
     const impressions = filteredCampaigns.reduce((sum, c) => sum + c.impression_count, 0);
-    const live = campaigns.filter((c) => c.status === "active" && c.days_remaining > 0).length;
+    const live = campaigns.filter((c) => c.status === "active" || c.status === "paused").length;
     return { views, inquiries, impressions, live };
   }, [filteredCampaigns, campaigns]);
+
+  async function toggleCampaign(campaign: BoostCampaign) {
+    setBusy(true);
+    try {
+      const action = campaign.status === "paused" ? "resume" : "pause";
+      await controlBoostCampaign(campaign.id, action);
+      await load();
+    } catch (err) {
+      Alert.alert("Boost update failed", friendlyError(err, "Could not update campaign."));
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function confirmBoost(listing: ApiListing) {
     if (!selectedPack || !pricing?.is_active) return;
@@ -280,9 +294,10 @@ export function PromotionsBody() {
               <Text style={{ color: "#6B7280", fontSize: 12, marginTop: 4 }}>
                 {campaign.listing_category} · {campaign.price_paid_label} · {campaign.duration_days} days
               </Text>
-              {campaign.status === "active" ? (
+              {(campaign.status === "active" || campaign.status === "paused") && campaign.days_remaining > 0 ? (
                 <Text style={{ color: GREEN, fontWeight: "700", fontSize: 12, marginTop: 6 }}>
                   {campaign.days_remaining} day{campaign.days_remaining === 1 ? "" : "s"} remaining
+                  {campaign.status === "paused" ? " (paused)" : ""}
                 </Text>
               ) : null}
               <View style={{ flexDirection: "row", marginTop: 12, gap: 8 }}>
@@ -290,6 +305,23 @@ export function PromotionsBody() {
                 <Metric label="Impressions" value={campaign.impression_count} />
                 <Metric label="Inquiries" value={campaign.inquiry_count} />
               </View>
+              {(campaign.status === "active" || campaign.status === "paused") ? (
+                <PressScale
+                  onPress={() => void toggleCampaign(campaign)}
+                  disabled={busy}
+                  style={{
+                    marginTop: 12,
+                    paddingVertical: 10,
+                    borderRadius: 12,
+                    backgroundColor: campaign.status === "paused" ? GREEN : "#F3F4F6",
+                    alignItems: "center",
+                  }}
+                >
+                  <Text style={{ fontWeight: "800", fontSize: 12, color: campaign.status === "paused" ? "#fff" : "#374151" }}>
+                    {campaign.status === "paused" ? "Reactivate boost" : "Pause boost"}
+                  </Text>
+                </PressScale>
+              ) : null}
             </View>
           );
         })
@@ -298,7 +330,7 @@ export function PromotionsBody() {
       <View style={{ marginHorizontal: 16, marginTop: 16, marginBottom: 8, backgroundColor: "#F3FBF5", borderRadius: 14, padding: 14, borderLeftWidth: 4, borderLeftColor: GREEN }}>
         <Text style={{ fontWeight: "800", color: colors.navy }}>Fair rotation</Text>
         <Text style={{ color: "#6B7280", fontSize: 12, marginTop: 6, lineHeight: 18 }}>
-          Boosted listings rotate top slots every 30 minutes inside their category. Longer packs get a small priority edge.
+          Longer boosting packages get more visibility and more inquiries.
         </Text>
       </View>
 
@@ -311,6 +343,11 @@ export function PromotionsBody() {
               {selectedPack?.days} days · {selectedPack?.price_label} · ~{selectedPack?.est_views} expected views
             </Text>
             <ScrollView style={{ marginTop: 14 }} showsVerticalScrollIndicator={false}>
+              {listings.length === 0 ? (
+                <Text style={{ color: "#6B7280", fontSize: 13, textAlign: "center", paddingVertical: 20 }}>
+                  No eligible listings. Only approved, active listings without an existing boost appear here.
+                </Text>
+              ) : null}
               {listings.map((listing) => (
                 <PressScale
                   key={listing.id}

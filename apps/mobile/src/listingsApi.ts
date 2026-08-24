@@ -29,6 +29,12 @@ export type ApiListing = {
   is_promoted: boolean;
   is_urgent?: boolean;
   urgent_ends_at?: string | null;
+  is_boosted?: boolean;
+  boost_paused?: boolean;
+  has_live_boost?: boolean;
+  boost_campaign_id?: string | null;
+  boost_days_remaining?: number;
+  can_be_boosted?: boolean;
   admin_reason: string;
   reviewed_at: string | null;
   created_at: string;
@@ -179,8 +185,10 @@ export async function createListing(payload: ListingWritePayload) {
   return row;
 }
 
-export async function deleteMyListing(id: string) {
-  await withAppAuth((token) => api<void>(`/api/listings/me/${id}/`, { method: "DELETE", token }));
+export async function deleteMyListing(id: string, confirm = false) {
+  await withAppAuth((token) =>
+    api<void>(`/api/listings/me/${id}/${confirm ? "?confirm=1" : ""}`, { method: "DELETE", token }),
+  );
   emitListingsChanged();
 }
 

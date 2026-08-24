@@ -8,6 +8,8 @@ from django.db import transaction
 from django.utils import timezone
 
 from apps.core.models import SellerWallet, SellerWalletTransaction
+from apps.listings.models import Listing
+from apps.listings.urgent import is_sold_extras
 from apps.promotions.models import BoostCampaign, BoostPricing
 
 logger = logging.getLogger(__name__)
@@ -45,15 +47,102 @@ def _active_campaign_qs():
 
 def sync_listing_promoted_flag(listing_id):
     """Keep listing.is_promoted aligned with wallet boost campaigns."""
-    from apps.listings.models import Listing
-
     listing = Listing.objects.filter(pk=listing_id).first()
     if not listing:
         return
-    boosted = _active_campaign_qs().filter(listing_id=listing_id).exists()
+    boosted = listing_is_actively_boosted(listing_id)
     if listing.is_promoted != boosted:
         listing.is_promoted = boosted
         listing.save(update_fields=["is_promoted", "updated_at"])
+
+
+def get_live_boost_campaign(listing_id) -> BoostCampaign | None:
+    """Return active or paused campaign for a listing."""
+    return (
+        BoostCampaign.objects.filter(
+            listing_id=listing_id,
+            status__in=[BoostCampaign.STATUS_ACTIVE, BoostCampaign.STATUS_PAUSED],
+        )
+        .order_by("-created_at")
+        .first()
+    )
+
+
+def listing_has_live_boost(listing_id) -> bool:
+    campaign = get_live_boost_campaign(listing_id)
+    return bool(campaign and campaign.is_live)
+
+
+def listing_is_actively_boosted(listing_id) -> bool:
+    now = timezone.now()
+    return BoostCampaign.objects.filter(
+        listing_id=listing_id,
+        status=BoostCampaign.STATUS_ACTIVE,
+        starts_at__lte=now,
+        ends_at__gt=now,
+    ).exists()
+
+
+def listing_can_be_boosted(listing: Listing) -> bool:
+    if listing.status != Listing.STATUS_APPROVED:
+        return False
+    if is_sold_extras(listing.extras):
+        return False
+    if listing_has_live_boost(listing.id):
+        return False
+    return True
+
+
+def pause_boost_campaign(campaign: BoostCampaign, reason: str = "") -> BoostCampaign:
+    if campaign.status != BoostCampaign.STATUS_ACTIVE:
+        raise ValidationError("Only active boost campaigns can be paused.")
+    now = timezone.now()
+    if campaign.ends_at <= now:
+        raise ValidationError("This boost campaign has already ended.")
+    campaign.status = BoostCampaign.STATUS_PAUSED
+    campaign.paused_at = now
+    if reason:
+        campaign.admin_paused_reason = reason[:500]
+    campaign.save(update_fields=["status", "paused_at", "admin_paused_reason", "updated_at"])
+    sync_listing_promoted_flag(campaign.listing_id)
+    return campaign
+
+
+def resume_boost_campaign(campaign: BoostCampaign) -> BoostCampaign:
+    if campaign.status != BoostCampaign.STATUS_PAUSED:
+        raise ValidationError("Only paused boost campaigns can be resumed.")
+    
+    listing = Listing.objects.filter(pk=campaign.listing_id).first()
+    if not listing:
+        raise ValidationError("Listing not found.")
+    if listing.status != Listing.STATUS_APPROVED:
+        raise ValidationError("Cannot resume boost: listing is not approved.")
+    if is_sold_extras(listing.extras):
+        raise ValidationError("Cannot resume boost: listing is sold.")
+    
+    now = timezone.now()
+    if campaign.paused_at:
+        campaign.ends_at = campaign.ends_at + (now - campaign.paused_at)
+        campaign.paused_at = None
+    if campaign.ends_at <= now:
+        campaign.status = BoostCampaign.STATUS_EXPIRED
+        campaign.save(update_fields=["status", "paused_at", "ends_at", "updated_at"])
+        sync_listing_promoted_flag(campaign.listing_id)
+        raise ValidationError("Boost time has expired. Start a new campaign to promote again.")
+    campaign.status = BoostCampaign.STATUS_ACTIVE
+    campaign.save(update_fields=["status", "paused_at", "ends_at", "updated_at"])
+    sync_listing_promoted_flag(campaign.listing_id)
+    return campaign
+
+
+def pause_boosts_for_listing(listing_id, reason: str = ""):
+    """Pause any running boosts (e.g. when listing is marked sold)."""
+    campaigns = BoostCampaign.objects.filter(
+        listing_id=listing_id,
+        status=BoostCampaign.STATUS_ACTIVE,
+    )
+    for campaign in campaigns:
+        pause_boost_campaign(campaign, reason=reason)
 
 
 def record_boost_inquiry_for_listing(listing_id, sender=None):
@@ -87,6 +176,15 @@ def create_boost_campaign(seller, listing, duration_days: int) -> BoostCampaign:
     
     if not pricing.is_active:
         raise ValidationError("Boost promotions are currently disabled.")
+
+    if not listing_can_be_boosted(listing):
+        if is_sold_extras(listing.extras):
+            raise ValidationError("Sold listings cannot be boosted.")
+        if listing.status != Listing.STATUS_APPROVED:
+            raise ValidationError("Only approved live listings can be boosted.")
+        if listing_has_live_boost(listing.id):
+            raise ValidationError("This listing already has an active or paused boost.")
+        raise ValidationError("This listing cannot be boosted right now.")
     
     # Check limits
     active_seller_boosts = BoostCampaign.objects.filter(
@@ -272,6 +370,30 @@ def get_boosted_listings_for_category(category: str, limit: int = 5) -> list:
     ).select_related("listing").order_by("current_slot")
     
     # Sort by slot, then priority
+    ranked = sorted(campaigns, key=lambda c: (c.current_slot, -c.calculate_priority_score()))
+    
+    return [c.listing_id for c in ranked[:limit]]
+
+
+def get_all_boosted_listings(limit: int = 10) -> list:
+    """
+    Returns all active boosted listing IDs across all categories (for global feeds).
+    Uses rotation slot + priority score with fair cross-category rotation.
+    """
+    expire_campaigns()
+    rotate_campaign_slots()
+    
+    campaigns = list(
+        BoostCampaign.objects.filter(
+            status=BoostCampaign.STATUS_ACTIVE,
+            ends_at__gt=timezone.now(),
+        ).select_related("listing").order_by("current_slot", "-duration_days")
+    )
+    
+    if not campaigns:
+        return []
+    
+    # Sort by slot for fair rotation, then priority
     ranked = sorted(campaigns, key=lambda c: (c.current_slot, -c.calculate_priority_score()))
     
     return [c.listing_id for c in ranked[:limit]]

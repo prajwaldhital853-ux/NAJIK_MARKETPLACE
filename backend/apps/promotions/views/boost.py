@@ -15,7 +15,10 @@ from apps.promotions.boost_service import (
     InsufficientBalanceError,
     create_boost_campaign,
     expire_campaigns,
+    listing_can_be_boosted,
+    pause_boost_campaign,
     paisa_to_label,
+    resume_boost_campaign,
     rupees_to_paisa,
 )
 from apps.promotions.models import BoostCampaign, BoostPricing
@@ -79,6 +82,7 @@ class BoostCampaignSerializer(serializers.ModelSerializer):
     days_remaining = serializers.IntegerField(read_only=True)
     hours_remaining = serializers.IntegerField(read_only=True)
     display_view_count = serializers.SerializerMethodField()
+    is_paused = serializers.BooleanField(read_only=True)
     
     class Meta:
         model = BoostCampaign
@@ -99,6 +103,8 @@ class BoostCampaignSerializer(serializers.ModelSerializer):
             "view_count",
             "display_view_count",
             "inquiry_count",
+            "is_paused",
+            "paused_at",
             "created_at",
         )
     
@@ -148,6 +154,12 @@ class CreateBoostCampaignView(APIView):
             Listing.objects.filter(owner=request.user, status=Listing.STATUS_APPROVED),
             pk=listing_id,
         )
+
+        if not listing_can_be_boosted(listing):
+            return Response(
+                {"detail": "This listing cannot be boosted. It may be sold, inactive, or already boosted."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         
         try:
             campaign = create_boost_campaign(request.user, listing, duration_days)
@@ -172,7 +184,13 @@ class MyBoostCampaignsView(APIView):
         campaigns = BoostCampaign.objects.filter(seller=request.user).select_related("listing")
         
         if status_filter == "active":
-            campaigns = campaigns.filter(status=BoostCampaign.STATUS_ACTIVE, ends_at__gt=timezone.now())
+            campaigns = campaigns.filter(
+                status__in=[BoostCampaign.STATUS_ACTIVE, BoostCampaign.STATUS_PAUSED],
+            ).filter(
+                Q(status=BoostCampaign.STATUS_PAUSED) | Q(ends_at__gt=timezone.now()),
+            )
+        elif status_filter == "paused":
+            campaigns = campaigns.filter(status=BoostCampaign.STATUS_PAUSED)
         elif status_filter == "expired":
             campaigns = campaigns.filter(status=BoostCampaign.STATUS_EXPIRED)
         elif status_filter == "cancelled":
@@ -181,6 +199,27 @@ class MyBoostCampaignsView(APIView):
         campaigns = campaigns.order_by("-created_at")[:50]
         
         return Response(BoostCampaignSerializer(campaigns, many=True).data)
+
+
+class SellerBoostCampaignControlView(APIView):
+    authentication_classes = [AppJWTAuthentication]
+    permission_classes = [IsAppUser]
+
+    def post(self, request, pk):
+        campaign = get_object_or_404(BoostCampaign, pk=pk, seller=request.user)
+        action = (request.data.get("action") or "").strip().lower()
+
+        try:
+            if action == "pause":
+                campaign = pause_boost_campaign(campaign)
+            elif action == "resume":
+                campaign = resume_boost_campaign(campaign)
+            else:
+                return Response({"detail": "Use action pause or resume."}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+        return Response(BoostCampaignSerializer(campaign).data)
 
 
 # Staff endpoints
@@ -262,26 +301,23 @@ class StaffBoostCampaignControlView(APIView):
         action = request.data.get("action")
         
         if action == "pause":
-            campaign.status = BoostCampaign.STATUS_PAUSED
-            campaign.admin_paused_reason = (request.data.get("reason") or "")[:500]
+            campaign = pause_boost_campaign(campaign, reason=(request.data.get("reason") or "")[:500])
             campaign.reviewed_by = request.user
-            campaign.save()
-            from apps.promotions.boost_service import sync_listing_promoted_flag
-
-            sync_listing_promoted_flag(campaign.listing_id)
+            campaign.save(update_fields=["reviewed_by"])
             return Response(BoostCampaignSerializer(campaign).data)
         
         elif action == "resume":
-            if campaign.status == BoostCampaign.STATUS_PAUSED and campaign.ends_at > timezone.now():
-                campaign.status = BoostCampaign.STATUS_ACTIVE
-                campaign.save()
-                from apps.promotions.boost_service import sync_listing_promoted_flag
-
-                sync_listing_promoted_flag(campaign.listing_id)
-                return Response(BoostCampaignSerializer(campaign).data)
+            try:
+                campaign = resume_boost_campaign(campaign)
+            except Exception as e:
+                return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+            campaign.reviewed_by = request.user
+            campaign.save(update_fields=["reviewed_by"])
+            return Response(BoostCampaignSerializer(campaign).data)
         
         elif action == "cancel":
             campaign.status = BoostCampaign.STATUS_CANCELLED
+            campaign.paused_at = None
             campaign.reviewed_by = request.user
             campaign.save()
             from apps.promotions.boost_service import sync_listing_promoted_flag

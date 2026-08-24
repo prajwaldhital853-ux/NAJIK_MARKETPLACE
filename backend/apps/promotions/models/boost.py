@@ -54,6 +54,7 @@ class BoostCampaign(models.Model):
     # Admin controls
     admin_paused_reason = models.TextField(blank=True, default="")
     admin_extended_hours = models.PositiveIntegerField(default=0)
+    paused_at = models.DateTimeField(null=True, blank=True)
     reviewed_by = models.ForeignKey(
         "staff.StaffUser",
         null=True,
@@ -78,23 +79,44 @@ class BoostCampaign(models.Model):
 
     @property
     def is_active(self) -> bool:
+        now = timezone.now()
         return (
             self.status == self.STATUS_ACTIVE
-            and self.starts_at <= timezone.now() < self.ends_at
+            and self.starts_at <= now < self.ends_at
         )
 
     @property
+    def is_paused(self) -> bool:
+        return self.status == self.STATUS_PAUSED
+
+    @property
+    def is_live(self) -> bool:
+        """Active or paused with remaining boost time (blocks delete / double boost)."""
+        now = timezone.now()
+        if self.status == self.STATUS_PAUSED:
+            return True
+        if self.status == self.STATUS_ACTIVE:
+            return self.starts_at <= now < self.ends_at
+        return False
+
+    @property
     def days_remaining(self) -> int:
-        if not self.is_active:
+        if self.status == self.STATUS_PAUSED and self.paused_at:
+            delta = self.ends_at - self.paused_at
+        elif self.is_active:
+            delta = self.ends_at - timezone.now()
+        else:
             return 0
-        delta = self.ends_at - timezone.now()
         return max(0, int(delta.total_seconds() / 86400))
 
     @property
     def hours_remaining(self) -> int:
-        if not self.is_active:
+        if self.status == self.STATUS_PAUSED and self.paused_at:
+            delta = self.ends_at - self.paused_at
+        elif self.is_active:
+            delta = self.ends_at - timezone.now()
+        else:
             return 0
-        delta = self.ends_at - timezone.now()
         return max(0, int(delta.total_seconds() / 3600))
 
     def calculate_priority_score(self) -> float:

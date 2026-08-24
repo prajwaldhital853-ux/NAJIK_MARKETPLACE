@@ -37,6 +37,8 @@ export type BoostCampaign = {
   view_count: number;
   display_view_count: number;
   inquiry_count: number;
+  is_paused?: boolean;
+  paused_at?: string | null;
   created_at: string;
 };
 
@@ -56,6 +58,16 @@ export async function createBoostCampaign(listingId: string, durationDays: numbe
       method: "POST",
       token,
       body: JSON.stringify({ listing_id: listingId, duration_days: durationDays }),
+    }),
+  );
+}
+
+export async function controlBoostCampaign(campaignId: string, action: "pause" | "resume") {
+  return withAppAuth((token) =>
+    api<BoostCampaign>(`/api/promotions/boost-campaigns/${campaignId}/`, {
+      method: "POST",
+      token,
+      body: JSON.stringify({ action }),
     }),
   );
 }

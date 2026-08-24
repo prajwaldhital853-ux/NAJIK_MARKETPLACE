@@ -17,7 +17,15 @@ def load_proof_path(instance, filename):
 class SellerPaymentConfig(models.Model):
     """Singleton seller listing-fee and offline top-up instructions."""
 
+    AUDIENCE_PROVIDER = "provider"
+    AUDIENCE_USER = "user"
+    AUDIENCE_CHOICES = (
+        (AUDIENCE_PROVIDER, "Service providers"),
+        (AUDIENCE_USER, "Buyers"),
+    )
+
     id = models.PositiveSmallIntegerField(primary_key=True, default=1, editable=False)
+    audience = models.CharField(max_length=16, choices=AUDIENCE_CHOICES, default=AUDIENCE_PROVIDER)
     listing_fee_rupees = models.PositiveIntegerField(default=10)
     listing_fee_label = models.CharField(max_length=40, default="Rs. 10")
     bank_name = models.CharField(max_length=120, blank=True, default="")
@@ -36,9 +44,18 @@ class SellerPaymentConfig(models.Model):
         verbose_name_plural = "seller payment config"
 
     @classmethod
-    def get_solo(cls):
-        obj, _ = cls.objects.get_or_create(pk=1)
+    def get_for_audience(cls, audience: str = "provider"):
+        aud = audience if audience in {cls.AUDIENCE_PROVIDER, cls.AUDIENCE_USER} else cls.AUDIENCE_PROVIDER
+        pk = 1 if aud == cls.AUDIENCE_PROVIDER else 2
+        obj, _ = cls.objects.get_or_create(pk=pk, defaults={"audience": aud})
+        if obj.audience != aud:
+            obj.audience = aud
+            obj.save(update_fields=["audience"])
         return obj
+
+    @classmethod
+    def get_solo(cls):
+        return cls.get_for_audience(cls.AUDIENCE_PROVIDER)
 
 
 class SellerWallet(models.Model):

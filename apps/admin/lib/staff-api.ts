@@ -468,12 +468,14 @@ export type ReferEarnConfig = {
   description: string;
 };
 
-export async function getReferEarnConfig() {
-  return staffRequest<ReferEarnConfig>("/api/admin/app-control/refer-earn/");
+export async function getReferEarnConfig(audience: "provider" | "user" = "provider") {
+  const q = audience === "user" ? "?audience=buyer" : "?audience=seller";
+  return staffRequest<ReferEarnConfig>(`/api/admin/app-control/refer-earn/${q}`);
 }
 
-export async function patchReferEarnConfig(payload: Partial<ReferEarnConfig>) {
-  return staffRequest<ReferEarnConfig>("/api/admin/app-control/refer-earn/", {
+export async function patchReferEarnConfig(payload: Partial<ReferEarnConfig>, audience: "provider" | "user" = "provider") {
+  const q = audience === "user" ? "?audience=buyer" : "?audience=seller";
+  return staffRequest<ReferEarnConfig>(`/api/admin/app-control/refer-earn/${q}`, {
     method: "PATCH",
     body: JSON.stringify(payload),
   });
@@ -492,9 +494,12 @@ export type StaffReferralRow = {
   referred_name: string;
 };
 
-export async function listStaffReferrals(status?: "joined" | "earned") {
-  const q = status ? `?status=${status}` : "";
-  return staffRequest<StaffReferralRow[]>(`/api/admin/app-control/referrals${q}`);
+export async function listStaffReferrals(status?: "joined" | "earned", audience: "provider" | "user" = "provider") {
+  const params = new URLSearchParams();
+  if (status) params.set("status", status);
+  params.set("audience", audience === "user" ? "buyer" : "seller");
+  const q = params.toString();
+  return staffRequest<StaffReferralRow[]>(`/api/admin/app-control/referrals?${q}`);
 }
 
 export type SellerPaymentConfig = {
@@ -510,10 +515,6 @@ export type SellerPaymentConfig = {
   payment_instructions: string;
   qr_code_url: string;
 };
-
-export async function getSellerPaymentConfig() {
-  return staffRequest<SellerPaymentConfig>("/api/admin/app-control/seller-payments/");
-}
 
 export type StaffPaymentsSummary = {
   pending_load_count: number;
@@ -540,13 +541,22 @@ export type StaffPaymentsSummary = {
   listing_fee_rupees: number;
 };
 
-export async function getStaffPaymentsSummary(revenuePeriod?: string) {
-  const suffix = revenuePeriod ? `?revenue_period=${encodeURIComponent(revenuePeriod)}` : "";
-  return staffRequest<StaffPaymentsSummary>(`/api/admin/app-control/payments-summary/${suffix}`);
+export async function getStaffPaymentsSummary(revenuePeriod?: string, audience: "provider" | "user" = "provider") {
+  const params = new URLSearchParams();
+  if (revenuePeriod) params.set("revenue_period", revenuePeriod);
+  params.set("audience", audience === "user" ? "buyer" : "seller");
+  const suffix = params.toString();
+  return staffRequest<StaffPaymentsSummary>(`/api/admin/app-control/payments-summary/?${suffix}`);
 }
 
-export async function patchSellerPaymentConfig(payload: Record<string, unknown>) {
-  return staffRequest<SellerPaymentConfig>("/api/admin/app-control/seller-payments/", {
+export async function getSellerPaymentConfig(audience: "provider" | "user" = "provider") {
+  const q = audience === "user" ? "?audience=buyer" : "?audience=seller";
+  return staffRequest<SellerPaymentConfig>(`/api/admin/app-control/seller-payments/${q}`);
+}
+
+export async function patchSellerPaymentConfig(payload: Record<string, unknown>, audience: "provider" | "user" = "provider") {
+  const q = audience === "user" ? "?audience=buyer" : "?audience=seller";
+  return staffRequest<SellerPaymentConfig>(`/api/admin/app-control/seller-payments/${q}`, {
     method: "PATCH",
     body: JSON.stringify(payload),
   });
@@ -571,9 +581,11 @@ export async function listStaffLoadRequestsPage(query?: {
   status?: "pending" | "approved" | "rejected";
   page?: number;
   page_size?: number;
+  audience?: "provider" | "user";
 }) {
   const params = new URLSearchParams();
   if (query?.status) params.set("status", query.status);
+  params.set("audience", query?.audience === "user" ? "buyer" : "seller");
   params.set("page", String(query?.page || 1));
   params.set("page_size", String(query?.page_size || 25));
   const data = await staffRequest<SellerLoadRequestRow[] | StaffPage<SellerLoadRequestRow>>(
@@ -582,8 +594,8 @@ export async function listStaffLoadRequestsPage(query?: {
   return unwrapStaffPage(data, query?.page || 1, query?.page_size || 25);
 }
 
-export async function listStaffLoadRequests(status?: "pending" | "approved" | "rejected") {
-  return (await listStaffLoadRequestsPage(status ? { status, page_size: 100 } : { page_size: 100 })).results;
+export async function listStaffLoadRequests(status?: "pending" | "approved" | "rejected", audience: "provider" | "user" = "provider") {
+  return (await listStaffLoadRequestsPage(status ? { status, page_size: 100, audience } : { page_size: 100, audience })).results;
 }
 
 export async function approveStaffLoadRequest(id: string) {
@@ -606,13 +618,22 @@ export type SellerWalletRow = {
   updated_at: string;
 };
 
-export async function listStaffSellerWallets(providerId?: string) {
-  const q = providerId ? `?provider=${encodeURIComponent(providerId)}` : "";
-  return staffRequest<SellerWalletRow[]>(`/api/admin/app-control/seller-wallets${q}`);
+export async function listStaffSellerWallets(providerId?: string, audience: "provider" | "user" = "provider") {
+  const params = new URLSearchParams();
+  if (providerId) params.set("provider", providerId);
+  params.set("audience", audience === "user" ? "buyer" : "seller");
+  const q = params.toString();
+  return staffRequest<SellerWalletRow[]>(`/api/admin/app-control/seller-wallets${q ? `?${q}` : ""}`);
 }
 
-export async function staffAdjustSellerWallet(providerId: string, amount_rupees: number, note: string) {
-  return staffRequest(`/api/admin/app-control/seller-wallets/${providerId}/adjust/`, {
+export async function staffAdjustSellerWallet(
+  providerId: string,
+  amount_rupees: number,
+  note: string,
+  audience: "provider" | "user" = "provider",
+) {
+  const q = audience === "user" ? "?audience=buyer" : "?audience=seller";
+  return staffRequest(`/api/admin/app-control/seller-wallets/${providerId}/adjust/${q}`, {
     method: "POST",
     body: JSON.stringify({ amount_rupees, note }),
   });
@@ -639,8 +660,9 @@ export type SellerWalletDetail = {
   load_requests: SellerLoadRequestRow[];
 };
 
-export async function getStaffSellerWalletDetail(providerId: string) {
-  return staffRequest<SellerWalletDetail>(`/api/admin/app-control/seller-wallets/${providerId}/`);
+export async function getStaffSellerWalletDetail(providerId: string, audience: "provider" | "user" = "provider") {
+  const q = audience === "user" ? "?audience=buyer" : "?audience=seller";
+  return staffRequest<SellerWalletDetail>(`/api/admin/app-control/seller-wallets/${providerId}/${q}`);
 }
 
 export type ChatReportParty = {

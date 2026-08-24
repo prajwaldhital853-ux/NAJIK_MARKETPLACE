@@ -10,7 +10,15 @@ from django.db import models, transaction
 class ReferEarnConfig(models.Model):
     """Singleton refer-and-earn program settings (no in-app payment)."""
 
+    AUDIENCE_PROVIDER = "provider"
+    AUDIENCE_USER = "user"
+    AUDIENCE_CHOICES = (
+        (AUDIENCE_PROVIDER, "Service providers"),
+        (AUDIENCE_USER, "Buyers"),
+    )
+
     id = models.PositiveSmallIntegerField(primary_key=True, default=1, editable=False)
+    audience = models.CharField(max_length=16, choices=AUDIENCE_CHOICES, default=AUDIENCE_PROVIDER)
     reward_amount = models.PositiveIntegerField(default=200)
     reward_label = models.CharField(max_length=40, default="Rs. 200")
     description = models.TextField(
@@ -29,9 +37,18 @@ class ReferEarnConfig(models.Model):
         verbose_name_plural = "refer & earn config"
 
     @classmethod
-    def get_solo(cls):
-        obj, _ = cls.objects.get_or_create(pk=1)
+    def get_for_audience(cls, audience: str = "provider"):
+        aud = audience if audience in {cls.AUDIENCE_PROVIDER, cls.AUDIENCE_USER} else cls.AUDIENCE_PROVIDER
+        pk = 1 if aud == cls.AUDIENCE_PROVIDER else 2
+        obj, _ = cls.objects.get_or_create(pk=pk, defaults={"audience": aud})
+        if obj.audience != aud:
+            obj.audience = aud
+            obj.save(update_fields=["audience"])
         return obj
+
+    @classmethod
+    def get_solo(cls):
+        return cls.get_for_audience(cls.AUDIENCE_PROVIDER)
 
 
 class Referral(models.Model):
@@ -54,6 +71,12 @@ class Referral(models.Model):
         related_name="referral_received",
     )
     invite_code = models.CharField(max_length=32, db_index=True)
+    audience = models.CharField(
+        max_length=16,
+        choices=ReferEarnConfig.AUDIENCE_CHOICES,
+        default=ReferEarnConfig.AUDIENCE_PROVIDER,
+        db_index=True,
+    )
     referred_phone = models.CharField(max_length=15, db_index=True)
     referred_email = models.EmailField(blank=True, default="")
     status = models.CharField(max_length=12, choices=STATUS_CHOICES, default=STATUS_JOINED)
@@ -106,6 +129,28 @@ def _referrer_is_eligible(referrer) -> bool:
     return app.status == ProviderApplication.STATUS_VERIFIED
 
 
+def _buyer_referrer_is_eligible(referrer) -> bool:
+    from apps.accounts.models import AppUser
+
+    if referrer.account_type != AppUser.ACCOUNT_USER:
+        return False
+    if not referrer.is_active or referrer.account_status != AppUser.STATUS_ACTIVE:
+        return False
+    return bool(referrer.phone_verified)
+
+
+def _referrer_audience(referrer) -> str:
+    from apps.accounts.models import AppUser
+
+    return ReferEarnConfig.AUDIENCE_USER if referrer.account_type == AppUser.ACCOUNT_USER else ReferEarnConfig.AUDIENCE_PROVIDER
+
+
+def _referrer_is_eligible_for_audience(referrer, audience: str) -> bool:
+    if audience == ReferEarnConfig.AUDIENCE_USER:
+        return _buyer_referrer_is_eligible(referrer)
+    return _referrer_is_eligible(referrer)
+
+
 def _new_random_invite_code() -> str:
     """Hard-to-guess single-use invite code."""
     return f"NAJIK-{secrets.token_hex(2).upper()}-{secrets.token_hex(3).upper()}"
@@ -115,31 +160,43 @@ def _code_was_consumed(code: str) -> bool:
     return Referral.objects.filter(invite_code__iexact=code).exists()
 
 
-def lookup_referrer(raw_code: str):
-    """Return active verified referrer for the user's current code, or None."""
+def lookup_referrer(raw_code: str, for_account_type: str | None = None):
+    """Return active referrer for the user's current code, or None."""
     from apps.accounts.models import AppUser
 
     code = _normalize_invite_code(raw_code)
     if not code:
         return None
-    cfg = ReferEarnConfig.get_solo()
+    referrer = AppUser.objects.filter(referral_code__iexact=code).first()
+    if not referrer:
+        return None
+    audience = _referrer_audience(referrer)
+    cfg = ReferEarnConfig.get_for_audience(audience)
     if not cfg.is_active:
         return None
-    referrer = AppUser.objects.filter(referral_code__iexact=code, account_type=AppUser.ACCOUNT_PROVIDER).first()
-    if not referrer or not _referrer_is_eligible(referrer):
+    if for_account_type and referrer.account_type != for_account_type:
+        return None
+    if not _referrer_is_eligible_for_audience(referrer, audience):
         return None
     return referrer
 
 
-def validate_invite_code_for_registration(raw_code: str, phone: str, email: str) -> str | None:
+def validate_invite_code_for_registration(raw_code: str, phone: str, email: str, referred_account_type: str) -> str | None:
     """Raise ValidationError if code is present but not usable."""
+    from apps.accounts.models import AppUser
+
     code = _normalize_invite_code(raw_code)
     if not code:
         return None
-    cfg = ReferEarnConfig.get_solo()
+    audience = (
+        ReferEarnConfig.AUDIENCE_USER
+        if referred_account_type == AppUser.ACCOUNT_USER
+        else ReferEarnConfig.AUDIENCE_PROVIDER
+    )
+    cfg = ReferEarnConfig.get_for_audience(audience)
     if not cfg.is_active:
         raise ValidationError("Refer & Earn is paused right now.")
-    referrer = lookup_referrer(code)
+    referrer = lookup_referrer(code, for_account_type=referred_account_type)
     if not referrer:
         if _code_was_consumed(code):
             raise ValidationError(
@@ -201,14 +258,19 @@ def apply_referral_code(referred_user, raw_code: str):
     """Link a new provider to referrer. Returns Referral or None."""
     from apps.accounts.models import AppUser
 
-    code = validate_invite_code_for_registration(raw_code, referred_user.phone or "", referred_user.email or "")
+    code = validate_invite_code_for_registration(
+        raw_code,
+        referred_user.phone or "",
+        referred_user.email or "",
+        referred_user.account_type,
+    )
     if not code:
         return None
-    if referred_user.account_type != AppUser.ACCOUNT_PROVIDER:
+    if referred_user.account_type != AppUser.ACCOUNT_PROVIDER and referred_user.account_type != AppUser.ACCOUNT_USER:
         return None
     if Referral.objects.filter(referred=referred_user).exists():
         return None
-    referrer = lookup_referrer(code)
+    referrer = lookup_referrer(code, for_account_type=referred_user.account_type)
     if not referrer or referrer.pk == referred_user.pk:
         return None
     from apps.accounts.models import AppUser
@@ -216,11 +278,13 @@ def apply_referral_code(referred_user, raw_code: str):
     referrer = AppUser.objects.select_for_update().get(pk=referrer.pk)
     phone = (referred_user.phone or "").strip()
     email = (referred_user.email or "").lower().strip()
-    cfg = ReferEarnConfig.get_solo()
+    audience = _referrer_audience(referrer)
+    cfg = ReferEarnConfig.get_for_audience(audience)
     referral = Referral.objects.create(
         referrer=referrer,
         referred=referred_user,
         invite_code=code,
+        audience=audience,
         referred_phone=phone,
         referred_email=email,
         reward_amount=cfg.reward_amount,
@@ -281,6 +345,35 @@ def qualify_referral_for_listing(listing):
     credit_referral_reward(ref)
 
 
+@transaction.atomic
+def qualify_referral_for_buyer(referred_user):
+    """Credit referrer when referred buyer verifies phone."""
+    from apps.accounts.models import AppUser
+
+    if referred_user.account_type != AppUser.ACCOUNT_USER:
+        return
+    if not referred_user.phone_verified:
+        return
+    if not referred_user.is_active or referred_user.account_status != AppUser.STATUS_ACTIVE:
+        return
+    try:
+        ref = Referral.objects.select_for_update().get(referred=referred_user, audience=ReferEarnConfig.AUDIENCE_USER)
+    except Referral.DoesNotExist:
+        return
+    if ref.status == Referral.STATUS_EARNED:
+        return
+    if not _buyer_referrer_is_eligible(ref.referrer):
+        return
+    from django.utils import timezone
+
+    ref.status = Referral.STATUS_EARNED
+    ref.earned_at = timezone.now()
+    ref.save(update_fields=["status", "earned_at"])
+    from apps.core.seller_wallet_service import credit_referral_reward
+
+    credit_referral_reward(ref)
+
+
 def _first_qualifying_listing_for_referred(referred):
     from apps.listings.models import Listing
     from apps.listings.urgent import is_sold_extras
@@ -305,7 +398,15 @@ def referral_status_detail(row: Referral) -> str:
         ).exists():
             return f"Rs. {row.reward_amount} was added to your Payments balance."
         return f"Rs. {row.reward_amount} earned — open Payments to refresh your balance."
-    cfg = ReferEarnConfig.get_solo()
+    cfg = ReferEarnConfig.get_for_audience(row.audience)
+    if row.audience == ReferEarnConfig.AUDIENCE_USER:
+        referred = row.referred
+        if referred.phone_verified:
+            return "Friend verified their phone — syncing your reward. Pull to refresh."
+        return (
+            f"Friend joined — you earn {cfg.reward_label} when they verify their phone on NAJIK. "
+            "Reward goes to Payments."
+        )
     referred = row.referred
     try:
         app = referred.provider_application
@@ -324,11 +425,14 @@ def referral_status_detail(row: Referral) -> str:
 
 
 def sync_joined_referral_earnings(referrer=None):
-    """Backfill earned status + wallet credit when a referred user already has a qualifying listing."""
+    """Backfill earned status + wallet credit when criteria are already met."""
     qs = Referral.objects.filter(status=Referral.STATUS_JOINED).select_related("referred", "referrer")
     if referrer is not None:
         qs = qs.filter(referrer=referrer)
     for ref in qs:
+        if ref.audience == ReferEarnConfig.AUDIENCE_USER:
+            qualify_referral_for_buyer(ref.referred)
+            continue
         listing = _first_qualifying_listing_for_referred(ref.referred)
         if listing:
             qualify_referral_for_listing(listing)

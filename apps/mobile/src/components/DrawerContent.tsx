@@ -161,13 +161,13 @@ export function DrawerContent({ navigation }: DrawerContentComponentProps) {
 
   return (
     <View style={{ flex: 1, backgroundColor: "#fff" }}>
-      <View style={{ backgroundColor: HEADER_GREEN, paddingTop: insets.top + k(6), paddingHorizontal: k(12), paddingBottom: k(14) }}>
+      <View style={{ backgroundColor: HEADER_GREEN, paddingTop: insets.top + k(4), paddingHorizontal: k(12), paddingBottom: k(8) }}>
         <Pressable onPress={() => navigation.closeDrawer()} style={{ alignSelf: "flex-end", padding: k(3) }} hitSlop={10}>
           <Ionicons name="close" size={k(14)} color="#fff" />
         </Pressable>
 
         <View style={{ flexDirection: "row", alignItems: "center", marginTop: k(2) }}>
-          <Avatar name={name} uri={photo || undefined} size={k(44)} />
+          <Avatar name={name} uri={photo || undefined} size={k(38)} />
           <View style={{ flex: 1, marginLeft: k(10) }}>
             <View style={{ flexDirection: "row", alignItems: "center", gap: k(4) }}>
               <Text style={{ color: "#fff", fontWeight: "800", fontSize: k(12) }} numberOfLines={1}>
@@ -204,25 +204,25 @@ export function DrawerContent({ navigation }: DrawerContentComponentProps) {
         {balances ? (
           <View
             style={{
-              marginTop: k(10),
+              marginTop: k(8),
               backgroundColor: "rgba(255,255,255,0.12)",
-              borderRadius: k(10),
-              padding: k(10),
+              borderRadius: k(8),
+              padding: k(8),
             }}
           >
-            <Text style={{ color: "#E8F8EE", fontSize: k(8), fontWeight: "700" }}>Your balances</Text>
-            <View style={{ flexDirection: "row", marginTop: k(6), gap: k(6) }}>
+            <Text style={{ color: "#E8F8EE", fontSize: k(7.5), fontWeight: "700" }}>Your balances</Text>
+            <View style={{ flexDirection: "row", marginTop: k(4), gap: k(4) }}>
               <View style={{ flex: 1 }}>
-                <Text style={{ color: "#CFE9DA", fontSize: k(7.5) }}>Loaded</Text>
-                <Text style={{ color: "#fff", fontWeight: "800", fontSize: k(10), marginTop: 2 }}>{balances.loaded_balance_label}</Text>
+                <Text style={{ color: "#CFE9DA", fontSize: k(7) }}>Loaded</Text>
+                <Text style={{ color: "#fff", fontWeight: "800", fontSize: k(9), marginTop: 1 }}>{balances.loaded_balance_label}</Text>
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={{ color: "#CFE9DA", fontSize: k(7.5) }}>Refer & Earn</Text>
-                <Text style={{ color: "#fff", fontWeight: "800", fontSize: k(10), marginTop: 2 }}>{balances.referrer_balance_label}</Text>
+                <Text style={{ color: "#CFE9DA", fontSize: k(7) }}>Refer & Earn</Text>
+                <Text style={{ color: "#fff", fontWeight: "800", fontSize: k(9), marginTop: 1 }}>{balances.referrer_balance_label}</Text>
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={{ color: "#CFE9DA", fontSize: k(7.5) }}>Combined</Text>
-                <Text style={{ color: "#fff", fontWeight: "800", fontSize: k(10), marginTop: 2 }}>{balances.combined_balance_label}</Text>
+                <Text style={{ color: "#CFE9DA", fontSize: k(7) }}>Combined</Text>
+                <Text style={{ color: "#fff", fontWeight: "800", fontSize: k(9), marginTop: 1 }}>{balances.combined_balance_label}</Text>
               </View>
             </View>
           </View>
@@ -356,7 +356,10 @@ export function DrawerContent({ navigation }: DrawerContentComponentProps) {
                 {provider ? "Promote your listings and reach more customers." : "Reach thousands of people in your area."}
               </Text>
               <PressScale
-                onPress={() => goTab("Post")}
+                onPress={() => {
+                  openSellerPage(navigation, "promotions");
+                  navigation.closeDrawer();
+                }}
                 style={{
                   marginTop: k(10),
                   alignSelf: "flex-start",

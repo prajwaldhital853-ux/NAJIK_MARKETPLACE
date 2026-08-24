@@ -15,7 +15,7 @@ import { fetchMyListings, fetchMyReviewsGiven, fetchSavedListings, fetchSellerPr
 import { getRecentViewIds } from "../listingViews";
 import { listChatThreads } from "../chatApi";
 import { subscribeListingsChanged } from "../listingsRefresh";
-import { openBuyerRecentViews, openBuyerReviewsGiven, openProviderIdCard, openSellerPage } from "../navigation/browse";
+import { openBuyerInviteEarn, openBuyerRecentViews, openBuyerReviewsGiven, openProviderIdCard, openSellerPage } from "../navigation/browse";
 import { choosePhoto } from "../pickPhoto";
 import { colors, shadow } from "../theme";
 
@@ -422,6 +422,7 @@ function BuyerProfile() {
   ];
 
   const activity = [
+    { icon: "gift-outline" as const, color: GREEN, bg: "#E7F6EC", title: "Invite & Earn", sub: "Share your code and earn rewards.", onPress: () => openBuyerInviteEarn(navigation) },
     { icon: "bookmark" as const, color: GREEN, bg: "#E7F6EC", title: "Saved Items", sub: "View your saved listings.", onPress: () => navigation.jumpTo("Saved") },
     { icon: "help-circle" as const, color: "#6D28D9", bg: "#F1E9FF", title: "My Inquiries", sub: "Track your messages.", onPress: () => navigation.jumpTo("Messages") },
     { icon: "eye" as const, color: "#1D4ED8", bg: "#E8F1FE", title: "Recently Viewed", sub: "Last 10 listings you opened.", onPress: () => openBuyerRecentViews(navigation) },

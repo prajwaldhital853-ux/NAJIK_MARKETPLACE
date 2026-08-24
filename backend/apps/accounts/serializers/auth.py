@@ -203,6 +203,7 @@ class RegisterSerializer(serializers.Serializer):
     full_name = serializers.CharField(required=False, allow_blank=True, max_length=150)
     password = serializers.CharField(write_only=True, min_length=8, max_length=128, style={"input_type": "password"})
     account_type = serializers.ChoiceField(choices=AppUser.ACCOUNT_CHOICES)
+    referral_code = serializers.CharField(required=False, allow_blank=True, max_length=32)
 
     def validate_phone(self, value):
         if not value:
@@ -237,11 +238,33 @@ class RegisterSerializer(serializers.Serializer):
         attrs["email"] = email
         attrs["phone"] = phone
         attrs["username"] = email or phone
+        ref_raw = (attrs.get("referral_code") or "").strip()
+        if ref_raw:
+            from apps.accounts.models.referral import validate_invite_code_for_registration
+
+            try:
+                attrs["referral_code"] = validate_invite_code_for_registration(
+                    ref_raw,
+                    phone or "",
+                    email or "",
+                    attrs["account_type"],
+                )
+            except DjangoValidationError as exc:
+                raise serializers.ValidationError({"referral_code": exc.messages}) from exc
+        else:
+            attrs["referral_code"] = ""
         return attrs
 
     def create(self, validated_data):
+        referral_raw = (validated_data.pop("referral_code", "") or "").strip()
         password = validated_data.pop("password")
-        return AppUser.objects.create_user(password=password, **validated_data)
+        user = AppUser.objects.create_user(password=password, **validated_data)
+        from apps.accounts.models.referral import apply_referral_code, generate_referral_code
+
+        generate_referral_code(user)
+        if referral_raw:
+            apply_referral_code(user, referral_raw)
+        return user
 
 
 class LoginSerializer(serializers.Serializer):

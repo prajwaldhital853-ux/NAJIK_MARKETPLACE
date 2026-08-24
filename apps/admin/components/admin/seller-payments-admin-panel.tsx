@@ -61,7 +61,15 @@ function ProofLightbox({
   );
 }
 
-export function SellerPaymentsConfigPanel({ embedded, onChanged }: { embedded?: boolean; onChanged?: () => void }) {
+export function SellerPaymentsConfigPanel({
+  embedded,
+  onChanged,
+  audience = "provider",
+}: {
+  embedded?: boolean;
+  onChanged?: () => void;
+  audience?: "provider" | "user";
+}) {
   const { toast } = useAdmin();
   const [cfg, setCfg] = useState<SellerPaymentConfig | null>(null);
   const [fee, setFee] = useState("10");
@@ -77,7 +85,7 @@ export function SellerPaymentsConfigPanel({ embedded, onChanged }: { embedded?: 
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    void getSellerPaymentConfig()
+    void getSellerPaymentConfig(audience)
       .then((c) => {
         setCfg(c);
         setFee(String(c.listing_fee_rupees));
@@ -92,7 +100,7 @@ export function SellerPaymentsConfigPanel({ embedded, onChanged }: { embedded?: 
         setActive(c.is_active);
       })
       .catch((err) => toast(err instanceof Error ? err.message : "Could not load payment config."));
-  }, [toast]);
+  }, [toast, audience]);
 
   async function save(qrFile?: File | null) {
     setBusy(true);
@@ -110,7 +118,7 @@ export function SellerPaymentsConfigPanel({ embedded, onChanged }: { embedded?: 
         is_active: active,
       };
       if (qrFile) payload.qr_code_uri = await fileToDataUri(qrFile);
-      const next = await patchSellerPaymentConfig(payload);
+      const next = await patchSellerPaymentConfig(payload, audience);
       setCfg(next);
       toast("Seller payment settings saved.");
       onChanged?.();
@@ -181,7 +189,15 @@ export function SellerPaymentsConfigPanel({ embedded, onChanged }: { embedded?: 
   );
 }
 
-export function SellerLoadRequestsPanel({ embedded, onChanged }: { embedded?: boolean; onChanged?: () => void }) {
+export function SellerLoadRequestsPanel({
+  embedded,
+  onChanged,
+  audience = "provider",
+}: {
+  embedded?: boolean;
+  onChanged?: () => void;
+  audience?: "provider" | "user";
+}) {
   const { toast } = useAdmin();
   const [rows, setRows] = useState<SellerLoadRequestRow[]>([]);
   const [feeRupees, setFeeRupees] = useState(10);
@@ -196,7 +212,7 @@ export function SellerLoadRequestsPanel({ embedded, onChanged }: { embedded?: bo
     if (opts?.refresh) setRefreshing(true);
     else setLoading(true);
     try {
-      const [pending, cfg] = await Promise.all([listStaffLoadRequests("pending"), getSellerPaymentConfig()]);
+      const [pending, cfg] = await Promise.all([listStaffLoadRequests("pending", audience), getSellerPaymentConfig(audience)]);
       setRows(pending);
       setFeeRupees(cfg.listing_fee_rupees || 0);
     } catch (err) {
@@ -205,7 +221,7 @@ export function SellerLoadRequestsPanel({ embedded, onChanged }: { embedded?: bo
       if (opts?.refresh) setRefreshing(false);
       else setLoading(false);
     }
-  }, [toast]);
+  }, [toast, audience]);
 
   useEffect(() => {
     void load();
@@ -335,7 +351,15 @@ export function SellerLoadRequestsPanel({ embedded, onChanged }: { embedded?: bo
   );
 }
 
-export function SellerWalletsPanel({ embedded, onChanged }: { embedded?: boolean; onChanged?: () => void }) {
+export function SellerWalletsPanel({
+  embedded,
+  onChanged,
+  audience = "provider",
+}: {
+  embedded?: boolean;
+  onChanged?: () => void;
+  audience?: "provider" | "user";
+}) {
   const { toast } = useAdmin();
   const [rows, setRows] = useState<SellerWalletRow[]>([]);
   const [providers, setProviders] = useState<AppDirectoryUser[]>([]);
@@ -352,12 +376,16 @@ export function SellerWalletsPanel({ embedded, onChanged }: { embedded?: boolean
   useEffect(() => {
     setLoading(true);
     void Promise.all([
-      listStaffSellerWallets().then(setRows),
-      listAppUsers().then((users) => setProviders(users.filter((u) => u.account_type === "provider"))),
+      listStaffSellerWallets(undefined, audience).then(setRows),
+      listAppUsers().then((users) =>
+        setProviders(
+          users.filter((u) => u.account_type === (audience === "user" ? "user" : "provider")),
+        ),
+      ),
     ])
       .catch((err) => toast(err instanceof Error ? err.message : "Could not load wallets."))
       .finally(() => setLoading(false));
-  }, [toast]);
+  }, [toast, audience]);
 
   const filteredProviders = providers.filter((p) => {
     const q = sellerSearch.trim().toLowerCase();
@@ -378,7 +406,7 @@ export function SellerWalletsPanel({ embedded, onChanged }: { embedded?: boolean
     }
     setDetailLoading(true);
     try {
-      const detail = await getStaffSellerWalletDetail(id);
+      const detail = await getStaffSellerWalletDetail(id, audience);
       let added = 0;
       let deducted = 0;
       for (const tx of detail.transactions) {
@@ -409,11 +437,11 @@ export function SellerWalletsPanel({ embedded, onChanged }: { embedded?: boolean
     }
     setBusy(true);
     try {
-      await staffAdjustSellerWallet(providerId.trim(), Number(adjustAmount), adjustNote.trim());
+      await staffAdjustSellerWallet(providerId.trim(), Number(adjustAmount), adjustNote.trim(), audience);
       toast("Balance adjusted.");
       setAdjustAmount("");
       setAdjustNote("");
-      setRows(await listStaffSellerWallets());
+      setRows(await listStaffSellerWallets(undefined, audience));
       await loadDetail(providerId.trim());
       onChanged?.();
     } catch (err) {

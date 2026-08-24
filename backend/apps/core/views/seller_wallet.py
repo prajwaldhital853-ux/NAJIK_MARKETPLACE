@@ -30,6 +30,13 @@ from apps.core.seller_wallet_service import (
 from apps.listings.models import Listing
 from apps.staff.authentication import StaffJWTAuthentication
 from apps.staff.permissions import IsStaffUser
+
+
+def _staff_account_type(request) -> str:
+    raw = (request.query_params.get("audience") or "provider").strip().lower()
+    if raw in {"user", "buyer", "buyers"}:
+        return AppUser.ACCOUNT_USER
+    return AppUser.ACCOUNT_PROVIDER
 from apps.verification.serializers import file_from_data_uri
 
 
@@ -217,11 +224,19 @@ class StaffSellerPaymentConfigView(APIView):
     permission_classes = [IsStaffUser]
 
     def get(self, request):
-        cfg = SellerPaymentConfig.get_solo()
+        cfg = SellerPaymentConfig.get_for_audience(
+            SellerPaymentConfig.AUDIENCE_USER
+            if _staff_account_type(request) == AppUser.ACCOUNT_USER
+            else SellerPaymentConfig.AUDIENCE_PROVIDER
+        )
         return Response(payment_config_payload(request, cfg))
 
     def patch(self, request):
-        cfg = SellerPaymentConfig.get_solo()
+        cfg = SellerPaymentConfig.get_for_audience(
+            SellerPaymentConfig.AUDIENCE_USER
+            if _staff_account_type(request) == AppUser.ACCOUNT_USER
+            else SellerPaymentConfig.AUDIENCE_PROVIDER
+        )
         if "listing_fee_rupees" in request.data:
             try:
                 cfg.listing_fee_rupees = max(0, int(request.data.get("listing_fee_rupees")))
@@ -264,7 +279,8 @@ class StaffLoadRequestListView(APIView):
 
     def get(self, request):
         status_filter = (request.query_params.get("status") or "").strip()
-        qs = SellerLoadRequest.objects.select_related("provider").order_by("-created_at")
+        account_type = _staff_account_type(request)
+        qs = SellerLoadRequest.objects.select_related("provider").filter(provider__account_type=account_type).order_by("-created_at")
         if status_filter in {
             SellerLoadRequest.STATUS_PENDING,
             SellerLoadRequest.STATUS_APPROVED,
@@ -433,17 +449,32 @@ class StaffPaymentsSummaryView(APIView):
     permission_classes = [IsStaffUser]
 
     def get(self, request):
-        from apps.accounts.models.referral import Referral
+        from apps.accounts.models.referral import ReferEarnConfig, Referral
 
-        pending_count = SellerLoadRequest.objects.filter(status=SellerLoadRequest.STATUS_PENDING).count()
-        wallet_agg = SellerWallet.objects.aggregate(count=Count("id"), total_paisa=Sum("balance_paisa"))
+        account_type = _staff_account_type(request)
+        audience = (
+            ReferEarnConfig.AUDIENCE_USER if account_type == AppUser.ACCOUNT_USER else ReferEarnConfig.AUDIENCE_PROVIDER
+        )
+        pending_count = SellerLoadRequest.objects.filter(
+            status=SellerLoadRequest.STATUS_PENDING,
+            provider__account_type=account_type,
+        ).count()
+        wallet_agg = SellerWallet.objects.filter(provider__account_type=account_type).aggregate(
+            count=Count("id"), total_paisa=Sum("balance_paisa")
+        )
         referral_credited_paisa = (
-            SellerWalletTransaction.objects.filter(kind=SellerWalletTransaction.KIND_REFERRAL_REWARD)
+            SellerWalletTransaction.objects.filter(
+                kind=SellerWalletTransaction.KIND_REFERRAL_REWARD,
+                wallet__provider__account_type=account_type,
+            )
             .aggregate(total=Sum("amount_paisa"))["total"]
             or 0
         )
         referral_earned_rupees = (
-            Referral.objects.filter(status=Referral.STATUS_EARNED).aggregate(total=Sum("reward_amount"))["total"] or 0
+            Referral.objects.filter(status=Referral.STATUS_EARNED, audience=audience).aggregate(total=Sum("reward_amount"))[
+                "total"
+            ]
+            or 0
         )
         admin_credit_paisa = (
             SellerWalletTransaction.objects.filter(kind=SellerWalletTransaction.KIND_ADMIN_CREDIT)
@@ -457,7 +488,7 @@ class StaffPaymentsSummaryView(APIView):
         )
         revenue_period = (request.query_params.get("revenue_period") or "month").strip().lower()
         wallet_series = _wallet_revenue_series(revenue_period)
-        cfg = SellerPaymentConfig.get_solo()
+        cfg = SellerPaymentConfig.get_for_audience(audience)
         wallet_count = wallet_agg["count"] or 0
         total_balance_paisa = wallet_agg["total_paisa"] or 0
         return Response(
@@ -494,7 +525,8 @@ class StaffSellerWalletListView(APIView):
 
     def get(self, request):
         provider_id = (request.query_params.get("provider") or "").strip()
-        qs = SellerWallet.objects.select_related("provider").order_by("-updated_at")
+        account_type = _staff_account_type(request)
+        qs = SellerWallet.objects.select_related("provider").filter(provider__account_type=account_type).order_by("-updated_at")
         if provider_id:
             qs = qs.filter(provider_id=provider_id)
         return Response(
@@ -517,10 +549,11 @@ class StaffSellerWalletDetailView(APIView):
     permission_classes = [IsStaffUser]
 
     def get(self, request, provider_id):
+        account_type = _staff_account_type(request)
         try:
-            provider = AppUser.objects.get(pk=provider_id, account_type=AppUser.ACCOUNT_PROVIDER)
+            provider = AppUser.objects.get(pk=provider_id, account_type=account_type)
         except AppUser.DoesNotExist:
-            return Response({"detail": "Provider not found."}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"detail": "Account not found."}, status=status.HTTP_404_NOT_FOUND)
         wallet = get_or_create_wallet(provider)
         txs = (
             SellerWalletTransaction.objects.filter(wallet=wallet)
@@ -546,10 +579,11 @@ class StaffSellerWalletAdjustView(APIView):
     permission_classes = [IsStaffUser]
 
     def post(self, request, provider_id):
+        account_type = _staff_account_type(request)
         try:
-            provider = AppUser.objects.get(pk=provider_id, account_type=AppUser.ACCOUNT_PROVIDER)
+            provider = AppUser.objects.get(pk=provider_id, account_type=account_type)
         except AppUser.DoesNotExist:
-            return Response({"detail": "Provider not found."}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"detail": "Account not found."}, status=status.HTTP_404_NOT_FOUND)
         try:
             amount_rupees = int(request.data.get("amount_rupees"))
         except (TypeError, ValueError):

@@ -144,8 +144,10 @@ class ProviderRegisterCompleteSerializer(serializers.Serializer):
             from apps.accounts.models.referral import validate_invite_code_for_registration
 
             try:
+                from apps.accounts.models import AppUser
+
                 attrs["referral_code"] = validate_invite_code_for_registration(
-                    ref_raw, attrs["phone"], attrs["email"]
+                    ref_raw, attrs["phone"], attrs["email"], AppUser.ACCOUNT_PROVIDER
                 )
             except DjangoValidationError as exc:
                 raise serializers.ValidationError({"referral_code": exc.messages}) from exc

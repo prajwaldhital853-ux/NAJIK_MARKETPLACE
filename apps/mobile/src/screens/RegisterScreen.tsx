@@ -22,6 +22,7 @@ export function RegisterScreen() {
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [referralCode, setReferralCode] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const { onInputFocus } = useKeyboardScroll();
@@ -48,6 +49,7 @@ export function RegisterScreen() {
         email: email.trim() || undefined,
         password,
         account_type: accountType,
+        ...(referralCode.trim() ? { referral_code: referralCode.trim() } : {}),
       });
     } catch (err) {
       setError(friendlyError(err, "Unable to create this account."));
@@ -74,6 +76,9 @@ export function RegisterScreen() {
           <Field icon="mail-outline" placeholder="Email (optional)" value={email} onChangeText={setEmail} onFocus={onInputFocus} />
         )}
         <Field icon="lock-closed-outline" placeholder="Password" value={password} onChangeText={setPassword} onFocus={onInputFocus} secure />
+        {!seller ? (
+          <Field icon="gift-outline" placeholder="Invite code (optional)" value={referralCode} onChangeText={setReferralCode} onFocus={onInputFocus} />
+        ) : null}
         <Text style={{ marginTop: 10, color: colors.muted, fontSize: 12 }}>
           {seller ? "Next you will verify OTP, then enter seller details." : "Next you will verify OTP, then sign in."}
         </Text>

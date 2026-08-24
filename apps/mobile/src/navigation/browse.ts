@@ -108,6 +108,10 @@ export function openInboxNoticeTarget(
   if (isProvider(user)) openSellerPage(navigation, "notifications");
 }
 
+export function openBuyerInviteEarn(navigation: { navigate: (...args: any[]) => void }) {
+  navigation.navigate("BuyerInviteEarn");
+}
+
 export function openBuyerReviewsGiven(navigation: { navigate: (...args: any[]) => void }) {
   navigateNamed(navigation, "BuyerReviewsGiven");
 }

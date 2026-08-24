@@ -80,6 +80,7 @@ export async function registerAccount(body: {
   email?: string;
   password: string;
   account_type: AccountType;
+  referral_code?: string;
 }) {
   const data = await api<AuthPayload>("/api/auth/register/", {
     method: "POST",

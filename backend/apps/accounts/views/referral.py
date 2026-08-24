@@ -18,9 +18,17 @@ from apps.staff.authentication import StaffJWTAuthentication
 from apps.staff.permissions import IsStaffUser
 
 
-def public_refer_config_payload():
-    cfg = ReferEarnConfig.get_solo()
+def _audience_param(raw: str | None) -> str:
+    value = (raw or ReferEarnConfig.AUDIENCE_PROVIDER).strip().lower()
+    if value in {"user", "buyer", "buyers"}:
+        return ReferEarnConfig.AUDIENCE_USER
+    return ReferEarnConfig.AUDIENCE_PROVIDER
+
+
+def public_refer_config_payload(audience: str = ReferEarnConfig.AUDIENCE_PROVIDER):
+    cfg = ReferEarnConfig.get_for_audience(audience)
     return {
+        "audience": cfg.audience,
         "is_active": cfg.is_active,
         "reward_amount": cfg.reward_amount,
         "reward_label": cfg.reward_label,
@@ -45,6 +53,29 @@ def referral_row_payload(row: Referral) -> dict:
 
 def refer_how_it_works(cfg: ReferEarnConfig) -> list[dict]:
     reward = cfg.reward_label
+    if cfg.audience == ReferEarnConfig.AUDIENCE_USER:
+        return [
+            {
+                "step": 1,
+                "title": "Share your one-time code",
+                "body": "Each code works for one friend only. After someone joins, you get a new code automatically.",
+            },
+            {
+                "step": 2,
+                "title": "Friend registers as buyer",
+                "body": "They must enter your code when signing up as a buyer on NAJIK.",
+            },
+            {
+                "step": 3,
+                "title": "Friend verifies phone",
+                "body": "They complete OTP verification on their account.",
+            },
+            {
+                "step": 4,
+                "title": "You receive your reward",
+                "body": f"Once verified, you receive {reward} in Payments.",
+            },
+        ]
     return [
         {
             "step": 1,
@@ -74,7 +105,8 @@ class PublicReferEarnConfigView(APIView):
     permission_classes = [AllowAny]
 
     def get(self, request):
-        return Response(public_refer_config_payload())
+        audience = _audience_param(request.query_params.get("audience"))
+        return Response(public_refer_config_payload(audience))
 
 
 class ReferEarnMeView(APIView):
@@ -83,38 +115,55 @@ class ReferEarnMeView(APIView):
 
     def get(self, request):
         user = request.user
-        if user.account_type != AppUser.ACCOUNT_PROVIDER:
-            return Response({"detail": "Refer & Earn is for service providers."}, status=status.HTTP_403_FORBIDDEN)
-        from apps.accounts.models.referral import _referrer_is_eligible, ensure_fresh_invite_code, sync_joined_referral_earnings
+        from apps.accounts.models.referral import (
+            _buyer_referrer_is_eligible,
+            _referrer_audience,
+            _referrer_is_eligible,
+            ensure_fresh_invite_code,
+            sync_joined_referral_earnings,
+        )
 
-        if not _referrer_is_eligible(user):
+        audience = _referrer_audience(user)
+        if audience == ReferEarnConfig.AUDIENCE_USER:
+            if user.account_type != AppUser.ACCOUNT_USER:
+                return Response({"detail": "Refer & Earn is not available for this account."}, status=status.HTTP_403_FORBIDDEN)
+            if not _buyer_referrer_is_eligible(user):
+                return Response(
+                    {"detail": "Verify your phone to unlock your invite code and earn rewards."},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+        elif user.account_type != AppUser.ACCOUNT_PROVIDER or not _referrer_is_eligible(user):
             return Response(
                 {"detail": "Complete verification to unlock your invite code and earn rewards."},
                 status=status.HTTP_403_FORBIDDEN,
             )
+
         user = AppUser.objects.get(pk=user.pk)
         sync_joined_referral_earnings(user)
         from apps.core.seller_wallet_service import sync_referral_wallet_credits
 
         sync_referral_wallet_credits(user)
         code = ensure_fresh_invite_code(user)
-        cfg = ReferEarnConfig.get_solo()
-        rows = list(Referral.objects.filter(referrer=user).select_related("referred").order_by("-joined_at")[:50])
+        cfg = ReferEarnConfig.get_for_audience(audience)
+        rows = list(
+            Referral.objects.filter(referrer=user, audience=audience).select_related("referred").order_by("-joined_at")[:50]
+        )
         earned_total = (
-            Referral.objects.filter(referrer=user, status=Referral.STATUS_EARNED).aggregate(total=Sum("reward_amount"))[
-                "total"
-            ]
+            Referral.objects.filter(referrer=user, audience=audience, status=Referral.STATUS_EARNED).aggregate(
+                total=Sum("reward_amount")
+            )["total"]
             or 0
         )
-        all_sent = Referral.objects.filter(referrer=user).count()
+        all_sent = Referral.objects.filter(referrer=user, audience=audience).count()
         joined_count = all_sent
-        earned_count = Referral.objects.filter(referrer=user, status=Referral.STATUS_EARNED).count()
+        earned_count = Referral.objects.filter(referrer=user, audience=audience, status=Referral.STATUS_EARNED).count()
         from apps.core.seller_wallet_service import get_or_create_wallet, paisa_to_label, wallet_balance_breakdown
 
         wallet = get_or_create_wallet(user)
         refer_remain_paisa, _loaded_paisa = wallet_balance_breakdown(wallet)
         return Response(
             {
+                "audience": audience,
                 "invite_code": code,
                 "is_active": cfg.is_active,
                 "reward_amount": cfg.reward_amount,
@@ -141,10 +190,12 @@ class StaffReferEarnConfigView(APIView):
     permission_classes = [IsStaffUser]
 
     def get(self, request):
-        return Response(public_refer_config_payload())
+        audience = _audience_param(request.query_params.get("audience"))
+        return Response(public_refer_config_payload(audience))
 
     def patch(self, request):
-        cfg = ReferEarnConfig.get_solo()
+        audience = _audience_param(request.query_params.get("audience"))
+        cfg = ReferEarnConfig.get_for_audience(audience)
         if "reward_amount" in request.data:
             try:
                 cfg.reward_amount = max(0, int(request.data.get("reward_amount")))
@@ -157,7 +208,7 @@ class StaffReferEarnConfigView(APIView):
         if "is_active" in request.data:
             cfg.is_active = bool(request.data.get("is_active"))
         cfg.save()
-        return Response(public_refer_config_payload())
+        return Response(public_refer_config_payload(audience))
 
 
 class StaffReferralListView(APIView):
@@ -165,7 +216,8 @@ class StaffReferralListView(APIView):
     permission_classes = [IsStaffUser]
 
     def get(self, request):
-        items = Referral.objects.select_related("referrer", "referred").order_by("-joined_at")[:300]
+        audience = _audience_param(request.query_params.get("audience"))
+        items = Referral.objects.select_related("referrer", "referred").filter(audience=audience).order_by("-joined_at")[:300]
         status_filter = (request.query_params.get("status") or "").strip()
         if status_filter in {Referral.STATUS_JOINED, Referral.STATUS_EARNED}:
             items = items.filter(status=status_filter)

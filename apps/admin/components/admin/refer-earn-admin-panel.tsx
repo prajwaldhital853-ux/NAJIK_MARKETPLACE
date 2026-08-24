@@ -12,7 +12,15 @@ import {
 import { formatNptDateTime } from "@/lib/format";
 import { useAdmin } from "@/lib/store";
 
-export function ReferEarnAdminPanel({ embedded, onChanged }: { embedded?: boolean; onChanged?: () => void }) {
+export function ReferEarnAdminPanel({
+  embedded,
+  onChanged,
+  audience = "provider",
+}: {
+  embedded?: boolean;
+  onChanged?: () => void;
+  audience?: "provider" | "user";
+}) {
   const { toast } = useAdmin();
   const [cfg, setCfg] = useState<ReferEarnConfig | null>(null);
   const [rows, setRows] = useState<StaffReferralRow[]>([]);
@@ -25,18 +33,18 @@ export function ReferEarnAdminPanel({ embedded, onChanged }: { embedded?: boolea
   useEffect(() => {
     void (async () => {
       try {
-        const config = await getReferEarnConfig();
+        const config = await getReferEarnConfig(audience);
         setCfg(config);
         setRewardAmount(String(config.reward_amount));
         setRewardLabel(config.reward_label);
         setDescription(config.description);
         setActive(config.is_active);
-        setRows(await listStaffReferrals());
+        setRows(await listStaffReferrals(undefined, audience));
       } catch (err) {
         toast(err instanceof Error ? err.message : "Could not load Refer & Earn.");
       }
     })();
-  }, [toast]);
+  }, [toast, audience]);
 
   async function save() {
     setBusy(true);
@@ -46,7 +54,7 @@ export function ReferEarnAdminPanel({ embedded, onChanged }: { embedded?: boolea
         reward_label: rewardLabel.trim(),
         description: description.trim(),
         is_active: active,
-      });
+      }, audience);
       setCfg(next);
       toast("Refer & Earn settings saved.");
       onChanged?.();
@@ -59,9 +67,11 @@ export function ReferEarnAdminPanel({ embedded, onChanged }: { embedded?: boolea
 
   return (
     <section className={`${embedded ? "mt-0" : "mt-4"} rounded border border-line bg-card p-4`}>
-      <h2 className="text-[13px] font-semibold text-ink">Refer & Earn</h2>
+      <h2 className="text-[13px] font-semibold text-ink">{audience === "user" ? "Buyer Refer & Earn" : "Seller Refer & Earn"}</h2>
       <p className="mt-1 text-[12px] text-muted">
-        Service providers share a code; you earn on-system when friends join and post their first live listing. No in-app payment.
+        {audience === "user"
+          ? "Buyers share a code; you earn on-system when friends join and verify their phone. No in-app payment."
+          : "Service providers share a code; you earn on-system when friends join and post their first live listing. No in-app payment."}
       </p>
       <div className="mt-3 grid gap-3 md:grid-cols-2">
         <Field label="Reward amount (Rs.)">

@@ -1,6 +1,7 @@
 import mimetypes
 import re
 
+from django.core.exceptions import ValidationError
 from django.http import FileResponse
 from rest_framework import status
 from rest_framework.response import Response
@@ -23,6 +24,7 @@ class MePhotoPatchSerializer(serializers.Serializer):
     address = serializers.CharField(required=False, allow_blank=True, max_length=255)
     allow_buyer_calls = serializers.BooleanField(required=False)
     hide_phone_on_ads = serializers.BooleanField(required=False)
+    referral_code = serializers.CharField(required=False, allow_blank=True, max_length=32)
 
     def validate_photo_uri(self, value):
         return file_from_data_uri(value, "avatar")
@@ -36,7 +38,15 @@ class MePhotoPatchSerializer(serializers.Serializer):
         return phone
 
     def validate(self, attrs):
-        keys = ("photo_uri", "full_name", "phone", "address", "allow_buyer_calls", "hide_phone_on_ads")
+        keys = (
+            "photo_uri",
+            "full_name",
+            "phone",
+            "address",
+            "allow_buyer_calls",
+            "hide_phone_on_ads",
+            "referral_code",
+        )
         if not any(key in self.initial_data for key in keys):
             raise serializers.ValidationError("Nothing to update.")
         return attrs
@@ -56,6 +66,7 @@ class MeView(APIView):
         serializer = MePhotoPatchSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
+        referral_raw = (data.get("referral_code") or "").strip()
         if user.account_type == user.ACCOUNT_PROVIDER and "photo_uri" in data:
             return Response(
                 {"detail": "Service providers update their photo from profile edit, which admin must verify."},
@@ -88,10 +99,28 @@ class MeView(APIView):
         if "hide_phone_on_ads" in data:
             user.hide_phone_on_ads = bool(data.get("hide_phone_on_ads"))
             updates.append("hide_phone_on_ads")
-        if not updates:
+        if not updates and not referral_raw:
             return Response({"detail": "Nothing to update."}, status=status.HTTP_400_BAD_REQUEST)
-        user.save(update_fields=updates)
+        if updates:
+            user.save(update_fields=updates)
         user = AppUser.objects.select_related("provider_application").get(pk=user.pk)
+        if referral_raw:
+            if user.account_type != AppUser.ACCOUNT_USER:
+                return Response({"detail": "Invite codes apply to buyer accounts only."}, status=status.HTTP_400_BAD_REQUEST)
+            if not (user.phone or "").strip():
+                return Response({"referral_code": ["Add your phone number before using an invite code."]}, status=status.HTTP_400_BAD_REQUEST)
+            from apps.accounts.models.referral import Referral, apply_referral_code, generate_referral_code, qualify_referral_for_buyer
+
+            if Referral.objects.filter(referred=user).exists():
+                return Response({"referral_code": ["This account already used an invite code."]}, status=status.HTTP_400_BAD_REQUEST)
+            try:
+                apply_referral_code(user, referral_raw)
+            except ValidationError as exc:
+                message = exc.messages[0] if getattr(exc, "messages", None) else str(exc)
+                return Response({"referral_code": [message]}, status=status.HTTP_400_BAD_REQUEST)
+            generate_referral_code(user)
+            user = AppUser.objects.select_related("provider_application").get(pk=user.pk)
+            qualify_referral_for_buyer(user)
         return Response(AppUserPublicSerializer(user, context={"request": request}).data)
 
 

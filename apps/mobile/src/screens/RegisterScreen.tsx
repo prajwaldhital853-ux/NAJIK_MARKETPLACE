@@ -80,7 +80,7 @@ export function RegisterScreen() {
           <Field icon="gift-outline" placeholder="Invite code (optional)" value={referralCode} onChangeText={setReferralCode} onFocus={onInputFocus} />
         ) : null}
         <Text style={{ marginTop: 10, color: colors.muted, fontSize: 12 }}>
-          {seller ? "Next you will verify OTP, then enter seller details." : "Next you will verify your phone with OTP before using NAJIK."}
+          {seller ? "Next you will verify OTP, then enter seller details." : "Next you will verify your phone with OTP. Your friend earns after your phone is verified."}
         </Text>
         {error ? <Text style={{ marginTop: 10, color: colors.red }}>{error}</Text> : null}
         <PressScale

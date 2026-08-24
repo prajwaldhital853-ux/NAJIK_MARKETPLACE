@@ -30,7 +30,7 @@ type AuthContextValue = {
   awaitingSignupOtp: boolean;
   login: (identifier: string, password: string, accountType?: AccountType) => Promise<void>;
   loginGoogle: (payload: { idToken?: string; code?: string; redirectUri?: string }, accountType?: AccountType) => Promise<void>;
-  completeBuyerDetails: (payload: { full_name: string; phone: string; address: string }) => Promise<void>;
+  completeBuyerDetails: (payload: { full_name: string; phone: string; address: string; referral_code?: string }) => Promise<void>;
   register: (payload: {
     phone?: string;
     email?: string;

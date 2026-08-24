@@ -112,12 +112,27 @@ export async function loginWithGoogle(
   return persist(data);
 }
 
-export async function completeBuyerProfile(payload: { full_name: string; phone: string; address: string }) {
+export async function completeBuyerProfile(payload: {
+  full_name: string;
+  phone: string;
+  address: string;
+  referral_code?: string;
+}) {
   return withAppAuth((token) =>
     api<AppUser>("/api/auth/me/", {
       method: "PATCH",
       token,
       body: JSON.stringify(payload),
+    }),
+  );
+}
+
+export async function applyBuyerInviteCode(referral_code: string) {
+  return withAppAuth((token) =>
+    api<AppUser>("/api/auth/me/", {
+      method: "PATCH",
+      token,
+      body: JSON.stringify({ referral_code }),
     }),
   );
 }

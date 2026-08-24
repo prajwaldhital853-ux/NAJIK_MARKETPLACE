@@ -19,6 +19,7 @@ export function BuyerProfileSetupScreen() {
   const [fullName, setFullName] = useState(user?.full_name || "");
   const [phone, setPhone] = useState(user?.phone || "");
   const [address, setAddress] = useState(user?.address || "");
+  const [referralCode, setReferralCode] = useState("");
   const [picker, setPicker] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -54,6 +55,7 @@ export function BuyerProfileSetupScreen() {
         full_name: fullName.trim(),
         phone: phone.replace(/\s/g, ""),
         address: address.trim(),
+        ...(referralCode.trim() ? { referral_code: referralCode.trim() } : {}),
       });
     } catch (err) {
       setError(friendlyError(err, "Could not save your details."));
@@ -85,6 +87,17 @@ export function BuyerProfileSetupScreen() {
           />
         </View>
         <Field icon="location-outline" placeholder="Address" value={address} onChangeText={setAddress} onFocus={onInputFocus} />
+        <Field
+          icon="gift-outline"
+          placeholder="Friend's invite code (optional)"
+          value={referralCode}
+          onChangeText={setReferralCode}
+          onFocus={onInputFocus}
+          autoCapitalize="characters"
+        />
+        <Text style={{ marginTop: 8, color: colors.muted, fontSize: 12, lineHeight: 18 }}>
+          Each code works for one person only. Your friend earns the reward in Payments after you verify your phone.
+        </Text>
         <View style={{ flexDirection: "row", gap: 8, marginTop: 10 }}>
           <PressScale onPress={() => void useLocation()} style={{ flex: 1, borderWidth: 1, borderColor: GREEN, borderRadius: 12, height: 44, alignItems: "center", justifyContent: "center" }}>
             <Text style={{ color: GREEN, fontWeight: "800", fontSize: 12 }}>Use my current location</Text>
@@ -133,17 +146,27 @@ function Field({
   value,
   onChangeText,
   onFocus,
+  autoCapitalize,
 }: {
   icon: keyof typeof Ionicons.glyphMap;
   placeholder: string;
   value: string;
   onChangeText: (v: string) => void;
   onFocus: () => void;
+  autoCapitalize?: "none" | "sentences" | "words" | "characters";
 }) {
   return (
     <View style={{ marginTop: 12, flexDirection: "row", alignItems: "center", borderWidth: 1, borderColor: colors.border, borderRadius: 12, paddingHorizontal: 12, height: 50, gap: 8 }}>
       <Ionicons name={icon} size={18} color={GREEN} />
-      <TextInput placeholder={placeholder} placeholderTextColor={colors.muted} value={value} onChangeText={onChangeText} onFocus={onFocus} style={{ flex: 1 }} />
+      <TextInput
+        placeholder={placeholder}
+        placeholderTextColor={colors.muted}
+        value={value}
+        onChangeText={onChangeText}
+        onFocus={onFocus}
+        autoCapitalize={autoCapitalize}
+        style={{ flex: 1 }}
+      />
     </View>
   );
 }

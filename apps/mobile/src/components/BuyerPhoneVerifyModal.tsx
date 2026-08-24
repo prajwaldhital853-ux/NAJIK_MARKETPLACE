@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { ActivityIndicator, Modal, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { friendlyError } from "../api";
-import { requestOtp } from "../authApi";
+import { applyBuyerInviteCode, requestOtp } from "../authApi";
 import { useAuth } from "../context/AuthContext";
 import { PressScale } from "./PressScale";
 import { colors } from "../theme";
@@ -14,6 +14,7 @@ export function BuyerPhoneVerifyModal() {
   const { user, verifyContact } = useAuth();
   const phone = user?.phone || "";
   const [code, setCode] = useState("");
+  const [referralCode, setReferralCode] = useState("");
   const [error, setError] = useState("");
   const [info, setInfo] = useState("Use code 1234 for now.");
   const [verifying, setVerifying] = useState(false);
@@ -45,6 +46,9 @@ export function BuyerPhoneVerifyModal() {
     setError("");
     setVerifying(true);
     try {
+      if (referralCode.trim()) {
+        await applyBuyerInviteCode(referralCode.trim());
+      }
       await verifyContact("phone", code.trim() || "1234");
     } catch (err) {
       setError(friendlyError(err, "Invalid code."));
@@ -61,6 +65,25 @@ export function BuyerPhoneVerifyModal() {
           <Text style={{ color: colors.muted, marginTop: 8, lineHeight: 20 }}>
             NAJIK needs to confirm <Text style={{ fontWeight: "800", color: "#111827" }}>+977 {phone}</Text> before you can continue.
             This step is required and cannot be skipped.
+          </Text>
+          <TextInput
+            value={referralCode}
+            onChangeText={setReferralCode}
+            placeholder="Friend's invite code (optional)"
+            autoCapitalize="characters"
+            editable={!verifying}
+            style={{
+              marginTop: 14,
+              borderWidth: 1,
+              borderColor: colors.border,
+              borderRadius: 12,
+              height: 46,
+              paddingHorizontal: 14,
+              fontSize: 14,
+            }}
+          />
+          <Text style={{ marginTop: 6, color: colors.muted, fontSize: 11, lineHeight: 16 }}>
+            One code per account. Your friend earns after this phone is verified.
           </Text>
           <TextInput
             value={code}

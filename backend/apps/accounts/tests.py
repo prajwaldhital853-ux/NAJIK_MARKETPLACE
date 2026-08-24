@@ -473,6 +473,74 @@ class AuthFlowTests(TestCase):
         self.assertEqual(patched.data["phone"], p)
 
     @override_settings(GOOGLE_CLIENT_IDS=["test-client"])
+    def test_google_buyer_invite_code_on_profile_then_otp_rewards_referrer(self):
+        from unittest.mock import patch
+
+        from apps.accounts.models.referral import ReferEarnConfig, Referral
+        from apps.core.models.seller_wallet import SellerWalletTransaction
+
+        referrer = AppUser.objects.create_user(
+            username=email("ref"),
+            email=email("ref"),
+            phone=phone(),
+            password=PASS,
+            full_name="Referrer",
+            account_type=AppUser.ACCOUNT_USER,
+            phone_verified=True,
+            account_status=AppUser.STATUS_ACTIVE,
+        )
+        from apps.accounts.models.referral import generate_referral_code
+
+        invite_code = generate_referral_code(referrer)
+
+        with patch("apps.accounts.views.google._google_payload", return_value=(
+            {
+                "sub": "google-buyer-invite",
+                "email": email("newbuyer"),
+                "email_verified": True,
+                "name": "New Buyer",
+            },
+            None,
+        )):
+            res = self.client.post(
+                "/api/auth/google/",
+                {"id_token": "tok", "account_type": "user"},
+                format="json",
+            )
+        self.assertEqual(res.status_code, 200, res.data)
+        self.auth(res.data["access"])
+        referred_phone = phone()
+        patched = self.client.patch(
+            "/api/auth/me/",
+            {
+                "full_name": "Buyer Name",
+                "phone": referred_phone,
+                "address": "Kathmandu",
+                "referral_code": invite_code,
+            },
+            format="json",
+        )
+        self.assertEqual(patched.status_code, 200, patched.data)
+        self.assertTrue(Referral.objects.filter(referrer=referrer, referred__phone=referred_phone).exists())
+        ok = self.client.post(
+            "/api/auth/otp/verify/",
+            {"purpose": "phone", "identifier": referred_phone, "code": "1234"},
+            format="json",
+        )
+        self.assertEqual(ok.status_code, 200, ok.data)
+        self.assertTrue(ok.data["phone_verified"])
+        ref = Referral.objects.get(referrer=referrer, referred__phone=referred_phone)
+        self.assertEqual(ref.status, Referral.STATUS_EARNED)
+        cfg = ReferEarnConfig.get_for_audience(ReferEarnConfig.AUDIENCE_USER)
+        self.assertTrue(
+            SellerWalletTransaction.objects.filter(
+                kind=SellerWalletTransaction.KIND_REFERRAL_REWARD,
+                note__contains=f"ref:{ref.pk}",
+            ).exists()
+        )
+        self.assertEqual(ref.reward_amount, cfg.reward_amount)
+
+    @override_settings(GOOGLE_CLIENT_IDS=["test-client"])
     def test_google_provider_cannot_use_buyer_page(self):
         from unittest.mock import patch
 

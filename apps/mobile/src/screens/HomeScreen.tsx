@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { useCallback, useState } from "react";
-import { Alert, ScrollView, Text, View } from "react-native";
+import { Alert, ScrollView, Text, View, ActivityIndicator } from "react-native";
 import { AppHeader } from "../components/AppHeader";
 import { AppNoticeHost } from "../components/AppNoticeHost";
 import { AuthImage } from "../components/AuthImage";
@@ -14,7 +14,7 @@ import { AccountStatusCard, ListingAdminNotesCard, StaffWarningCard } from "../c
 import { useAuth } from "../context/AuthContext";
 import { isPendingProvider, isProvider, isRejectedProvider, isVerifiedProvider } from "../demo";
 import { discountedAmount, listingDiscountPercent } from "../data/liveListings";
-import { fetchMyListingsPaginated, fetchMyListings, deleteMyListing, type ApiListing } from "../listingsApi";
+import { fetchMyListings, deleteMyListing, type ApiListing } from "../listingsApi";
 import { subscribeListingsChanged } from "../listingsRefresh";
 import { openListing } from "../navigation/browse";
 import { colors, shadow } from "../theme";
@@ -116,7 +116,12 @@ function SellerHomeScreen() {
           ) : null}
         </View>
 
-        {verified && liveHomePosts.length ? (
+        {loading ? (
+          <View style={{ backgroundColor: colors.white, borderRadius: 16, padding: 28, alignItems: "center", ...shadow.card }}>
+            <ActivityIndicator color={colors.green} />
+            <Text style={{ color: colors.muted, marginTop: 10, textAlign: "center" }}>Loading your listings…</Text>
+          </View>
+        ) : verified && liveHomePosts.length ? (
           liveHomePosts.slice(0, 4).map((item) => <RecentPostCard key={item.id} item={item} />)
         ) : (
           <View style={{ backgroundColor: colors.white, borderRadius: 16, padding: 18, ...shadow.card }}>

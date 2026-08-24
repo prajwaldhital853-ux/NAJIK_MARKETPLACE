@@ -1,163 +1,157 @@
-import React, { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, FlatList, RefreshControl, Text, View } from "react-native";
-import { type CatalogItem } from "../data/catalog";
-import { catalogFromFeed, type ApiListing } from "../listingsApi";
+import type { CatalogItem } from "../data/catalog";
+import { catalogFromFeed } from "../data/feedOrdering";
+import type { ApiListing, FeedResponse } from "../listingsApi";
 import { colors, shadow } from "../theme";
 import { ClassifiedGridCard, LISTING_CARD_W } from "./ClassifiedCard";
+import { ProductSkeleton } from "./ProductSkeleton";
 
 const GAP = 11;
+const PAGE_SIZE = 10;
+
+type PageResponse = FeedResponse | ApiListing[] | { results?: ApiListing[]; has_next?: boolean };
 
 type InfiniteListingGridProps = {
-  fetchData: (page: number, page_size: number) => Promise<{ results: ApiListing[]; has_next: boolean }>;
-  initialData?: CatalogItem[];
-  showPromoted?: boolean;
+  fetchData: (page: number, pageSize: number) => Promise<PageResponse>;
   emptyText?: string;
-  numColumns?: number;
+  showPromoted?: boolean;
   pageSize?: number;
 };
 
+function normalizePage(raw: PageResponse, pageSize: number) {
+  const results = Array.isArray(raw) ? raw : Array.isArray(raw?.results) ? raw.results : [];
+  const hasNext = Array.isArray(raw) ? results.length >= pageSize : Boolean(raw?.has_next);
+  return { items: catalogFromFeed(results), hasNext };
+}
+
 export function InfiniteListingGrid({
   fetchData,
-  initialData = [],
-  showPromoted = false,
   emptyText = "No listings found.",
-  numColumns = 2,
-  pageSize = 20,
+  showPromoted = false,
+  pageSize = PAGE_SIZE,
 }: InfiniteListingGridProps) {
-  const [data, setData] = useState<CatalogItem[]>(initialData);
-  const [loading, setLoading] = useState(false);
+  const [data, setData] = useState<CatalogItem[]>([]);
+  const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [page, setPage] = useState(1);
-  const [hasNext, setHasNext] = useState(true);
   const [error, setError] = useState("");
+  const fetchRef = useRef(fetchData);
+  const inFlight = useRef(false);
+  const pageRef = useRef(1);
+  const hasNextRef = useRef(true);
+  const idsRef = useRef(new Set<string>());
 
-  const loadPage = useCallback(async (pageNum: number, isRefresh = false) => {
-    if (!hasNext && !isRefresh) return;
-    
-    try {
-      if (isRefresh) {
-        setRefreshing(true);
+  fetchRef.current = fetchData;
+
+  const load = useCallback(
+    async (reset: boolean) => {
+      if (inFlight.current) return;
+      if (!reset && !hasNextRef.current) return;
+      inFlight.current = true;
+      if (reset) {
         setError("");
-      } else if (pageNum === 1) {
-        setLoading(true);
-        setError("");
+        if (!data.length) setLoading(true);
       } else {
         setLoadingMore(true);
       }
-
-      const response = await fetchData(pageNum, pageSize);
-      const items = catalogFromFeed(response.results);
-
-      if (isRefresh || pageNum === 1) {
-        setData(items);
-        setPage(2);
-      } else {
-        setData((prev) => [...prev, ...items]);
-        setPage(pageNum + 1);
+      try {
+        const page = reset ? 1 : pageRef.current;
+        const raw = await fetchRef.current(page, pageSize);
+        const { items, hasNext } = normalizePage(raw, pageSize);
+        if (reset) {
+          idsRef.current = new Set(items.map((item) => item.id));
+          setData(items);
+          pageRef.current = 2;
+        } else {
+          setData((prev) => {
+            const next = [...prev];
+            for (const item of items) {
+              if (idsRef.current.has(item.id)) continue;
+              idsRef.current.add(item.id);
+              next.push(item);
+            }
+            return next;
+          });
+          pageRef.current = page + 1;
+        }
+        hasNextRef.current = hasNext && items.length > 0;
+        setError("");
+      } catch {
+        if (reset && !data.length) {
+          setError("Could not load listings. Pull down to retry.");
+        }
+      } finally {
+        inFlight.current = false;
+        setLoading(false);
+        setLoadingMore(false);
+        setRefreshing(false);
       }
-      
-      setHasNext(response.has_next);
-    } catch (err) {
-      setError("Failed to load listings. Pull to retry.");
-      if (pageNum === 1 && data.length === 0) {
-        setData([]);
-      }
-    } finally {
-      setLoading(false);
-      setLoadingMore(false);
-      setRefreshing(false);
-    }
-  }, [fetchData, pageSize, hasNext, data.length]);
-
-  const loadMore = useCallback(() => {
-    if (!loadingMore && hasNext) {
-      void loadPage(page);
-    }
-  }, [loadPage, page, loadingMore, hasNext]);
-
-  const refresh = useCallback(() => {
-    setHasNext(true);
-    void loadPage(1, true);
-  }, [loadPage]);
-
-  useEffect(() => {
-    if (initialData.length === 0) {
-      void loadPage(1);
-    } else {
-      setData(initialData);
-    }
-  }, [loadPage, initialData]);
-
-  const renderItem = useCallback(
-    ({ item, index }: { item: CatalogItem; index: number }) => {
-      const isLeft = index % numColumns === 0;
-      return (
-        <View style={{ marginLeft: isLeft ? 0 : GAP }}>
-          <ClassifiedGridCard item={item} width={LISTING_CARD_W} showPromoted={showPromoted} />
-        </View>
-      );
     },
-    [numColumns, showPromoted],
+    [pageSize, data.length],
   );
 
-  const renderFooter = useCallback(() => {
-    if (loadingMore) {
-      return (
-        <View style={{ padding: 20, alignItems: "center" }}>
-          <ActivityIndicator size="small" color={colors.primary} />
-        </View>
-      );
-    }
-    return null;
-  }, [loadingMore]);
+  useEffect(() => {
+    pageRef.current = 1;
+    hasNextRef.current = true;
+    idsRef.current = new Set();
+    void load(true);
+    // First paint only; later pages go through onEndReached / pull-to-refresh.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  const renderEmpty = useCallback(() => {
-    if (loading) {
-      return (
-        <View style={{ padding: 40, alignItems: "center" }}>
-          <ActivityIndicator size="large" color={colors.primary} />
-        </View>
-      );
-    }
-    
-    if (error) {
-      return (
-        <View style={{ backgroundColor: "#fff", borderRadius: 16, padding: 18, margin: 16, ...shadow.card }}>
-          <Text style={{ color: colors.red, textAlign: "center", fontWeight: "600" }}>{error}</Text>
-        </View>
-      );
-    }
+  const onEndReached = useCallback(() => {
+    if (loading || loadingMore || !hasNextRef.current || !data.length) return;
+    void load(false);
+  }, [load, loading, loadingMore]);
 
-    return (
-      <View style={{ backgroundColor: "#fff", borderRadius: 16, padding: 18, margin: 16, ...shadow.card }}>
-        <Text style={{ color: colors.muted, textAlign: "center" }}>{emptyText}</Text>
-      </View>
-    );
-  }, [loading, error, emptyText]);
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    hasNextRef.current = true;
+    void load(true);
+  }, [load]);
 
   return (
     <FlatList
       data={data}
-      renderItem={renderItem}
+      numColumns={2}
       keyExtractor={(item) => item.id}
-      numColumns={numColumns}
-      contentContainerStyle={{ padding: 16, paddingBottom: 36 }}
+      renderItem={({ item }) => (
+        <View style={{ width: LISTING_CARD_W, marginBottom: GAP }}>
+          <ClassifiedGridCard item={item} width={LISTING_CARD_W} showPromoted={showPromoted} />
+        </View>
+      )}
+      columnWrapperStyle={{ justifyContent: "space-between" }}
+      contentContainerStyle={{ padding: 16, paddingBottom: 36, flexGrow: 1 }}
       showsVerticalScrollIndicator={false}
-      onEndReached={loadMore}
-      onEndReachedThreshold={0.3}
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} />}
-      ListFooterComponent={renderFooter}
-      ListEmptyComponent={renderEmpty}
-      removeClippedSubviews={true}
-      maxToRenderPerBatch={10}
-      windowSize={10}
-      initialNumToRender={8}
-      getItemLayout={(data, index) => ({
-        length: LISTING_CARD_W * 0.68 + 80, // Approximate item height
-        offset: (LISTING_CARD_W * 0.68 + 80) * Math.floor(index / numColumns),
-        index,
-      })}
+      onEndReached={onEndReached}
+      onEndReachedThreshold={0.4}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+      ListFooterComponent={
+        loadingMore ? (
+          <View style={{ paddingVertical: 18, alignItems: "center" }}>
+            <ActivityIndicator color={colors.green} />
+            <Text style={{ color: colors.muted, marginTop: 8, fontSize: 12 }}>Loading more…</Text>
+          </View>
+        ) : null
+      }
+      ListEmptyComponent={
+        loading ? (
+          <ProductSkeleton count={6} />
+        ) : error ? (
+          <View style={{ backgroundColor: "#fff", borderRadius: 16, padding: 18, ...shadow.card }}>
+            <Text style={{ color: colors.red, textAlign: "center", fontWeight: "600" }}>{error}</Text>
+          </View>
+        ) : (
+          <View style={{ backgroundColor: "#fff", borderRadius: 16, padding: 18, ...shadow.card }}>
+            <Text style={{ color: colors.muted, textAlign: "center" }}>{emptyText}</Text>
+          </View>
+        )
+      }
+      removeClippedSubviews
+      maxToRenderPerBatch={8}
+      windowSize={8}
+      initialNumToRender={6}
     />
   );
 }

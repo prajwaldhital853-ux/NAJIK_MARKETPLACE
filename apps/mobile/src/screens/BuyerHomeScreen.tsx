@@ -1,12 +1,13 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
-import { useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, Dimensions, ScrollView, Text, TextInput, View } from "react-native";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { ActivityIndicator, Dimensions, FlatList, Text, TextInput, View } from "react-native";
 import { AppHeader } from "../components/AppHeader";
-import { ListingGrid } from "../components/ClassifiedCard";
+import { ClassifiedGridCard, LISTING_CARD_W } from "../components/ClassifiedCard";
 import { useAppRefreshControl } from "../components/KeyboardScreen";
 import { MarketplaceSection } from "../components/MarketplaceSection";
 import { PressScale } from "../components/PressScale";
+import { ProductSkeleton } from "../components/ProductSkeleton";
 import { StaffWarningCard, AccountStatusCard } from "../components/StaffWarningBanner";
 import { useAuth } from "../context/AuthContext";
 import { useBuyerLocation } from "../context/BuyerLocationContext";
@@ -16,12 +17,11 @@ import { listingsToCatalog, liveListingById } from "../data/liveListings";
 import { HomeBannerCarousel } from "../components/HomeBannerCarousel";
 import { UrgentSellSection } from "../components/UrgentSellSection";
 import { fetchListingFeed, fetchListingFeedPaginated, fetchSavedListings, type ApiListing } from "../listingsApi";
-import { getCachedHomeData, setCachedHomeData, clearHomeCache } from "../cache/homeCache";
+import { getCachedHomeData, setCachedHomeData } from "../cache/homeCache";
 import { getRecentViewIds } from "../listingViews";
 import { subscribeListingsChanged } from "../listingsRefresh";
 import { openCategory, openHomeSection } from "../navigation/browse";
 import { colors, shadow } from "../theme";
-import { InfiniteListingGrid } from "../components/InfiniteListingGrid";
 
 const { width: SCREEN_W } = Dimensions.get("window");
 const PAD = 16;
@@ -29,7 +29,7 @@ const GAP = 11;
 const TILE = (SCREEN_W - PAD * 2 - GAP * 3) / 4;
 const GREEN = "#1B7D2C";
 const SECTION_LIMIT = 10;
-const QUICK_FEED_LIMIT = 20;
+const PAGE_SIZE = 10;
 
 const categories: { label: string; icon: keyof typeof Ionicons.glyphMap; bg: string; color: string }[] = [
   { label: "Property", icon: "home", bg: "#E8F1FE", color: "#1D4ED8" },
@@ -52,6 +52,17 @@ const TREND_CHIPS: { key: string; label: string; catalog?: CatalogKey }[] = [
   { key: "electronics", label: "Electronics", catalog: "electronics" },
 ];
 
+function mergeUnique(prev: CatalogItem[], extra: CatalogItem[]) {
+  const seen = new Set(prev.map((row) => row.id));
+  const out = [...prev];
+  for (const row of extra) {
+    if (seen.has(row.id)) continue;
+    seen.add(row.id);
+    out.push(row);
+  }
+  return out;
+}
+
 export function BuyerHomeScreen() {
   const navigation = useNavigation<any>();
   const { user } = useAuth();
@@ -66,13 +77,12 @@ export function BuyerHomeScreen() {
   const [trendChip, setTrendChip] = useState("all");
   const [loadingHome, setLoadingHome] = useState(true);
   const [latestPage, setLatestPage] = useState(1);
-  const [latestHasMore, setLatestHasMore] = useState(true);
+  const [latestHasMore, setLatestHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
+  const loadingMoreRef = useRef(false);
 
   async function loadSections() {
     const base = { ...feedParams };
-    
-    // Load cached data first to show immediately
     const cachedData = getCachedHomeData();
     if (cachedData) {
       setLatestRows(cachedData.latest);
@@ -85,52 +95,60 @@ export function BuyerHomeScreen() {
     }
 
     try {
-      // Load minimal data first (only 10 items for immediate display)
-      const quick = await fetchListingFeed({ ...base, sort: "new", page_size: 10 }).catch(() => [] as ApiListing[]);
-      const quickItems = catalogFromFeed(quick);
-      if (quickItems.length) {
-        setLatestRows(quickItems);
-        setTrendingRows(quickItems);
-        setRecommendedRows(quickItems.slice(0, SECTION_LIMIT));
+      const firstPage = await fetchListingFeedPaginated({ ...base, sort: "new", page: 1, page_size: PAGE_SIZE }).catch(
+        () => ({ results: [] as ApiListing[], page: 1, page_size: PAGE_SIZE, has_next: false }),
+      );
+      const firstItems = catalogFromFeed(firstPage.results);
+      setLatestRows(firstItems);
+      setLatestPage(1);
+      setLatestHasMore(Boolean(firstPage.has_next));
+      if (firstItems.length) {
+        setTrendingRows((prev) => (prev.length ? prev : firstItems));
+        setRecommendedRows((prev) => (prev.length ? prev : firstItems.slice(0, SECTION_LIMIT)));
         setLoadingHome(false);
-        
-        // Cache this quick data
         setCachedHomeData({
-          latest: quickItems,
-          trending: quickItems,
-          recommended: quickItems.slice(0, SECTION_LIMIT),
+          latest: firstItems,
+          trending: firstItems,
+          recommended: firstItems.slice(0, SECTION_LIMIT),
           verified: [],
         });
       }
 
-      // Load full data in background without blocking UI
-      const [popular, verified, latest, saved, recentIds] = await Promise.all([
-        fetchListingFeed({ ...base, sort: "popular", page_size: 20 }).catch(() => [] as ApiListing[]),
-        fetchListingFeed({ ...base, verified: true, sort: "new", page_size: 15 }).catch(() => [] as ApiListing[]),
-        fetchListingFeed({ ...base, sort: "new", page_size: 20 }).catch(() => [] as ApiListing[]),
+      const [popular, verified, saved, recentIds] = await Promise.all([
+        fetchListingFeed({ ...base, sort: "popular", page_size: PAGE_SIZE }).catch(() => [] as ApiListing[]),
+        fetchListingFeed({ ...base, verified: true, sort: "new", page_size: PAGE_SIZE }).catch(() => [] as ApiListing[]),
         user ? fetchSavedListings().catch(() => [] as ApiListing[]) : Promise.resolve([] as ApiListing[]),
         getRecentViewIds(),
       ]);
-    const popularItems = catalogFromFeed(popular);
-    const verifiedItems = catalogFromFeed(verified).filter((item) => item.verified);
-    const latestItems = catalogFromFeed(latest);
-    const savedItems = listingsToCatalog(saved);
-    const exclude = new Set(savedItems.map((row) => row.id));
-    const seedItems: CatalogItem[] = [];
-    for (const id of recentIds) {
-      const hit = liveListingById(id) || popularItems.find((row) => row.id === id) || latestItems.find((row) => row.id === id);
-      if (hit) seedItems.push(hit);
-    }
-    for (const row of savedItems) {
-      if (!seedItems.some((s) => s.id === row.id)) seedItems.push(row);
-    }
-    const pool = [...popularItems, ...latestItems];
-    const recommended = buildRecommendedFromFeed(latestItems, pool, seedItems, exclude, SECTION_LIMIT);
+      const popularItems = catalogFromFeed(popular);
+      const verifiedItems = catalogFromFeed(verified).filter((item) => item.verified);
+      const savedItems = listingsToCatalog(saved);
+      const exclude = new Set(savedItems.map((row) => row.id));
+      const seedItems: CatalogItem[] = [];
+      for (const id of recentIds) {
+        const hit = liveListingById(id) || popularItems.find((row) => row.id === id) || firstItems.find((row) => row.id === id);
+        if (hit) seedItems.push(hit);
+      }
+      for (const row of savedItems) {
+        if (!seedItems.some((s) => s.id === row.id)) seedItems.push(row);
+      }
+      const pool = [...popularItems, ...firstItems];
+      const recommended = buildRecommendedFromFeed(firstItems, pool, seedItems, exclude, SECTION_LIMIT);
 
-    setTrendingRows(prioritizePromoted(popularItems));
-    setVerifiedRows(prioritizePromoted(verifiedItems));
-    setLatestRows(latestItems);
-    setRecommendedRows(recommended);
+      setTrendingRows(prioritizePromoted(popularItems.length ? popularItems : firstItems));
+      setVerifiedRows(prioritizePromoted(verifiedItems));
+      setRecommendedRows(recommended);
+      setCachedHomeData({
+        latest: firstItems,
+        trending: popularItems.length ? popularItems : firstItems,
+        recommended,
+        verified: verifiedItems,
+      });
+    } catch (error) {
+      console.error("Error loading sections:", error);
+    } finally {
+      setLoadingHome(false);
+    }
   }
 
   useEffect(() => {
@@ -156,30 +174,35 @@ export function BuyerHomeScreen() {
   const trending = useMemo(() => {
     const chip = TREND_CHIPS.find((c) => c.key === trendChip);
     const base = trendingRows;
-    const pool =
-      chip?.catalog
-        ? base.filter((item) => item.key === chip.catalog || (chip.catalog === "used" && item.key === "electronics"))
-        : base;
+    const pool = chip?.catalog
+      ? base.filter((item) => item.key === chip.catalog || (chip.catalog === "used" && item.key === "electronics"))
+      : base;
     return pool.slice(0, SECTION_LIMIT);
   }, [trendingRows, trendChip]);
 
   const verifiedSellers = useMemo(() => verifiedRows.slice(0, SECTION_LIMIT), [verifiedRows]);
-  const latest = useMemo(() => latestRows, [latestRows]);
   const recommended = useMemo(() => recommendedRows.slice(0, SECTION_LIMIT), [recommendedRows]);
-  
+
   async function loadMoreLatest() {
-    if (loadingMore || !latestHasMore) return;
+    if (loadingHome || loadingMoreRef.current || !latestHasMore || submitted) return;
+    loadingMoreRef.current = true;
     setLoadingMore(true);
     try {
       const nextPage = latestPage + 1;
-      const response = await fetchListingFeedPaginated({ ...feedParams, sort: "new", page: nextPage, page_size: 20 });
+      const response = await fetchListingFeedPaginated({
+        ...feedParams,
+        sort: "new",
+        page: nextPage,
+        page_size: PAGE_SIZE,
+      });
       const moreItems = catalogFromFeed(response.results);
-      setLatestRows((prev) => [...prev, ...moreItems]);
+      setLatestRows((prev) => mergeUnique(prev, moreItems));
       setLatestPage(nextPage);
-      setLatestHasMore(response.has_next);
-    } catch (err) {
-      // Ignore errors, user can retry
+      setLatestHasMore(Boolean(response.has_next) && moreItems.length > 0);
+    } catch {
+      // Keep current rows; user can scroll again.
     } finally {
+      loadingMoreRef.current = false;
       setLoadingMore(false);
     }
   }
@@ -187,6 +210,81 @@ export function BuyerHomeScreen() {
   function runSearch() {
     setSubmitted(query.trim());
   }
+
+  const listHeader = (
+    <View>
+      <AccountStatusCard />
+      <StaffWarningCard />
+      <HomeBannerCarousel audience="buyer" />
+      <UrgentSellSection />
+
+      <View style={{ marginTop: 4 }}>
+        <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 12 }}>
+          <Ionicons name="grid-outline" size={22} color="#2563EB" />
+          <Text style={{ marginLeft: 8, fontSize: 20, fontWeight: "900", color: "#111827" }}>Browse categories</Text>
+        </View>
+        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: GAP }}>
+          {categories.map((item) => (
+            <PressScale
+              key={item.label}
+              onPress={() => openCategory(navigation, homeCategoryKey[item.label] ?? "property")}
+              style={{ width: TILE, backgroundColor: item.bg, borderRadius: 16, paddingVertical: 14, paddingHorizontal: 2, alignItems: "center" }}
+            >
+              <Ionicons name={item.icon} size={34} color={item.color} />
+              <Text style={{ fontSize: 10, fontWeight: "700", marginTop: 4, color: "#111827" }} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
+                {item.label}
+              </Text>
+            </PressScale>
+          ))}
+        </View>
+      </View>
+
+      <MarketplaceSection
+        title="Recommended"
+        icon="thumbs-up"
+        iconColor="#2563EB"
+        items={recommended}
+        loading={loadingHome && !recommended.length}
+        onViewMore={() => openHomeSection(navigation, "recommended", { title: "Recommended" })}
+        emptyText={!loadingHome && !recommended.length ? "Browse listings to get personalised picks." : undefined}
+      />
+      <MarketplaceSection
+        title="Trending"
+        icon="stats-chart"
+        iconColor="#2563EB"
+        items={trending}
+        loading={loadingHome && !trending.length}
+        chips={TREND_CHIPS.map(({ key, label }) => ({ key, label }))}
+        activeChip={trendChip}
+        onChip={setTrendChip}
+        onViewMore={() => {
+          const chip = TREND_CHIPS.find((c) => c.key === trendChip);
+          openHomeSection(navigation, "trending", {
+            title: chip?.key === "all" ? "Trending" : chip?.label || "Trending",
+            catalog: chip?.catalog,
+          });
+        }}
+      />
+      {verifiedSellers.length || loadingHome ? (
+        <MarketplaceSection
+          title="By verified sellers"
+          icon="checkmark-circle"
+          iconColor="#2563EB"
+          items={verifiedSellers}
+          loading={loadingHome && !verifiedSellers.length}
+          onViewMore={() => openHomeSection(navigation, "verified", { title: "By verified sellers" })}
+        />
+      ) : null}
+
+      <View style={{ marginTop: 16, marginBottom: 12, flexDirection: "row", alignItems: "center" }}>
+        <Ionicons name="cloud-upload" size={22} color="#111827" />
+        <Text style={{ marginLeft: 8, flex: 1, fontSize: 18, fontWeight: "800", color: "#111827" }}>Latest Uploads</Text>
+        <PressScale onPress={() => openHomeSection(navigation, "latest", { title: "Latest uploads" })}>
+          <Text style={{ color: "#2563EB", fontWeight: "800", fontSize: 13 }}>View All ›</Text>
+        </PressScale>
+      </View>
+    </View>
+  );
 
   return (
     <View style={{ flex: 1, backgroundColor: "#F7F8FA" }}>
@@ -209,91 +307,76 @@ export function BuyerHomeScreen() {
         </View>
       </View>
 
-      <ScrollView refreshControl={refreshControl} contentContainerStyle={{ paddingHorizontal: PAD, paddingTop: 12, paddingBottom: 28 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-        <AccountStatusCard />
-        <StaffWarningCard />
-
-        {!submitted ? <HomeBannerCarousel audience="buyer" /> : null}
-        {!submitted ? <UrgentSellSection /> : null}
-
-        <View style={{ marginTop: 4 }}>
-          <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 12 }}>
-            <Ionicons name="grid-outline" size={22} color="#2563EB" />
-            <Text style={{ marginLeft: 8, fontSize: 20, fontWeight: "900", color: "#111827" }}>Browse categories</Text>
-          </View>
-          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: GAP }}>
-            {categories.map((item) => (
-              <PressScale key={item.label} onPress={() => openCategory(navigation, homeCategoryKey[item.label] ?? "property")} style={{ width: TILE, backgroundColor: item.bg, borderRadius: 16, paddingVertical: 14, paddingHorizontal: 2, alignItems: "center" }}>
-                <Ionicons name={item.icon} size={34} color={item.color} />
-                <Text style={{ fontSize: 10, fontWeight: "700", marginTop: 4, color: "#111827" }} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
-                  {item.label}
-                </Text>
-              </PressScale>
-            ))}
-          </View>
-        </View>
-
-        {submitted ? (
-          <View style={{ marginTop: 16 }}>
+      {submitted ? (
+        <FlatList
+          data={searchRows}
+          numColumns={2}
+          key="search"
+          keyExtractor={(item) => item.id}
+          refreshControl={refreshControl}
+          contentContainerStyle={{ paddingHorizontal: PAD, paddingTop: 12, paddingBottom: 28 }}
+          columnWrapperStyle={{ justifyContent: "space-between" }}
+          ListHeaderComponent={
             <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
               <Text style={{ fontSize: 18, fontWeight: "800", color: colors.navy }}>Results in {place.label}</Text>
               <PressScale onPress={() => { setQuery(""); setSubmitted(""); }}>
                 <Text style={{ color: GREEN, fontWeight: "700" }}>Clear</Text>
               </PressScale>
             </View>
-            {searchRows.length ? <ListingGrid items={searchRows} /> : (
-              <View style={{ backgroundColor: "#fff", borderRadius: 16, padding: 18, ...shadow.card }}>
-                <Text style={{ color: colors.muted, textAlign: "center" }}>No matches for “{submitted}”.</Text>
-              </View>
-            )}
-          </View>
-        ) : (
-          <>
-            <MarketplaceSection title="Recommended" icon="thumbs-up" iconColor="#2563EB" items={recommended} loading={loadingHome && !recommended.length} onViewMore={() => openHomeSection(navigation, "recommended", { title: "Recommended" })} emptyText={!loadingHome && !recommended.length ? "Browse listings to get personalised picks." : undefined} />
-            <MarketplaceSection title="Trending" icon="stats-chart" iconColor="#2563EB" items={trending} loading={loadingHome && !trending.length} chips={TREND_CHIPS.map(({ key, label }) => ({ key, label }))} activeChip={trendChip} onChip={setTrendChip} onViewMore={() => { const chip = TREND_CHIPS.find((c) => c.key === trendChip); openHomeSection(navigation, "trending", { title: chip?.key === "all" ? "Trending" : chip?.label || "Trending", catalog: chip?.catalog }); }} />
-            {verifiedSellers.length || loadingHome ? (
-              <MarketplaceSection title="By verified sellers" icon="checkmark-circle" iconColor="#2563EB" items={verifiedSellers} loading={loadingHome && !verifiedSellers.length} onViewMore={() => openHomeSection(navigation, "verified", { title: "By verified sellers" })} />
-            ) : null}
-            
-            <View style={{ marginTop: 16 }}>
-              <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 12 }}>
-                <Ionicons name="cloud-upload" size={22} color="#111827" />
-                <Text style={{ marginLeft: 8, fontSize: 18, fontWeight: "800", color: "#111827" }}>Latest Uploads</Text>
-              </View>
-              {loadingHome && !latest.length ? (
-                <View style={{ backgroundColor: "#fff", borderRadius: 16, padding: 18, ...shadow.card }}>
-                  <ActivityIndicator size="large" color={colors.primary} />
-                </View>
-              ) : (
-                <ScrollView
-                  style={{ maxHeight: 600 }}
-                  showsVerticalScrollIndicator={false}
-                  onScroll={(e) => {
-                    const { contentOffset, layoutMeasurement, contentSize } = e.nativeEvent;
-                    const paddingToBottom = 20;
-                    if (contentOffset.y >= contentSize.height - layoutMeasurement.height - paddingToBottom) {
-                      void loadMoreLatest();
-                    }
-                  }}
-                  scrollEventThrottle={400}
-                >
-                  <ListingGrid items={latest} />
-                  {loadingMore && (
-                    <View style={{ padding: 20, alignItems: "center" }}>
-                      <ActivityIndicator size="small" color={colors.primary} />
-                    </View>
-                  )}
-                  {!latestHasMore && latest.length > 20 && (
-                    <View style={{ backgroundColor: "#fff", borderRadius: 12, padding: 14, marginTop: 12, alignItems: "center", ...shadow.card }}>
-                      <Text style={{ color: colors.muted, fontSize: 14 }}>No more listings</Text>
-                    </View>
-                  )}
-                </ScrollView>
-              )}
+          }
+          renderItem={({ item }) => (
+            <View style={{ width: LISTING_CARD_W, marginBottom: GAP }}>
+              <ClassifiedGridCard item={item} width={LISTING_CARD_W} />
             </View>
-          </>
-        )}
-      </ScrollView>
+          )}
+          ListEmptyComponent={
+            <View style={{ backgroundColor: "#fff", borderRadius: 16, padding: 18, ...shadow.card }}>
+              <Text style={{ color: colors.muted, textAlign: "center" }}>No matches for “{submitted}”.</Text>
+            </View>
+          }
+        />
+      ) : (
+        <FlatList
+          data={latestRows}
+          numColumns={2}
+          key="home"
+          keyExtractor={(item) => item.id}
+          refreshControl={refreshControl}
+          contentContainerStyle={{ paddingHorizontal: PAD, paddingTop: 12, paddingBottom: 28, flexGrow: 1 }}
+          columnWrapperStyle={latestRows.length ? { justifyContent: "space-between" } : undefined}
+          ListHeaderComponent={listHeader}
+          renderItem={({ item }) => (
+            <View style={{ width: LISTING_CARD_W, marginBottom: GAP }}>
+              <ClassifiedGridCard item={item} width={LISTING_CARD_W} />
+            </View>
+          )}
+          onEndReached={() => void loadMoreLatest()}
+          onEndReachedThreshold={0.4}
+          ListFooterComponent={
+            loadingMore ? (
+              <View style={{ paddingVertical: 18, alignItems: "center" }}>
+                <ActivityIndicator color={GREEN} />
+                <Text style={{ color: colors.muted, marginTop: 8, fontSize: 12 }}>Loading more…</Text>
+              </View>
+            ) : null
+          }
+          ListEmptyComponent={
+            loadingHome ? (
+              <ProductSkeleton count={6} />
+            ) : (
+              <View style={{ backgroundColor: "#fff", borderRadius: 16, padding: 18, ...shadow.card }}>
+                <Text style={{ color: colors.muted, textAlign: "center" }}>No listings yet. Pull to refresh.</Text>
+              </View>
+            )
+          }
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          removeClippedSubviews
+          maxToRenderPerBatch={8}
+          windowSize={8}
+          initialNumToRender={6}
+        />
+      )}
     </View>
   );
 }

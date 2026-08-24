@@ -4,8 +4,8 @@ import { listingsToCatalog } from "./liveListings";
 import { rankSimilarListings } from "./similarListings";
 
 /** Non-urgent catalog rows preserving API feed order (boosted listings first from backend). */
-export function catalogFromFeed(rows: ApiListing[]) {
-  return listingsToCatalog(rows).filter((item) => !item.urgent);
+export function catalogFromFeed(rows: ApiListing[] | undefined | null) {
+  return listingsToCatalog(Array.isArray(rows) ? rows : []).filter((item) => !item.urgent);
 }
 
 export function isPromotedItem(item: CatalogItem) {

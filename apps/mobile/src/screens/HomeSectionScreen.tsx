@@ -1,113 +1,55 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Pressable, ScrollView, Text, View, ActivityIndicator } from "react-native";
+import { useCallback, useMemo } from "react";
+import { Pressable, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { ListingGrid } from "../components/ClassifiedCard";
 import { InfiniteListingGrid } from "../components/InfiniteListingGrid";
-import { useAppRefreshControl } from "../components/KeyboardScreen";
-import { useAuth } from "../context/AuthContext";
 import { useBuyerLocation } from "../context/BuyerLocationContext";
-import { type CatalogItem, type CatalogKey } from "../data/catalog";
-import { catalogFromFeed, buildRecommendedFromFeed, prioritizePromoted } from "../data/feedOrdering";
-import { listingsToCatalog, liveListingById } from "../data/liveListings";
-import { fetchListingFeed, fetchListingFeedPaginated, fetchSavedListings, type ApiListing } from "../listingsApi";
-import { getRecentViewIds } from "../listingViews";
-import { subscribeListingsChanged } from "../listingsRefresh";
+import type { CatalogKey } from "../data/catalog";
+import { fetchListingFeedPaginated } from "../listingsApi";
 import { colors } from "../theme";
 
 type SectionKey = "recommended" | "trending" | "verified" | "latest";
-const QUICK_LIMIT = 24;
-const FULL_LIMIT = 120;
+const PAGE_SIZE = 10;
 
 export function HomeSectionScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const insets = useSafeAreaInsets();
-  const { user } = useAuth();
   const { feedParams } = useBuyerLocation();
   const section = (route.params?.section as SectionKey) || "trending";
   const catalog = route.params?.catalog as CatalogKey | undefined;
   const title = route.params?.title as string | undefined;
-  const [items, setItems] = useState<CatalogItem[]>([]);
-  const [loading, setLoading] = useState(true);
 
-  const heading = title || (section === "recommended" ? "Recommended" : section === "verified" ? "By verified sellers" : section === "latest" ? "Latest uploads" : "Trending");
+  const heading =
+    title ||
+    (section === "recommended"
+      ? "Recommended"
+      : section === "verified"
+        ? "By verified sellers"
+        : section === "latest"
+          ? "Latest uploads"
+          : "Trending");
 
-  const load = useCallback(async () => {
-    const base = { ...feedParams };
-    setLoading(true);
-    try {
+  const fetchData = useCallback(
+    async (page: number, pageSize: number) => {
+      const base = { ...feedParams, page, page_size: pageSize };
       if (section === "verified") {
-        const quick = await fetchListingFeed({ ...base, verified: true, sort: "new", limit: QUICK_LIMIT }).catch(() => [] as ApiListing[]);
-        setItems(prioritizePromoted(catalogFromFeed(quick).filter((row) => row.verified)));
-        setLoading(false);
-        const rows = await fetchListingFeed({ ...base, verified: true, sort: "new", limit: FULL_LIMIT }).catch(() => [] as ApiListing[]);
-        setItems(prioritizePromoted(catalogFromFeed(rows).filter((row) => row.verified)));
-        return;
+        return fetchListingFeedPaginated({ ...base, verified: true, sort: "new" });
       }
-      if (section === "latest") {
-        const quick = await fetchListingFeed({ ...base, sort: "new", limit: QUICK_LIMIT }).catch(() => [] as ApiListing[]);
-        setItems(catalogFromFeed(quick));
-        setLoading(false);
-        const rows = await fetchListingFeed({ ...base, sort: "new", limit: FULL_LIMIT }).catch(() => [] as ApiListing[]);
-        setItems(catalogFromFeed(rows));
-        return;
+      if (section === "trending") {
+        return fetchListingFeedPaginated({
+          ...base,
+          sort: "popular",
+          category: catalog,
+        });
       }
-      if (section === "recommended") {
-        const quick = await fetchListingFeed({ ...base, sort: "new", limit: QUICK_LIMIT }).catch(() => [] as ApiListing[]);
-        setItems(catalogFromFeed(quick));
-        setLoading(false);
-        const [popular, latest, saved, recentIds] = await Promise.all([
-          fetchListingFeed({ ...base, sort: "popular", limit: FULL_LIMIT }).catch(() => [] as ApiListing[]),
-          fetchListingFeed({ ...base, sort: "new", limit: FULL_LIMIT }).catch(() => [] as ApiListing[]),
-          user ? fetchSavedListings().catch(() => [] as ApiListing[]) : Promise.resolve([] as ApiListing[]),
-          getRecentViewIds(),
-        ]);
-        const popularItems = catalogFromFeed(popular);
-        const latestItems = catalogFromFeed(latest);
-        const savedItems = listingsToCatalog(saved);
-        const exclude = new Set(savedItems.map((row) => row.id));
-        const seeds: CatalogItem[] = [];
-        for (const id of recentIds) {
-          const hit = liveListingById(id) || popularItems.find((row) => row.id === id) || latestItems.find((row) => row.id === id);
-          if (hit) seeds.push(hit);
-        }
-        for (const row of savedItems) {
-          if (!seeds.some((s) => s.id === row.id)) seeds.push(row);
-        }
-        const pool = [...popularItems, ...latestItems];
-        setItems(buildRecommendedFromFeed(latestItems, pool, seeds, exclude, FULL_LIMIT));
-        return;
-      }
-      const quick = await fetchListingFeed({ ...base, sort: "popular", limit: QUICK_LIMIT }).catch(() => [] as ApiListing[]);
-      let quickPool = prioritizePromoted(catalogFromFeed(quick));
-      if (catalog) {
-        quickPool = quickPool.filter((row) => row.key === catalog || (catalog === "used" && row.key === "electronics"));
-      }
-      setItems(quickPool);
-      setLoading(false);
-      const rows = await fetchListingFeed({ ...base, sort: "popular", limit: FULL_LIMIT }).catch(() => [] as ApiListing[]);
-      let pool = prioritizePromoted(catalogFromFeed(rows));
-      if (catalog) {
-        pool = pool.filter((row) => row.key === catalog || (catalog === "used" && row.key === "electronics"));
-      }
-      setItems(pool);
-    } catch {
-      setItems([]);
-    } finally {
-      setLoading(false);
-    }
-  }, [section, catalog, feedParams, user?.id]);
+      return fetchListingFeedPaginated({ ...base, sort: "new" });
+    },
+    [feedParams, section, catalog],
+  );
 
-  useEffect(() => {
-    void load();
-    return subscribeListingsChanged(() => void load());
-  }, [load]);
-
-  const refreshControl = useAppRefreshControl(load);
-
-  const countLabel = useMemo(() => `${items.length} listing${items.length === 1 ? "" : "s"}`, [items.length]);
+  const subtitle = useMemo(() => "", []);
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
@@ -118,32 +60,16 @@ export function HomeSectionScreen() {
           </Pressable>
           <View style={{ flex: 1 }}>
             <Text style={{ fontWeight: "800", fontSize: 16 }}>{heading}</Text>
-            <Text style={{ color: colors.muted, fontSize: 12, marginTop: 2 }}>{countLabel}</Text>
+            <Text style={{ color: colors.muted, fontSize: 12, marginTop: 2 }}>{subtitle}</Text>
           </View>
         </View>
       </View>
       <View style={{ flex: 1 }}>
         <InfiniteListingGrid
-          fetchData={async (page, page_size) => {
-            const base = { ...feedParams };
-            if (section === "verified") {
-              const response = await fetchListingFeedPaginated({ ...base, verified: true, sort: "new", page, page_size });
-              return response;
-            } else if (section === "latest") {
-              const response = await fetchListingFeedPaginated({ ...base, sort: "new", page, page_size });
-              return response;
-            } else if (section === "trending") {
-              const response = await fetchListingFeedPaginated({ ...base, sort: "popular", page, page_size });
-              return response;
-            } else {
-              // Recommended section - use latest as fallback
-              const response = await fetchListingFeedPaginated({ ...base, sort: "new", page, page_size });
-              return response;
-            }
-          }}
-          initialData={items}
-          emptyText={`No ${heading.toLowerCase()} found.`}
-          pageSize={20}
+          key={`${section}-${catalog || "all"}-${feedParams.place || "np"}`}
+          fetchData={fetchData}
+          emptyText={`No ${heading.toLowerCase()} yet.`}
+          pageSize={PAGE_SIZE}
         />
       </View>
     </View>

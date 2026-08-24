@@ -179,10 +179,27 @@ export async function fetchListingFeedPaginated(categoryOrQuery?: string | FeedQ
       params.set(key, String(value));
     });
   }
+  if (!params.has("page")) params.set("page", "1");
+  if (!params.has("page_size")) params.set("page_size", "10");
   const query = params.toString() ? `?${params.toString()}` : "";
-  const response = await api<FeedResponse>(`/api/listings/feed/${query}`);
-  rememberListingFeed(response.results);
-  return response;
+  const response = await api<FeedResponse | ApiListing[]>(`/api/listings/feed/${query}`);
+  if (Array.isArray(response)) {
+    rememberListingFeed(response);
+    return {
+      results: response,
+      page: 1,
+      page_size: response.length,
+      has_next: response.length >= Number(params.get("page_size") || 10),
+    };
+  }
+  const results = Array.isArray(response?.results) ? response.results : [];
+  rememberListingFeed(results);
+  return {
+    results,
+    page: Number(response?.page) || 1,
+    page_size: Number(response?.page_size) || results.length,
+    has_next: Boolean(response?.has_next),
+  };
 }
 
 export function prefetchListing(id: string) {
@@ -226,7 +243,17 @@ export async function fetchMyListings(page?: number, page_size?: number): Promis
 
 export async function fetchMyListingsPaginated(page = 1, page_size = 20): Promise<FeedResponse> {
   const params = new URLSearchParams({ page: String(page), page_size: String(page_size) });
-  return withAppAuth((token) => api<FeedResponse>(`/api/listings/me/?${params.toString()}`, { token }));
+  const response = await withAppAuth((token) => api<FeedResponse | ApiListing[]>(`/api/listings/me/?${params.toString()}`, { token }));
+  if (Array.isArray(response)) {
+    return { results: response, page, page_size, has_next: response.length >= page_size };
+  }
+  const results = Array.isArray(response?.results) ? response.results : [];
+  return {
+    results,
+    page: Number(response?.page) || page,
+    page_size: Number(response?.page_size) || page_size,
+    has_next: Boolean(response?.has_next),
+  };
 }
 
 export async function createListing(payload: ListingWritePayload) {

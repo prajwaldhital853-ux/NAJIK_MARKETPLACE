@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { useCallback, useMemo, useState } from "react";
-import { Alert, Image, Modal, ScrollView, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Alert, Image, Modal, ScrollView, Text, TextInput, View } from "react-native";
 import { AppHeader } from "../components/AppHeader";
 import { AuthImage } from "../components/AuthImage";
 import { SalePrice } from "../components/ClassifiedCard";
@@ -165,6 +165,7 @@ function VerifiedBody() {
   const [sheet, setSheet] = useState<"filter" | "sort" | null>(null);
   const [live, setLive] = useState<ApiListing[]>([]);
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
 
   const load = useCallback(() => {
     void fetchMyListings()
@@ -175,7 +176,8 @@ function VerifiedBody() {
       .catch((err) => {
         setLive([]);
         setError(err instanceof Error ? err.message : "Could not load listings.");
-      });
+      })
+      .finally(() => setLoading(false));
   }, []);
 
   useFocusEffect(
@@ -349,7 +351,12 @@ function VerifiedBody() {
 
       {error ? <Text style={{ color: colors.red, marginBottom: 8 }}>{error}</Text> : null}
 
-      {liveList.length ? (
+      {loading && !live.length ? (
+        <View style={{ backgroundColor: "#fff", borderRadius: 16, padding: 28, alignItems: "center", marginTop: 8 }}>
+          <ActivityIndicator color={GREEN} />
+          <Text style={{ color: "#8A8F98", marginTop: 10, fontSize: 13 }}>Loading your listings…</Text>
+        </View>
+      ) : liveList.length ? (
         grid ? (
           <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>
             {liveList.map((item) => (

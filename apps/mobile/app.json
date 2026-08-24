@@ -3,7 +3,7 @@
     "name": "NAJIK",
     "slug": "najik",
     "scheme": "najik",
-    "version": "1.0.3",
+    "version": "1.0.4",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -31,7 +31,7 @@
       }
     },
     "android": {
-      "versionCode": 4,
+      "versionCode": 5,
       "userInterfaceStyle": "light",
       "softwareKeyboardLayoutMode": "resize",
       "package": "com.najik.app",

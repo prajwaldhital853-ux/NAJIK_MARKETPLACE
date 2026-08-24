@@ -1,7 +1,6 @@
-"""Seed 100 demo seller accounts with 2 approved listings each.
+"""Seed demo seller accounts with listings — LOCAL DEV ONLY.
 
-Idempotent. Safe to run on every Render deploy. Adds mix-and-match photos
-to listings that still have none (no SSH required).
+Not run on Render/production. Use purge_demo_sellers to clean up demo rows.
 """
 
 import random

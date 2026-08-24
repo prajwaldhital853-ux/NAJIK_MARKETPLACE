@@ -123,18 +123,38 @@ class BoostCampaign(models.Model):
         """Higher score = better position. Factors: duration, time remaining, rotation fairness."""
         if not self.is_active:
             return 0.0
-        
-        # Base: longer campaigns get slight boost
+
         duration_weight = min(self.duration_days / 15.0, 1.5)
-        
-        # Rotation fairness: distribute slots over time
         rotation_penalty = min(self.total_rotations / 100.0, 0.3)
-        
-        # Time remaining: campaigns near end get small boost to maximize their value
         hours_left = self.hours_remaining
         urgency_boost = 0.1 if hours_left < 24 else 0.0
-        
+
         return duration_weight - rotation_penalty + urgency_boost
+
+
+class BoostCampaignInquiry(models.Model):
+    """One inquiry per buyer per boost campaign (chat or booking)."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    campaign = models.ForeignKey(
+        BoostCampaign,
+        on_delete=models.CASCADE,
+        related_name="unique_inquiries",
+    )
+    buyer = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="boost_inquiries",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["campaign", "buyer"], name="boost_one_inquiry_per_buyer"),
+        ]
+
+    def __str__(self):
+        return f"inquiry:{self.campaign_id}:{self.buyer_id}"
 
 
 class BoostPricing(models.Model):
@@ -157,8 +177,8 @@ class BoostPricing(models.Model):
     rotation_interval_minutes = models.PositiveIntegerField(default=30)
     max_slots_per_category_feed = models.PositiveIntegerField(default=5)
     
-    # View multiplier for seller confidence (show 1 view as N views)
-    seller_view_multiplier = models.PositiveIntegerField(default=5)
+    # Legacy field (no longer inflates seller stats; kept for API compatibility)
+    seller_view_multiplier = models.PositiveIntegerField(default=1)
     
     # Estimated metrics for UI
     est_views_per_day_3d = models.PositiveIntegerField(default=50)

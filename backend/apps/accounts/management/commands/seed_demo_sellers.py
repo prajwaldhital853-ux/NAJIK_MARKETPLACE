@@ -9,7 +9,7 @@ from django.utils import timezone
 
 from apps.accounts.models import AppUser
 from apps.core.models import SellerWallet
-from apps.listings.models import Listing
+from apps.listings.models import Listing, ListingPhoto
 from apps.verification.models import ProviderApplication
 
 SELLER_COUNT = 100
@@ -419,6 +419,23 @@ class Command(BaseCommand):
                     listing.save(update_fields=["lat", "lng", "updated_at"])
                 if created:
                     created_listings += 1
+                
+                # Add 3-5 demo photos per listing (even if listing existed)
+                if listing.photos.count() == 0:
+                    photo_count = random.randint(3, 5)
+                    for p_idx in range(photo_count):
+                        try:
+                            photo = ListingPhoto(listing=listing, sort_order=p_idx)
+                            photo.image.save(
+                                f"listing_{listing.id}_photo_{p_idx}.jpg",
+                                _demo_jpeg(f"demo_listing_{listing.category}_{p_idx}.jpg"),
+                                save=False
+                            )
+                            photo.save()
+                        except Exception as photo_exc:
+                            self.stdout.write(
+                                self.style.WARNING(f"  [!] Photo {p_idx} skipped for {listing.title}: {photo_exc}")
+                            )
 
         # Backfill coordinates on any demo listing still missing map pins
         demo_phones = [f"+{PHONE_BASE + i}" for i in range(count)]

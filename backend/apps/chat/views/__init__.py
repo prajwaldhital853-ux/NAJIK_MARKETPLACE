@@ -113,6 +113,13 @@ class ChatThreadListView(APIView):
         thread = participant_threads(request.user).get(pk=thread.pk)
         mark_viewing_thread(request.user, thread.id)
         mark_read(thread, request.user)
+        if request.user.id != listing.owner_id:
+            try:
+                from apps.promotions.boost_service import record_boost_inquiry_for_listing
+
+                record_boost_inquiry_for_listing(listing.id, sender=request.user)
+            except Exception:
+                pass
         return Response(
             ChatThreadSerializer(thread, context={"request": request, "include_messages": True}).data,
             status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
@@ -166,13 +173,6 @@ class ChatMessageCreateView(APIView):
             msg.voice = data["voice_file"]
         msg.save()
         thread.save(update_fields=["updated_at"])
-        if thread.listing_id and request.user.id != thread.seller_id:
-            try:
-                from apps.promotions.boost_service import record_boost_inquiry_for_listing
-
-                record_boost_inquiry_for_listing(thread.listing_id, sender=request.user)
-            except Exception:
-                pass
         preview = (data.get("text") or "").strip() or "New message"
         if data["kind"] == ChatMessage.KIND_IMAGE:
             preview = "Sent a photo"

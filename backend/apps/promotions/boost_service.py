@@ -147,15 +147,16 @@ def pause_boosts_for_listing(listing_id, reason: str = ""):
 
 
 def record_boost_inquiry_for_listing(listing_id, sender=None):
-    """Count inquiry when a buyer messages or books on a boosted listing."""
-    if not listing_id:
+    """Count one inquiry per buyer per active boost campaign (chat start or booking)."""
+    if not listing_id or sender is None:
         return
     from apps.listings.models import Listing
+    from apps.promotions.models import BoostCampaignInquiry
 
     listing = Listing.objects.filter(pk=listing_id).only("owner_id").first()
     if not listing:
         return
-    if sender is not None and getattr(sender, "id", None) == listing.owner_id:
+    if getattr(sender, "id", None) == listing.owner_id:
         return
     campaign = (
         _active_campaign_qs()
@@ -163,8 +164,14 @@ def record_boost_inquiry_for_listing(listing_id, sender=None):
         .order_by("-created_at")
         .first()
     )
-    if campaign:
-        record_boost_inquiry(campaign)
+    if not campaign:
+        return
+    _, created = BoostCampaignInquiry.objects.get_or_create(
+        campaign=campaign,
+        buyer_id=sender.id,
+    )
+    if created:
+        BoostCampaign.objects.filter(pk=campaign.pk).update(inquiry_count=F("inquiry_count") + 1)
 
 
 @transaction.atomic
@@ -427,13 +434,7 @@ def record_boost_impressions_for_listing_ids(listing_ids: list):
     BoostCampaign.objects.bulk_update(campaigns, ["impression_count", "last_impression_at"])
 
 
-def record_boost_view(campaign: BoostCampaign, multiplier: int = 1):
-    """Track listing detail opens (actual count; display uses seller_view_multiplier)."""
+def record_boost_view(campaign: BoostCampaign):
+    """Track each listing detail open on an active boost campaign."""
     BoostCampaign.objects.filter(pk=campaign.pk).update(view_count=F("view_count") + 1)
     campaign.refresh_from_db(fields=["view_count"])
-
-
-def record_boost_inquiry(campaign: BoostCampaign):
-    """Track inquiries (messages, bookings) from boosted listings."""
-    campaign.inquiry_count += 1
-    campaign.save(update_fields=["inquiry_count"])

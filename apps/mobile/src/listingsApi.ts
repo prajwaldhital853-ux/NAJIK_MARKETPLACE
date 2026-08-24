@@ -106,6 +106,15 @@ export type FeedQuery = {
   owner?: string;
   urgent?: string;
   limit?: number;
+  page?: number;
+  page_size?: number;
+};
+
+export type FeedResponse = {
+  results: ApiListing[];
+  page: number;
+  page_size: number;
+  has_next: boolean;
 };
 
 export type SellerPublicProfile = {
@@ -137,7 +146,7 @@ export async function fetchSellerProfile(id: string) {
   return withAppAuth((token) => api<SellerPublicProfile>(`/api/listings/sellers/${id}/`, { token }));
 }
 
-export async function fetchListingFeed(categoryOrQuery?: string | FeedQuery) {
+export async function fetchListingFeed(categoryOrQuery?: string | FeedQuery): Promise<ApiListing[]> {
   const params = new URLSearchParams();
   if (typeof categoryOrQuery === "string") {
     if (categoryOrQuery) params.set("category", categoryOrQuery);
@@ -150,9 +159,30 @@ export async function fetchListingFeed(categoryOrQuery?: string | FeedQuery) {
     });
   }
   const query = params.toString() ? `?${params.toString()}` : "";
-  const rows = await api<ApiListing[]>(`/api/listings/feed/${query}`);
+  const response = await api<ApiListing[] | FeedResponse>(`/api/listings/feed/${query}`);
+  
+  // Support both legacy array response and new paginated response
+  const rows = Array.isArray(response) ? response : response.results;
   rememberListingFeed(rows);
   return rows;
+}
+
+export async function fetchListingFeedPaginated(categoryOrQuery?: string | FeedQuery): Promise<FeedResponse> {
+  const params = new URLSearchParams();
+  if (typeof categoryOrQuery === "string") {
+    if (categoryOrQuery) params.set("category", categoryOrQuery);
+  } else if (categoryOrQuery) {
+    const { verified, ...rest } = categoryOrQuery;
+    if (verified) params.set("verified", "1");
+    Object.entries(rest).forEach(([key, value]) => {
+      if (value === undefined || value === "" || value === null) return;
+      params.set(key, String(value));
+    });
+  }
+  const query = params.toString() ? `?${params.toString()}` : "";
+  const response = await api<FeedResponse>(`/api/listings/feed/${query}`);
+  rememberListingFeed(response.results);
+  return response;
 }
 
 export function prefetchListing(id: string) {

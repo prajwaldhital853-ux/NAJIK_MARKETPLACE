@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { useEffect, useMemo, useState } from "react";
-import { Dimensions, ScrollView, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Dimensions, ScrollView, Text, TextInput, View } from "react-native";
 import { AppHeader } from "../components/AppHeader";
 import { ListingGrid } from "../components/ClassifiedCard";
 import { useAppRefreshControl } from "../components/KeyboardScreen";
@@ -15,7 +15,7 @@ import { catalogFromFeed, buildRecommendedFromFeed, prioritizePromoted } from ".
 import { listingsToCatalog, liveListingById } from "../data/liveListings";
 import { HomeBannerCarousel } from "../components/HomeBannerCarousel";
 import { UrgentSellSection } from "../components/UrgentSellSection";
-import { fetchListingFeed, fetchSavedListings, type ApiListing } from "../listingsApi";
+import { fetchListingFeed, fetchListingFeedPaginated, fetchSavedListings, type ApiListing } from "../listingsApi";
 import { getRecentViewIds } from "../listingViews";
 import { subscribeListingsChanged } from "../listingsRefresh";
 import { openCategory, openHomeSection } from "../navigation/browse";
@@ -27,7 +27,7 @@ const GAP = 11;
 const TILE = (SCREEN_W - PAD * 2 - GAP * 3) / 4;
 const GREEN = "#1B7D2C";
 const SECTION_LIMIT = 10;
-const QUICK_FEED_LIMIT = 40;
+const QUICK_FEED_LIMIT = 20;
 
 const categories: { label: string; icon: keyof typeof Ionicons.glyphMap; bg: string; color: string }[] = [
   { label: "Property", icon: "home", bg: "#E8F1FE", color: "#1D4ED8" },
@@ -63,12 +63,15 @@ export function BuyerHomeScreen() {
   const [recommendedRows, setRecommendedRows] = useState<CatalogItem[]>([]);
   const [trendChip, setTrendChip] = useState("all");
   const [loadingHome, setLoadingHome] = useState(true);
+  const [latestPage, setLatestPage] = useState(1);
+  const [latestHasMore, setLatestHasMore] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   async function loadSections() {
     const base = { ...feedParams };
     setLoadingHome(true);
     try {
-      const quick = await fetchListingFeed({ ...base, sort: "new", limit: QUICK_FEED_LIMIT }).catch(() => [] as ApiListing[]);
+      const quick = await fetchListingFeed({ ...base, sort: "new", page_size: QUICK_FEED_LIMIT }).catch(() => [] as ApiListing[]);
       const quickItems = catalogFromFeed(quick);
       if (quickItems.length) {
         setLatestRows(quickItems);
@@ -80,9 +83,9 @@ export function BuyerHomeScreen() {
     }
 
     const [popular, verified, latest, saved, recentIds] = await Promise.all([
-      fetchListingFeed({ ...base, sort: "popular", limit: 60 }).catch(() => [] as ApiListing[]),
-      fetchListingFeed({ ...base, verified: true, sort: "new", limit: 40 }).catch(() => [] as ApiListing[]),
-      fetchListingFeed({ ...base, sort: "new", limit: 60 }).catch(() => [] as ApiListing[]),
+      fetchListingFeed({ ...base, sort: "popular", page_size: 30 }).catch(() => [] as ApiListing[]),
+      fetchListingFeed({ ...base, verified: true, sort: "new", page_size: 20 }).catch(() => [] as ApiListing[]),
+      fetchListingFeed({ ...base, sort: "new", page_size: 30 }).catch(() => [] as ApiListing[]),
       user ? fetchSavedListings().catch(() => [] as ApiListing[]) : Promise.resolve([] as ApiListing[]),
       getRecentViewIds(),
     ]);
@@ -139,8 +142,25 @@ export function BuyerHomeScreen() {
   }, [trendingRows, trendChip]);
 
   const verifiedSellers = useMemo(() => verifiedRows.slice(0, SECTION_LIMIT), [verifiedRows]);
-  const latest = useMemo(() => latestRows.slice(0, SECTION_LIMIT), [latestRows]);
+  const latest = useMemo(() => latestRows, [latestRows]);
   const recommended = useMemo(() => recommendedRows.slice(0, SECTION_LIMIT), [recommendedRows]);
+  
+  async function loadMoreLatest() {
+    if (loadingMore || !latestHasMore) return;
+    setLoadingMore(true);
+    try {
+      const nextPage = latestPage + 1;
+      const response = await fetchListingFeedPaginated({ ...feedParams, sort: "new", page: nextPage, page_size: 20 });
+      const moreItems = catalogFromFeed(response.results);
+      setLatestRows((prev) => [...prev, ...moreItems]);
+      setLatestPage(nextPage);
+      setLatestHasMore(response.has_next);
+    } catch (err) {
+      // Ignore errors, user can retry
+    } finally {
+      setLoadingMore(false);
+    }
+  }
 
   function runSearch() {
     setSubmitted(query.trim());
@@ -212,7 +232,31 @@ export function BuyerHomeScreen() {
             {verifiedSellers.length || loadingHome ? (
               <MarketplaceSection title="By verified sellers" icon="checkmark-circle" iconColor="#2563EB" items={verifiedSellers} loading={loadingHome && !verifiedSellers.length} onViewMore={() => openHomeSection(navigation, "verified", { title: "By verified sellers" })} />
             ) : null}
-            <MarketplaceSection title="Latest Uploads" icon="cloud-upload" iconColor="#111827" items={latest} loading={loadingHome && !latest.length} mode="grid" limit={SECTION_LIMIT} onViewMore={() => openHomeSection(navigation, "latest", { title: "Latest uploads" })} />
+            
+            <View style={{ marginTop: 16 }}>
+              <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 12 }}>
+                <Ionicons name="cloud-upload" size={22} color="#111827" />
+                <Text style={{ marginLeft: 8, fontSize: 18, fontWeight: "800", color: "#111827" }}>Latest Uploads</Text>
+              </View>
+              {loadingHome && !latest.length ? (
+                <View style={{ backgroundColor: "#fff", borderRadius: 16, padding: 18, ...shadow.card }}>
+                  <ActivityIndicator size="large" color={colors.primary} />
+                </View>
+              ) : (
+                <>
+                  <ListingGrid items={latest} />
+                  {latestHasMore && (
+                    <PressScale onPress={() => void loadMoreLatest()} style={{ backgroundColor: "#fff", borderRadius: 12, padding: 14, marginTop: 12, alignItems: "center", ...shadow.card }}>
+                      {loadingMore ? (
+                        <ActivityIndicator size="small" color={colors.primary} />
+                      ) : (
+                        <Text style={{ color: colors.primary, fontWeight: "700", fontSize: 15 }}>Load More</Text>
+                      )}
+                    </PressScale>
+                  )}
+                </>
+              )}
+            </View>
           </>
         )}
       </ScrollView>

@@ -137,6 +137,24 @@ class ListingFeedView(APIView):
 
     def get(self, request):
         expire_urgent_listings()
+        
+        # Pagination params
+        try:
+            page = max(1, int(request.query_params.get("page") or 1))
+            page_size = min(max(int(request.query_params.get("page_size") or 20), 1), 50)
+        except (TypeError, ValueError):
+            page = 1
+            page_size = 20
+        
+        # Legacy limit param (for backward compat)
+        legacy_limit = request.query_params.get("limit")
+        if legacy_limit:
+            try:
+                page_size = min(max(int(legacy_limit), 1), 200)
+                page = 1
+            except (TypeError, ValueError):
+                pass
+        
         items = exclude_sold_listings(listing_queryset().filter(status=Listing.STATUS_APPROVED))
         urgent_only = request.query_params.get("urgent") == "1"
         if urgent_only:
@@ -203,13 +221,10 @@ class ListingFeedView(APIView):
         place_q = listing_place_q(place)
         no_coords = Q(lat__isnull=True) | Q(lng__isnull=True)
         if place and geo_q is not None:
-            # Geo filter: include listings in radius OR without map coords (national visibility).
             items = items.filter(place_q | geo_q | no_coords)
         elif place:
-            # Text place only: match location fields OR listings without coords (still discoverable).
             items = items.filter(place_q | no_coords)
         elif geo_q is not None:
-            # Listings without map coordinates still appear nationally until coords are set.
             items = items.filter(geo_q | no_coords)
         sort = request.query_params.get("sort") or "new"
         if sort == "popular":
@@ -220,10 +235,6 @@ class ListingFeedView(APIView):
             items = items.order_by("-price")
         else:
             items = items.order_by("-created_at")
-        try:
-            limit = min(max(int(request.query_params.get("limit") or 200), 1), 200)
-        except (TypeError, ValueError):
-            limit = 200
         
         # Apply boost priority
         single_cat = None
@@ -232,16 +243,25 @@ class ListingFeedView(APIView):
             if len(cats) == 1:
                 single_cat = cats[0]
         
+        # Calculate pagination indices
+        start_idx = (page - 1) * page_size
+        end_idx = start_idx + page_size
+        
         # Boost priority: category-scoped or global (recommendation / home feeds)
         if sort in ("new", "popular"):
             from apps.promotions.boost_service import record_boost_impressions_for_listing_ids
 
-            slice_items, impression_ids = apply_feed_boost_priority(items, single_cat, limit)
+            slice_items, impression_ids = apply_feed_boost_priority(items, single_cat, end_idx + 1)
             if impression_ids:
                 record_boost_impressions_for_listing_ids(impression_ids)
-            rows = ListingSerializer(slice_items, many=True, context={"request": request}).data
+            paginated = slice_items[start_idx:end_idx]
+            has_next = len(slice_items) > end_idx
+            rows = ListingSerializer(paginated, many=True, context={"request": request}).data
         else:
-            rows = ListingSerializer(items[:limit], many=True, context={"request": request}).data
+            paginated = items[start_idx:end_idx]
+            has_next = items[end_idx:end_idx+1].exists()
+            rows = ListingSerializer(paginated, many=True, context={"request": request}).data
+        
         min_price = request.query_params.get("min_price")
         max_price = request.query_params.get("max_price")
         if min_price or max_price:
@@ -254,11 +274,20 @@ class ListingFeedView(APIView):
 
             rows = [row for row in rows if (not lo or price_num(row) >= lo) and (not hi or price_num(row) <= hi)]
         rows = [row for row in rows if not is_sold_extras(row.get("extras"))]
-        return Response(rows)
+        
+        # Return paginated response (backward compat: if legacy limit used, return array; else object)
+        if legacy_limit:
+            return Response(rows)
+        return Response({
+            "results": rows,
+            "page": page,
+            "page_size": page_size,
+            "has_next": has_next,
+        })
 
 
 def record_listing_view_event(listing: Listing, viewer=None) -> int:
-    """Count every listing open. Boosted listings add multiplier to campaign stats only."""
+    """Count every listing open (repeat visits by anyone except owner each count once)."""
     Listing.objects.filter(pk=listing.pk).update(view_count=F("view_count") + 1)
     listing.refresh_from_db(fields=["view_count"])
 

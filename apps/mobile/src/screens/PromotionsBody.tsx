@@ -93,7 +93,7 @@ export function PromotionsBody() {
   }, [campaigns, period]);
 
   const stats = useMemo(() => {
-    const views = filteredCampaigns.reduce((sum, c) => sum + c.display_view_count, 0);
+    const views = filteredCampaigns.reduce((sum, c) => sum + c.view_count, 0);
     const inquiries = filteredCampaigns.reduce((sum, c) => sum + c.inquiry_count, 0);
     const impressions = filteredCampaigns.reduce((sum, c) => sum + c.impression_count, 0);
     const live = campaigns.filter((c) => c.status === "active" || c.status === "paused").length;
@@ -303,7 +303,7 @@ export function PromotionsBody() {
                 </Text>
               ) : null}
               <View style={{ flexDirection: "row", marginTop: 12, gap: 8 }}>
-                <Metric label="Views" value={campaign.display_view_count} />
+                <Metric label="Views" value={campaign.view_count} />
                 <Metric label="Impressions" value={campaign.impression_count} />
                 <Metric label="Inquiries" value={campaign.inquiry_count} />
               </View>

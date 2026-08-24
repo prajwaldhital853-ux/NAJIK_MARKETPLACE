@@ -128,9 +128,6 @@ export function BoostAdsAdminPanel({ initialTab }: { initialTab?: Tab }) {
               <Field label="Top slots per category feed">
                 <input type="number" className={inputClass} value={pricing.max_slots_per_category_feed} onChange={(e) => setPricing({ ...pricing, max_slots_per_category_feed: Number(e.target.value) })} />
               </Field>
-              <Field label="Seller view multiplier">
-                <input type="number" className={inputClass} value={pricing.seller_view_multiplier} onChange={(e) => setPricing({ ...pricing, seller_view_multiplier: Number(e.target.value) })} />
-              </Field>
             </div>
           </section>
 

@@ -112,9 +112,8 @@ class BoostCampaignSerializer(serializers.ModelSerializer):
         return paisa_to_label(obj.price_paid_paisa)
     
     def get_display_view_count(self, obj):
-        """Show inflated view count to boost seller confidence."""
-        pricing = BoostPricing.get_solo()
-        return obj.view_count * pricing.seller_view_multiplier
+        """Same as view_count — real detail opens, no inflation."""
+        return obj.view_count
 
 
 class BoostPricingView(APIView):

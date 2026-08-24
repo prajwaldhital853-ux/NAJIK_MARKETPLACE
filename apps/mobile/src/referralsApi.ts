@@ -7,6 +7,9 @@ export type ReferEarnStats = {
   earned_count: number;
   earned_total: number;
   earned_total_label: string;
+  available_total?: number;
+  available_total_label?: string;
+  wallet_total_label?: string;
 };
 
 export type ReferEarnInvite = {

@@ -74,7 +74,7 @@ type AuthContextValue = {
 const AuthContext = createContext<AuthContextValue | null>(null);
 const KEEP_ALIVE_MS = 10 * 60 * 1000;
 const ACCOUNT_CHECK_MS = 12_000;
-const SELLER_POLL_MS = 5000;
+const SELLER_POLL_MS = 20_000;
 
 function userLiveKey(user: AppUser) {
   return [

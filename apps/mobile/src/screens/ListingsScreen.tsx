@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useFocusEffect, useNavigation } from "@react-navigation/native";
-import { useCallback, useMemo, useState } from "react";
+import { useNavigation } from "@react-navigation/native";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, Alert, Image, Modal, ScrollView, Text, TextInput, View } from "react-native";
 import { AppHeader } from "../components/AppHeader";
 import { AuthImage } from "../components/AuthImage";
@@ -167,25 +167,25 @@ function VerifiedBody() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
 
-  const load = useCallback(() => {
+  const load = useCallback((silent = false) => {
     void fetchMyListings()
       .then((rows) => {
         setLive(rows);
         setError("");
       })
       .catch((err) => {
-        setLive([]);
-        setError(err instanceof Error ? err.message : "Could not load listings.");
+        if (!silent) {
+          setLive([]);
+          setError(err instanceof Error ? err.message : "Could not load listings.");
+        }
       })
       .finally(() => setLoading(false));
   }, []);
 
-  useFocusEffect(
-    useCallback(() => {
-      load();
-      return subscribeListingsChanged(load);
-    }, [load]),
-  );
+  useEffect(() => {
+    load();
+    return subscribeListingsChanged(() => load(true));
+  }, [load]);
 
   const counts = useMemo(
     () => ({

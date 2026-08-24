@@ -17,7 +17,7 @@ import { listingsToCatalog, liveListingById } from "../data/liveListings";
 import { HomeBannerCarousel } from "../components/HomeBannerCarousel";
 import { UrgentSellSection } from "../components/UrgentSellSection";
 import { fetchListingFeed, fetchListingFeedPaginated, fetchSavedListings, type ApiListing } from "../listingsApi";
-import { getCachedHomeData, setCachedHomeData } from "../cache/homeCache";
+import { getCachedHomeData, hydrateHomeCache, setCachedHomeData } from "../cache/homeCache";
 import { getRecentViewIds } from "../listingViews";
 import { subscribeListingsChanged } from "../listingsRefresh";
 import { openCategory, openHomeSection } from "../navigation/browse";
@@ -83,8 +83,9 @@ export function BuyerHomeScreen() {
 
   async function loadSections() {
     const base = { ...feedParams };
-    const cachedData = getCachedHomeData();
-    if (cachedData) {
+    await hydrateHomeCache();
+    const cachedData = getCachedHomeData(feedParams.place);
+    if (cachedData?.latest?.length) {
       setLatestRows(cachedData.latest);
       setTrendingRows(cachedData.trending);
       setRecommendedRows(cachedData.recommended);
@@ -111,6 +112,7 @@ export function BuyerHomeScreen() {
           trending: firstItems,
           recommended: firstItems.slice(0, SECTION_LIMIT),
           verified: [],
+          place: feedParams.place,
         });
       }
 
@@ -143,6 +145,7 @@ export function BuyerHomeScreen() {
         trending: popularItems.length ? popularItems : firstItems,
         recommended,
         verified: verifiedItems,
+        place: feedParams.place,
       });
     } catch (error) {
       console.error("Error loading sections:", error);

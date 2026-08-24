@@ -1,67 +1,64 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { type CatalogItem } from "../data/catalog";
 
-const HOME_CACHE_KEY = "@najik_home_cache";
-const CACHE_EXPIRY_MS = 5 * 60 * 1000; // 5 minutes
+const HOME_CACHE_KEY = "@najik_home_cache_v2";
+const FRESH_MS = 2 * 60 * 1000;
 
-type HomeCacheData = {
+export type HomeCacheData = {
   latest: CatalogItem[];
   trending: CatalogItem[];
   recommended: CatalogItem[];
   verified: CatalogItem[];
+  place?: string;
   timestamp: number;
 };
 
 let memoryCache: HomeCacheData | null = null;
+let hydratePromise: Promise<HomeCacheData | null> | null = null;
 
-export function getCachedHomeData(): HomeCacheData | null {
-  // Use memory cache for immediate access
-  if (memoryCache && Date.now() - memoryCache.timestamp < CACHE_EXPIRY_MS) {
-    return memoryCache;
-  }
-  
-  // Load from AsyncStorage in background
-  void loadCacheFromStorage();
+export async function hydrateHomeCache(): Promise<HomeCacheData | null> {
+  if (memoryCache) return memoryCache;
+  if (hydratePromise) return hydratePromise;
+  hydratePromise = (async () => {
+    try {
+      const raw = await AsyncStorage.getItem(HOME_CACHE_KEY);
+      if (!raw) return null;
+      const data = JSON.parse(raw) as HomeCacheData;
+      if (!data?.latest) return null;
+      memoryCache = data;
+      return data;
+    } catch {
+      return null;
+    } finally {
+      hydratePromise = null;
+    }
+  })();
+  return hydratePromise;
+}
+
+export function getCachedHomeData(place?: string): HomeCacheData | null {
+  if (!memoryCache) return null;
+  if (place && memoryCache.place && memoryCache.place !== place) return null;
   return memoryCache;
 }
 
-async function loadCacheFromStorage() {
-  try {
-    const cached = await AsyncStorage.getItem(HOME_CACHE_KEY);
-    if (!cached) return;
-    
-    const data: HomeCacheData = JSON.parse(cached);
-    if (Date.now() - data.timestamp < CACHE_EXPIRY_MS) {
-      memoryCache = data;
-    } else {
-      void AsyncStorage.removeItem(HOME_CACHE_KEY);
-    }
-  } catch {
-    // Ignore cache errors
-  }
+export function isHomeCacheFresh(): boolean {
+  return Boolean(memoryCache && Date.now() - memoryCache.timestamp < FRESH_MS);
 }
 
-export function setCachedHomeData(data: Omit<HomeCacheData, 'timestamp'>): void {
+export function setCachedHomeData(data: Omit<HomeCacheData, "timestamp">): void {
   try {
-    const cached: HomeCacheData = {
-      ...data,
-      timestamp: Date.now(),
-    };
+    const cached: HomeCacheData = { ...data, timestamp: Date.now() };
     memoryCache = cached;
     void AsyncStorage.setItem(HOME_CACHE_KEY, JSON.stringify(cached));
   } catch {
-    // Ignore cache errors
+    memoryCache = { ...data, timestamp: Date.now() };
   }
 }
 
 export function clearHomeCache(): void {
-  try {
-    memoryCache = null;
-    void AsyncStorage.removeItem(HOME_CACHE_KEY);
-  } catch {
-    // Ignore cache errors
-  }
+  memoryCache = null;
+  void AsyncStorage.removeItem(HOME_CACHE_KEY).catch(() => undefined);
 }
 
-// Initialize cache on app start
-void loadCacheFromStorage();
+void hydrateHomeCache();

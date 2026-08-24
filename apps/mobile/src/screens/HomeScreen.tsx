@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useFocusEffect, useNavigation } from "@react-navigation/native";
-import { useCallback, useState } from "react";
+import { useNavigation } from "@react-navigation/native";
+import { useCallback, useEffect, useState } from "react";
 import { Alert, ScrollView, Text, View, ActivityIndicator } from "react-native";
 import { AppHeader } from "../components/AppHeader";
 import { AppNoticeHost } from "../components/AppNoticeHost";
@@ -44,25 +44,22 @@ function SellerHomeScreen() {
   const serviceLabel = user?.service_type || "Real Estate & Property Service";
   const liveHomePosts = posts.filter((item) => item.extras?.sold !== true && String(item.extras?.sold || "") !== "true");
 
-  const loadPosts = useCallback(async () => {
+  const loadPosts = useCallback(async (silent = false) => {
     try {
-      setLoading(true);
-      // Load only first 10 listings for home screen
+      if (!silent) setLoading(true);
       const result = await fetchMyListings(1, 10);
       setPosts(result);
     } catch (err) {
-      setPosts([]);
+      if (!silent) setPosts([]);
     } finally {
       setLoading(false);
     }
   }, []);
 
-  useFocusEffect(
-    useCallback(() => {
-      loadPosts();
-      return subscribeListingsChanged(loadPosts);
-    }, [loadPosts]),
-  );
+  useEffect(() => {
+    void loadPosts();
+    return subscribeListingsChanged(() => void loadPosts(true));
+  }, [loadPosts]);
 
   const refreshControl = useAppRefreshControl(async () => {
     loadPosts();

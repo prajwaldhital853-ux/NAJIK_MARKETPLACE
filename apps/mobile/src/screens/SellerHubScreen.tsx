@@ -446,8 +446,8 @@ function InviteBody() {
       <StatStrip
         items={[
           { n: String(stats?.invites_sent ?? 0), l: "Invites used" },
-          { n: String(stats?.earned_count ?? 0), l: "Rewards paid" },
-          { n: stats?.earned_total_label ?? "Rs. 0", l: "In Payments" },
+          { n: stats?.available_total_label ?? stats?.earned_total_label ?? "Rs. 0", l: "Available now" },
+          { n: stats?.wallet_total_label ?? "Rs. 0", l: "Wallet total" },
         ]}
       />
 
@@ -580,7 +580,7 @@ function PaymentsBody() {
   const transactions = data?.transactions ?? [];
 
   const loadedLabel = data?.loaded_balance_label ?? data?.balance_label ?? "Rs. 0";
-  const referLabel = data?.refer_earn_total_label ?? "Rs. 0";
+  const referLabel = data?.refer_earn_remaining_label ?? data?.refer_earn_total_label ?? "Rs. 0";
   const totalLabel = data?.balance_label ?? "Rs. 0";
 
   function txTitle(row: { kind: string; kind_label?: string }) {

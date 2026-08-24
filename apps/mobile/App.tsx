@@ -9,12 +9,16 @@ import { InboxProvider } from "./src/context/InboxContext";
 import { forceLightMode, subscribeForceLightMode } from "./src/forceLightMode";
 import { StaffWarningBanner } from "./src/components/StaffWarningBanner";
 import { PushNotificationsBridge } from "./src/components/PushNotificationsBridge";
+import { hydrateHomeCache } from "./src/cache/homeCache";
 import { RootNavigator } from "./src/navigation/RootNavigator";
 
 forceLightMode();
 
 export default function App() {
   useEffect(() => subscribeForceLightMode(), []);
+  useEffect(() => {
+    void hydrateHomeCache();
+  }, []);
 
   return (
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: "#FFFFFF" }}>

@@ -1,6 +1,7 @@
 import { api } from "./api";
 import { optionalAppAccessToken, withAppAuth } from "./authApi";
 import { emitListingsChanged } from "./listingsRefresh";
+import { clearHomeCache } from "./cache/homeCache";
 import { peekListingDetail, prefetchListingDetail, rememberListingDetail, rememberListingFeed } from "./listingCache";
 
 export type ApiListingPhoto = { id: string; url: string; sort_order: number; is_pending?: boolean };
@@ -265,6 +266,7 @@ export async function createListing(payload: ListingWritePayload) {
     }),
   );
   emitListingsChanged();
+  clearHomeCache();
   return row;
 }
 
@@ -273,6 +275,7 @@ export async function deleteMyListing(id: string, confirm = false) {
     api<void>(`/api/listings/me/${id}/${confirm ? "?confirm=1" : ""}`, { method: "DELETE", token }),
   );
   emitListingsChanged();
+  clearHomeCache();
 }
 
 export async function updateListing(id: string, payload: ListingWritePayload) {
@@ -284,6 +287,7 @@ export async function updateListing(id: string, payload: ListingWritePayload) {
     }),
   );
   emitListingsChanged();
+  clearHomeCache();
   return row;
 }
 
@@ -296,6 +300,7 @@ export async function setListingSold(id: string, sold: boolean) {
     }),
   );
   emitListingsChanged();
+  clearHomeCache();
   return row;
 }
 

@@ -45,3 +45,25 @@ export function SummaryStrip({
     </div>
   );
 }
+
+export function AdminLoadingState({ label = "Loading…" }: { label?: string }) {
+  return (
+    <div className="flex items-center justify-center gap-2 rounded-2xl border border-line bg-card px-4 py-14 text-sm text-muted">
+      <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-brand border-t-transparent" />
+      {label}
+    </div>
+  );
+}
+
+export function AdminTableLoadingRow({ colSpan, label = "Loading…" }: { colSpan: number; label?: string }) {
+  return (
+    <tr>
+      <td colSpan={colSpan} className="px-4 py-14 text-center">
+        <span className="inline-flex items-center justify-center gap-2 text-sm text-muted">
+          <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-brand border-t-transparent" />
+          {label}
+        </span>
+      </td>
+    </tr>
+  );
+}

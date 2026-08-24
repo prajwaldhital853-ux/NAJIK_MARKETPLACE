@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { PageHeader } from "@/components/admin/page-frame";
+import { PageHeader, AdminLoadingState } from "@/components/admin/page-frame";
 import { Btn, Field, StatusBadge, inputClass } from "@/components/admin/ui";
 import { useSession } from "@/lib/session";
 import { useAdmin } from "@/lib/store";
@@ -38,12 +38,15 @@ export default function GeneralAppControlPage() {
   const [previews, setPreviews] = useState<Record<string, string>>({});
   const [audience, setAudience] = useState<(typeof AUDIENCES)[number]["value"]>("all");
   const [busy, setBusy] = useState(false);
+  const [busyAction, setBusyAction] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (opts?: { refresh?: boolean }) => {
     if (!apiSession) return;
-    setLoading(true);
+    if (opts?.refresh) setRefreshing(true);
+    else setLoading(true);
     try {
       const rows = await listHomeBannerSlides();
       setSlides(rows);
@@ -58,7 +61,8 @@ export default function GeneralAppControlPage() {
       setPreviews({});
       setError(err instanceof Error ? err.message : "Could not load banners.");
     } finally {
-      setLoading(false);
+      if (opts?.refresh) setRefreshing(false);
+      else setLoading(false);
     }
   }, [apiSession]);
 
@@ -103,7 +107,7 @@ export default function GeneralAppControlPage() {
 
   async function removeSlide(id: string) {
     if (!window.confirm("Delete this banner?")) return;
-    setBusy(true);
+    setBusyAction(`delete:${id}`);
     try {
       await deleteHomeBannerSlide(id);
       toast("Banner deleted.");
@@ -111,17 +115,20 @@ export default function GeneralAppControlPage() {
     } catch (err) {
       toast(err instanceof Error ? err.message : "Could not delete banner.");
     } finally {
-      setBusy(false);
+      setBusyAction(null);
     }
   }
 
   async function setAudienceFor(id: string, next: "all" | "buyer" | "provider") {
+    setBusyAction(`audience:${id}`);
     try {
       await patchHomeBannerSlide(id, { audience: next });
       await load();
       toast("Audience updated.");
     } catch (err) {
       toast(err instanceof Error ? err.message : "Could not update audience.");
+    } finally {
+      setBusyAction(null);
     }
   }
 
@@ -132,8 +139,9 @@ export default function GeneralAppControlPage() {
         summary="Up to 3 home banners auto-scroll on buyer or seller Home. Pick who sees each banner. Changes appear in the app within about a minute without refresh."
       />
       {error ? <p className="mb-4 text-sm text-red">{error}</p> : null}
-      {loading && !error ? <p className="mb-4 text-sm text-muted">Loading app controls…</p> : null}
+      {loading && !error ? <AdminLoadingState label="Loading app controls…" /> : null}
 
+      {!loading ? (
       <section className="rounded border border-line bg-card p-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
@@ -159,6 +167,7 @@ export default function GeneralAppControlPage() {
                   <select
                     className={inputClass}
                     value={slide.audience}
+                    disabled={!!busyAction}
                     onChange={(e) => void setAudienceFor(slide.id, e.target.value as "all" | "buyer" | "provider")}
                   >
                     {AUDIENCES.map((a) => (
@@ -167,7 +176,15 @@ export default function GeneralAppControlPage() {
                   </select>
                 </Field>
                 <div className="flex gap-2">
-                  <Btn kind="danger" onClick={() => void removeSlide(slide.id)} disabled={busy}>Delete</Btn>
+                  <Btn
+                    kind="danger"
+                    loading={busyAction === `delete:${slide.id}`}
+                    loadingLabel="Deleting…"
+                    disabled={!!busyAction || busy}
+                    onClick={() => void removeSlide(slide.id)}
+                  >
+                    Delete
+                  </Btn>
                 </div>
               </div>
             </div>
@@ -198,9 +215,12 @@ export default function GeneralAppControlPage() {
         </div>
 
         <div className="mt-3">
-          <Btn kind="ghost" onClick={() => void load()} disabled={busy}>Refresh</Btn>
+          <Btn kind="ghost" loading={refreshing} loadingLabel="Refreshing…" disabled={busy || !!busyAction || refreshing} onClick={() => void load({ refresh: true })}>
+            Refresh
+          </Btn>
         </div>
       </section>
+      ) : null}
 
       <UrgentSellAdminPanel />
     </div>

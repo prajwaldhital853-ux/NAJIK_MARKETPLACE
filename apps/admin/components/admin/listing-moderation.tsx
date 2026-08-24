@@ -55,7 +55,16 @@ export function ListingModeration({
   const [tab, setTab] = useState<(typeof TABS)[number]>(() => tabFromParam(params.get("status")));
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
   const [reason, setReason] = useState("");
+  const [busyAction, setBusyAction] = useState<string | null>(null);
   const [open, setOpen] = useState<StaffListing | null>(null);
+
+  const ACTION_LABELS: Record<string, string> = {
+    approve: "Approving…",
+    reject: "Rejecting…",
+    deactivate: "Deactivating…",
+    delete: "Deleting…",
+    reactivate: "Reactivating…",
+  };
   const orderKey = `najik-listing-order:${category || "all"}`;
   const [orderIds, setOrderIds] = useState<string[]>(() => {
     if (typeof window === "undefined") return [];
@@ -157,13 +166,22 @@ export function ListingModeration({
     router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
   }
 
-  async function setStatus(id: string, status: "approved" | "rejected" | "deactivated", note?: string) {
+  async function setStatus(
+    id: string,
+    status: "approved" | "rejected" | "deactivated",
+    note?: string,
+    actionKey?: string,
+  ) {
+    const key = actionKey || `${id}:${status === "approved" ? "approve" : status === "rejected" ? "reject" : "deactivate"}`;
+    setBusyAction(key);
     try {
       await patchStaffListing(id, status, note ?? reason);
       setReason("");
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not update listing.");
+    } finally {
+      setBusyAction(null);
     }
   }
 
@@ -177,17 +195,20 @@ export function ListingModeration({
       window.alert("A note for the seller is required.");
       return;
     }
-    await setStatus(row.id, "deactivated", note.trim());
+    await setStatus(row.id, "deactivated", note.trim(), `${row.id}:deactivate`);
   }
 
   async function removeListing(id: string) {
     if (!window.confirm("Delete this listing permanently? Buyers will no longer see it.")) return;
+    setBusyAction(`${id}:delete`);
     try {
       await deleteStaffListing(id);
       if (open?.id === id) setOpen(null);
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not delete listing.");
+    } finally {
+      setBusyAction(null);
     }
   }
 
@@ -432,14 +453,39 @@ export function ListingModeration({
                     rows={2}
                   />
                   <div className="flex flex-wrap gap-2">
-                    <Btn onClick={() => void setStatus(open.id, "approved")}>{open.has_pending_edit ? "Approve edit" : "Approve"}</Btn>
-                    <Btn kind="danger" onClick={() => void setStatus(open.id, "rejected")}>
+                    <Btn
+                      loading={busyAction === `${open.id}:approve`}
+                      loadingLabel={ACTION_LABELS.approve}
+                      disabled={!!busyAction}
+                      onClick={() => void setStatus(open.id, "approved", undefined, `${open.id}:approve`)}
+                    >
+                      {open.has_pending_edit ? "Approve edit" : "Approve"}
+                    </Btn>
+                    <Btn
+                      kind="danger"
+                      loading={busyAction === `${open.id}:reject`}
+                      loadingLabel={ACTION_LABELS.reject}
+                      disabled={!!busyAction}
+                      onClick={() => void setStatus(open.id, "rejected", undefined, `${open.id}:reject`)}
+                    >
                       {open.has_pending_edit ? "Reject edit" : "Reject"}
                     </Btn>
-                    <Btn kind="danger" onClick={() => void deactivateListing(open)}>
+                    <Btn
+                      kind="danger"
+                      loading={busyAction === `${open.id}:deactivate`}
+                      loadingLabel={ACTION_LABELS.deactivate}
+                      disabled={!!busyAction}
+                      onClick={() => void deactivateListing(open)}
+                    >
                       Deactivate
                     </Btn>
-                    <Btn kind="danger" onClick={() => void removeListing(open.id)}>
+                    <Btn
+                      kind="danger"
+                      loading={busyAction === `${open.id}:delete`}
+                      loadingLabel={ACTION_LABELS.delete}
+                      disabled={!!busyAction}
+                      onClick={() => void removeListing(open.id)}
+                    >
                       Delete
                     </Btn>
                   </div>
@@ -447,14 +493,33 @@ export function ListingModeration({
               ) : (
                 <div className="flex flex-wrap gap-2">
                   {open.status === "deactivated" || open.status === "rejected" ? (
-                    <Btn onClick={() => void setStatus(open.id, "approved", "")}>Reactivate listing</Btn>
+                    <Btn
+                      loading={busyAction === `${open.id}:reactivate`}
+                      loadingLabel={ACTION_LABELS.reactivate}
+                      disabled={!!busyAction}
+                      onClick={() => void setStatus(open.id, "approved", "", `${open.id}:reactivate`)}
+                    >
+                      Reactivate listing
+                    </Btn>
                   ) : null}
                   {open.status === "approved" ? (
-                    <Btn kind="danger" onClick={() => void deactivateListing(open)}>
+                    <Btn
+                      kind="danger"
+                      loading={busyAction === `${open.id}:deactivate`}
+                      loadingLabel={ACTION_LABELS.deactivate}
+                      disabled={!!busyAction}
+                      onClick={() => void deactivateListing(open)}
+                    >
                       Deactivate
                     </Btn>
                   ) : null}
-                  <Btn kind="danger" onClick={() => void removeListing(open.id)}>
+                  <Btn
+                    kind="danger"
+                    loading={busyAction === `${open.id}:delete`}
+                    loadingLabel={ACTION_LABELS.delete}
+                    disabled={!!busyAction}
+                    onClick={() => void removeListing(open.id)}
+                  >
                     Delete listing
                   </Btn>
                 </div>

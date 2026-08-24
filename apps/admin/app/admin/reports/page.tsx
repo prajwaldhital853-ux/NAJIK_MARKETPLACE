@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { PageHeader, SummaryStrip } from "@/components/admin/page-frame";
+import { PageHeader, SummaryStrip, AdminLoadingState } from "@/components/admin/page-frame";
 import { Btn, StatusBadge, inputClass } from "@/components/admin/ui";
 import { formatNptDateTime, formatNptTime } from "@/lib/format";
 import { ADMIN_POLL_FALLBACK_MS } from "@/lib/event-stream";
@@ -68,7 +68,27 @@ export default function ReportsPage() {
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
   const [warningNote, setWarningNote] = useState("");
   const [adminNote, setAdminNote] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [busyAction, setBusyAction] = useState<string | null>(null);
+
+  const ACTION_LABELS: Record<string, string> = {
+    save_note: "Saving…",
+    under_review: "Updating…",
+    resolved: "Resolving…",
+    open: "Reopening…",
+    warn_accused: "Sending warning…",
+    warn_reporter: "Sending warning…",
+    warn_both: "Sending warnings…",
+    clear_warning_accused: "Clearing…",
+    clear_warning_reporter: "Clearing…",
+    block_accused: "Blocking…",
+    block_reporter: "Blocking…",
+    block_both: "Blocking…",
+    deactivate_accused: "Deactivating…",
+    deactivate_reporter: "Deactivating…",
+    deactivate_both: "Deactivating…",
+    unblock_both: "Reactivating…",
+  };
 
   function writeFilters(next: {
     section?: "all" | ComplaintSection;
@@ -98,6 +118,7 @@ export default function ReportsPage() {
 
   async function load(nextPage = page) {
     if (!apiSession) return;
+    setLoading(true);
     try {
       const status =
         tab === "Open" ? "open" : tab === "Under review" ? "under_review" : tab === "Resolved" ? "resolved" : undefined;
@@ -118,12 +139,15 @@ export default function ReportsPage() {
     } catch (err) {
       setItems([]);
       setError(err instanceof Error ? err.message : "Could not load reports.");
+    } finally {
+      setLoading(false);
     }
   }
 
   useEffect(() => {
     if (!apiSession) {
       setItems([]);
+      setLoading(false);
       setError("Sign in with a staff account to review reports and complaints.");
       return;
     }
@@ -189,14 +213,17 @@ export default function ReportsPage() {
     setAdminNote(selected.admin_note || "");
   }, [selected?.id]);
 
-  async function act(body: {
-    status?: string;
-    action?: string;
-    admin_note?: string;
-    warning_message?: string;
-  }) {
+  async function act(
+    actionKey: string,
+    body: {
+      status?: string;
+      action?: string;
+      admin_note?: string;
+      warning_message?: string;
+    },
+  ) {
     if (!selected) return;
-    setBusy(true);
+    setBusyAction(actionKey);
     try {
       await patchComplaint(selected.id, body);
       toast("Complaint updated.");
@@ -204,8 +231,37 @@ export default function ReportsPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not update complaint.");
     } finally {
-      setBusy(false);
+      setBusyAction(null);
     }
+  }
+
+  function ComplaintBtn({
+    actionKey,
+    children,
+    kind,
+    body,
+  }: {
+    actionKey: string;
+    children: React.ReactNode;
+    kind?: "primary" | "ghost" | "danger";
+    body: {
+      status?: string;
+      action?: string;
+      admin_note?: string;
+      warning_message?: string;
+    };
+  }) {
+    return (
+      <Btn
+        kind={kind}
+        loading={busyAction === actionKey}
+        loadingLabel={ACTION_LABELS[actionKey] || "Working…"}
+        disabled={!!busyAction}
+        onClick={() => void act(actionKey, body)}
+      >
+        {children}
+      </Btn>
+    );
   }
 
   function titleFor(row: ComplaintTicket) {
@@ -300,7 +356,9 @@ export default function ReportsPage() {
         </div>
       </div>
       {error ? <p className="mb-4 text-sm text-red">{error}</p> : null}
-      {visible.length === 0 && !error ? (
+      {loading ? (
+        <AdminLoadingState label="Loading complaints…" />
+      ) : visible.length === 0 && !error ? (
         <section className="card-glow rounded-2xl border border-line bg-card p-6 text-sm text-muted">
           No complaints in this section yet. Buyer, seller, and chat reports each appear in their own section.
         </section>
@@ -397,9 +455,9 @@ export default function ReportsPage() {
                 placeholder="Internal note for staff…"
               />
               <div className="mt-2">
-                <Btn disabled={busy} onClick={() => void act({ admin_note: adminNote })}>
+                <ComplaintBtn actionKey="save_note" body={{ admin_note: adminNote }}>
                   Save note
-                </Btn>
+                </ComplaintBtn>
               </div>
 
               <label className="mt-4 block text-xs font-semibold uppercase tracking-wide text-muted">Warning note to user</label>
@@ -417,68 +475,68 @@ export default function ReportsPage() {
               ) : null}
 
               <div className="mt-3 flex flex-wrap gap-2">
-                <Btn disabled={busy} onClick={() => void act({ status: "under_review" })}>
+                <ComplaintBtn actionKey="under_review" body={{ status: "under_review" }}>
                   Under review
-                </Btn>
-                <Btn disabled={busy} onClick={() => void act({ status: "resolved" })}>
+                </ComplaintBtn>
+                <ComplaintBtn actionKey="resolved" body={{ status: "resolved" }}>
                   Resolve
-                </Btn>
-                <Btn disabled={busy} onClick={() => void act({ status: "open" })}>
+                </ComplaintBtn>
+                <ComplaintBtn actionKey="open" body={{ status: "open" }}>
                   Reopen
-                </Btn>
+                </ComplaintBtn>
               </div>
 
               <p className="mt-4 text-xs font-semibold uppercase tracking-wide text-muted">Send warning</p>
               <div className="mt-2 flex flex-wrap gap-2">
-                <Btn
-                  disabled={busy}
-                  onClick={() => void act({ action: "warn_accused", warning_message: warningNote, status: "under_review" })}
+                <ComplaintBtn
+                  actionKey="warn_accused"
+                  body={{ action: "warn_accused", warning_message: warningNote, status: "under_review" }}
                 >
                   Warn accused
-                </Btn>
-                <Btn
-                  disabled={busy}
-                  onClick={() => void act({ action: "warn_reporter", warning_message: warningNote, status: "under_review" })}
+                </ComplaintBtn>
+                <ComplaintBtn
+                  actionKey="warn_reporter"
+                  body={{ action: "warn_reporter", warning_message: warningNote, status: "under_review" }}
                 >
                   Warn reporter
-                </Btn>
-                <Btn
-                  disabled={busy}
-                  onClick={() => void act({ action: "warn_both", warning_message: warningNote, status: "under_review" })}
+                </ComplaintBtn>
+                <ComplaintBtn
+                  actionKey="warn_both"
+                  body={{ action: "warn_both", warning_message: warningNote, status: "under_review" }}
                 >
                   Warn both
-                </Btn>
-                <Btn disabled={busy} onClick={() => void act({ action: "clear_warning_accused" })}>
+                </ComplaintBtn>
+                <ComplaintBtn actionKey="clear_warning_accused" body={{ action: "clear_warning_accused" }}>
                   Clear accused warning
-                </Btn>
-                <Btn disabled={busy} onClick={() => void act({ action: "clear_warning_reporter" })}>
+                </ComplaintBtn>
+                <ComplaintBtn actionKey="clear_warning_reporter" body={{ action: "clear_warning_reporter" }}>
                   Clear reporter warning
-                </Btn>
+                </ComplaintBtn>
               </div>
 
               <p className="mt-4 text-xs font-semibold uppercase tracking-wide text-muted">Account actions</p>
               <div className="mt-2 flex flex-wrap gap-2">
-                <Btn kind="danger" disabled={busy} onClick={() => void act({ action: "block_accused", status: "under_review" })}>
+                <ComplaintBtn kind="danger" actionKey="block_accused" body={{ action: "block_accused", status: "under_review" }}>
                   Block accused
-                </Btn>
-                <Btn kind="danger" disabled={busy} onClick={() => void act({ action: "block_reporter", status: "under_review" })}>
+                </ComplaintBtn>
+                <ComplaintBtn kind="danger" actionKey="block_reporter" body={{ action: "block_reporter", status: "under_review" }}>
                   Block reporter
-                </Btn>
-                <Btn kind="danger" disabled={busy} onClick={() => void act({ action: "block_both", status: "under_review" })}>
+                </ComplaintBtn>
+                <ComplaintBtn kind="danger" actionKey="block_both" body={{ action: "block_both", status: "under_review" }}>
                   Block both
-                </Btn>
-                <Btn kind="danger" disabled={busy} onClick={() => void act({ action: "deactivate_accused", status: "under_review" })}>
+                </ComplaintBtn>
+                <ComplaintBtn kind="danger" actionKey="deactivate_accused" body={{ action: "deactivate_accused", status: "under_review" }}>
                   Deactivate accused
-                </Btn>
-                <Btn kind="danger" disabled={busy} onClick={() => void act({ action: "deactivate_reporter", status: "under_review" })}>
+                </ComplaintBtn>
+                <ComplaintBtn kind="danger" actionKey="deactivate_reporter" body={{ action: "deactivate_reporter", status: "under_review" }}>
                   Deactivate reporter
-                </Btn>
-                <Btn kind="danger" disabled={busy} onClick={() => void act({ action: "deactivate_both", status: "under_review" })}>
+                </ComplaintBtn>
+                <ComplaintBtn kind="danger" actionKey="deactivate_both" body={{ action: "deactivate_both", status: "under_review" }}>
                   Deactivate both
-                </Btn>
-                <Btn disabled={busy} onClick={() => void act({ action: "unblock_both" })}>
+                </ComplaintBtn>
+                <ComplaintBtn actionKey="unblock_both" body={{ action: "unblock_both" }}>
                   Unblock / reactivate both
-                </Btn>
+                </ComplaintBtn>
               </div>
             </section>
           ) : null}

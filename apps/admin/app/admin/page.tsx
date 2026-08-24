@@ -51,7 +51,7 @@ function activityInRange(row: Activity, rangeDays: number): boolean {
 export default function DashboardPage() {
   const router = useRouter();
   const { staff } = useSession();
-  const { kpis: k, growth, categories, activity, liveListings, users, paymentsSummary } = useAdmin();
+  const { kpis: k, growth, categories, activity, liveListings, users, paymentsSummary, inboxReady } = useAdmin();
   const [rangeDays, setRangeDays] = useState(30);
   const [rangeLabel, setRangeLabel] = useState("Last 30 days");
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -358,6 +358,9 @@ export default function DashboardPage() {
           onTab={setTableTab}
           onRow={openActivityRow}
           rowActions={rowActions}
+          loading={!inboxReady}
+          loadingLabel="Loading activity…"
+          emptyLabel="No recent activity in this filter."
         />
       </div>
       <UserDetailDrawer user={openUser} onClose={() => setOpenUser(null)} />

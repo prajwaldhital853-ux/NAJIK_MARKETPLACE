@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Btn } from "./ui";
+import { AdminLoadingState } from "./page-frame";
 import { listPromoteStaffListings, removeStaffListingPromote, setStaffListingPromote, type StaffListing } from "@/lib/staff-api";
 import { relativeTime } from "@/lib/format";
 import { useAdmin } from "@/lib/store";
@@ -67,7 +68,7 @@ export function PromotionRequestsPanel() {
           Refresh
         </Btn>
       </div>
-      {loading ? <p className="mt-3 text-sm text-muted">Loading…</p> : null}
+      {loading ? <AdminLoadingState label="Loading promotion requests…" /> : null}
       {!loading && rows.length === 0 ? (
         <p className="mt-3 text-sm text-muted">No pending promotion requests.</p>
       ) : null}

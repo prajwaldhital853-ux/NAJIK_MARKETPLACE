@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Btn, Field, inputClass } from "./ui";
+import { AdminLoadingState } from "./page-frame";
 import { ADMIN_POLL_FALLBACK_MS } from "@/lib/event-stream";
 import {
   approveStaffLoadRequest,
@@ -188,20 +189,27 @@ export function SellerLoadRequestsPanel({ embedded, onChanged }: { embedded?: bo
   const [rejectNote, setRejectNote] = useState<Record<string, string>>({});
   const [proofSrc, setProofSrc] = useState<string | null>(null);
   const [proofLoading, setProofLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (opts?: { refresh?: boolean }) => {
+    if (opts?.refresh) setRefreshing(true);
+    else setLoading(true);
     try {
       const [pending, cfg] = await Promise.all([listStaffLoadRequests("pending"), getSellerPaymentConfig()]);
       setRows(pending);
       setFeeRupees(cfg.listing_fee_rupees || 0);
     } catch (err) {
       toast(err instanceof Error ? err.message : "Could not load requests.");
+    } finally {
+      if (opts?.refresh) setRefreshing(false);
+      else setLoading(false);
     }
   }, [toast]);
 
   useEffect(() => {
     void load();
-    const id = window.setInterval(() => void load(), ADMIN_POLL_FALLBACK_MS);
+    const id = window.setInterval(() => void load({ refresh: true }), ADMIN_POLL_FALLBACK_MS);
     return () => window.clearInterval(id);
   }, [load]);
 
@@ -256,20 +264,24 @@ export function SellerLoadRequestsPanel({ embedded, onChanged }: { embedded?: bo
           </div>
           <div className="flex items-center gap-2">
             <span className="rounded-full bg-amber/20 px-3 py-1 text-[11px] font-bold text-ink">{rows.length} pending</span>
-            <Btn kind="ghost" onClick={() => void load()}>Refresh</Btn>
+            <Btn kind="ghost" loading={refreshing} loadingLabel="Refreshing…" disabled={refreshing} onClick={() => void load({ refresh: true })}>
+              Refresh
+            </Btn>
           </div>
         </div>
       </div>
 
       <div className="space-y-3 p-4">
-        {rows.length === 0 ? (
+        {loading ? <AdminLoadingState label="Loading payment requests…" /> : null}
+        {!loading && rows.length === 0 ? (
           <div className="rounded-xl border border-dashed border-line bg-elevated px-4 py-10 text-center">
             <p className="text-sm font-semibold text-ink">No pending requests</p>
             <p className="mt-1 text-[12px] text-muted">New bank top-ups appear here automatically.</p>
           </div>
         ) : null}
 
-        {rows.map((row) => {
+        {!loading
+          ? rows.map((row) => {
           const rupees = row.amount_paisa / 100;
           const listings = listingsFromAmount(rupees, feeRupees);
           return (
@@ -314,7 +326,8 @@ export function SellerLoadRequestsPanel({ embedded, onChanged }: { embedded?: bo
               </div>
             </div>
           );
-        })}
+        })
+          : null}
       </div>
 
       {proofSrc !== null ? <ProofLightbox src={proofSrc} onClose={() => setProofSrc(null)} /> : null}
@@ -331,17 +344,19 @@ export function SellerWalletsPanel({ embedded, onChanged }: { embedded?: boolean
   const [adjustAmount, setAdjustAmount] = useState("");
   const [adjustNote, setAdjustNote] = useState("");
   const [busy, setBusy] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [detailLoading, setDetailLoading] = useState(false);
   const [addedLabel, setAddedLabel] = useState("Rs. 0");
   const [deductedLabel, setDeductedLabel] = useState("Rs. 0");
 
   useEffect(() => {
-    void listStaffSellerWallets()
-      .then(setRows)
-      .catch((err) => toast(err instanceof Error ? err.message : "Could not load wallets."));
-    void listAppUsers()
-      .then((users) => setProviders(users.filter((u) => u.account_type === "provider")))
-      .catch(() => setProviders([]));
+    setLoading(true);
+    void Promise.all([
+      listStaffSellerWallets().then(setRows),
+      listAppUsers().then((users) => setProviders(users.filter((u) => u.account_type === "provider"))),
+    ])
+      .catch((err) => toast(err instanceof Error ? err.message : "Could not load wallets."))
+      .finally(() => setLoading(false));
   }, [toast]);
 
   const filteredProviders = providers.filter((p) => {
@@ -413,6 +428,10 @@ export function SellerWalletsPanel({ embedded, onChanged }: { embedded?: boolean
       <h2 className="text-[15px] font-bold text-ink">Seller wallets</h2>
       <p className="mt-1 text-[12px] text-muted">Search seller, view totals credited vs deducted, manual balance fixes.</p>
 
+      {loading ? <div className="mt-4"><AdminLoadingState label="Loading wallets…" /></div> : null}
+
+      {!loading ? (
+      <>
       <div className="mt-4 grid gap-3 md:grid-cols-2">
         <Field label="Find seller (name, phone, email)">
           <input
@@ -489,6 +508,8 @@ export function SellerWalletsPanel({ embedded, onChanged }: { embedded?: boolean
           </button>
         ))}
       </div>
+      </>
+      ) : null}
     </section>
   );
 }

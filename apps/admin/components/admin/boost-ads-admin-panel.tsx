@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Btn, Field, inputClass } from "./ui";
+import { AdminLoadingState } from "./page-frame";
 import {
   controlBoostCampaign,
   getBoostPricing,
@@ -22,6 +23,7 @@ export function BoostAdsAdminPanel({ initialTab }: { initialTab?: Tab }) {
   const [campaigns, setCampaigns] = useState<BoostCampaignRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [busyCampaign, setBusyCampaign] = useState<string | null>(null);
 
   const loadPricing = useCallback(async () => {
     const data = await getBoostPricing();
@@ -55,17 +57,28 @@ export function BoostAdsAdminPanel({ initialTab }: { initialTab?: Tab }) {
   };
 
   const controlCampaign = async (campaignId: string, action: string, hours?: number) => {
+    const key = `${campaignId}:${action}`;
+    setBusyCampaign(key);
     try {
       await controlBoostCampaign(campaignId, action, hours);
       toast(`Campaign ${action}${action.endsWith("e") ? "d" : "ed"}`);
       await loadCampaigns(tab === "all" ? "all" : "active");
     } catch (err) {
       toast(err instanceof Error ? err.message : `Failed to ${action} campaign`);
+    } finally {
+      setBusyCampaign(null);
     }
   };
 
+  const CAMPAIGN_LABELS: Record<string, string> = {
+    pause: "Pausing…",
+    resume: "Resuming…",
+    extend: "Extending…",
+    cancel: "Cancelling…",
+  };
+
   if (loading) {
-    return <div className="p-6 text-center text-sm text-muted">Loading boost ads…</div>;
+    return <AdminLoadingState label="Loading boost ads…" />;
   }
 
   const liveCount = campaigns.filter((c) => c.status === "active").length;
@@ -203,7 +216,15 @@ export function BoostAdsAdminPanel({ initialTab }: { initialTab?: Tab }) {
                 <div className="flex flex-wrap gap-2">
                   {campaign.status === "active" ? (
                     <>
-                      <Btn kind="ghost" onClick={() => void controlCampaign(campaign.id, "pause")}>Pause</Btn>
+                      <Btn
+                        kind="ghost"
+                        loading={busyCampaign === `${campaign.id}:pause`}
+                        loadingLabel={CAMPAIGN_LABELS.pause}
+                        disabled={!!busyCampaign}
+                        onClick={() => void controlCampaign(campaign.id, "pause")}
+                      >
+                        Pause
+                      </Btn>
                       <Btn
                         kind="ghost"
                         onClick={() => {
@@ -216,10 +237,21 @@ export function BoostAdsAdminPanel({ initialTab }: { initialTab?: Tab }) {
                     </>
                   ) : null}
                   {campaign.status === "paused" ? (
-                    <Btn kind="ghost" onClick={() => void controlCampaign(campaign.id, "resume")}>Resume</Btn>
+                    <Btn
+                      kind="ghost"
+                      loading={busyCampaign === `${campaign.id}:resume`}
+                      loadingLabel={CAMPAIGN_LABELS.resume}
+                      disabled={!!busyCampaign}
+                      onClick={() => void controlCampaign(campaign.id, "resume")}
+                    >
+                      Resume
+                    </Btn>
                   ) : null}
                   <Btn
                     kind="danger"
+                    loading={busyCampaign === `${campaign.id}:cancel`}
+                    loadingLabel={CAMPAIGN_LABELS.cancel}
+                    disabled={!!busyCampaign}
                     onClick={() => {
                       if (confirm("Cancel this boost campaign?")) void controlCampaign(campaign.id, "cancel");
                     }}

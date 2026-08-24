@@ -4,15 +4,27 @@ import { useState } from "react";
 import { compact, npr } from "@/lib/format";
 import { REVENUE_BARS } from "@/lib/demo-data";
 import { CategoryDonut, LineGrowth, RevenueBars } from "@/components/admin/charts";
-import { PageHeader, SummaryStrip } from "@/components/admin/page-frame";
+import { PageHeader, SummaryStrip, AdminLoadingState } from "@/components/admin/page-frame";
 import { KpiCard } from "@/components/admin/ui";
 import { useAdmin } from "@/lib/store";
 
 export default function AnalyticsPage() {
-  const { users, orders, payments, properties, kpis, growth, categories } = useAdmin();
+  const { users, orders, payments, properties, kpis, growth, categories, inboxReady } = useAdmin();
   const [city, setCity] = useState("All Nepal");
   const cities = ["All Nepal", "Kathmandu", "Lalitpur", "Pokhara", "Lahan", "Biratnagar"];
   const gmv = payments.filter((p) => p.status === "completed").reduce((s, p) => s + p.amount, 0);
+
+  if (!inboxReady) {
+    return (
+      <div>
+        <PageHeader
+          title="Analytics"
+          summary="Live marketplace counts from app signups and submitted listings. Charts follow the same series as the dashboard."
+        />
+        <AdminLoadingState label="Loading analytics…" />
+      </div>
+    );
+  }
 
   return (
     <div>

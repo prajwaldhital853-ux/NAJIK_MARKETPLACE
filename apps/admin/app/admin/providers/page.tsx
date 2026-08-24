@@ -48,6 +48,8 @@ export default function ProviderVerificationPage() {
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
   const [open, setOpen] = useState<ProviderApplication | null>(null);
   const [rejectNote, setRejectNote] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [busyAction, setBusyAction] = useState<string | null>(null);
   const orderKey = "najik-kyc-order";
   const [orderIds, setOrderIds] = useState<string[]>(() => {
     if (typeof window === "undefined") return [];
@@ -60,6 +62,7 @@ export default function ProviderVerificationPage() {
 
   async function load(nextPage = page) {
     if (!apiSession) return;
+    setLoading(true);
     try {
       const statusQuery =
         filter === "active" ? "verified" : filter === "rejected" ? "rejected" : filter === "pending" ? "pending" : undefined;
@@ -78,12 +81,15 @@ export default function ProviderVerificationPage() {
     } catch (err) {
       setItems([]);
       setError(err instanceof Error ? err.message : "Could not load applications.");
+    } finally {
+      setLoading(false);
     }
   }
 
   useEffect(() => {
     if (!apiSession) {
       setItems([]);
+      setLoading(false);
       setError("Sign in with a staff account to review live seller applications.");
       return;
     }
@@ -116,12 +122,21 @@ export default function ProviderVerificationPage() {
     setRejectNote(open.rejection_note || "");
   }, [open?.id]);
 
-  async function setStatus(id: string, status: "pending" | "verified" | "rejected", rejection_note?: string) {
+  async function setStatus(
+    id: string,
+    status: "pending" | "verified" | "rejected",
+    rejection_note?: string,
+    actionKey?: string,
+  ) {
+    const key = actionKey || `${status}:${id}`;
+    setBusyAction(key);
     try {
       await patchProviderApplication(id, status, rejection_note);
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not update status.");
+    } finally {
+      setBusyAction(null);
     }
   }
 
@@ -238,7 +253,12 @@ export default function ProviderVerificationPage() {
       window.alert("Add a rejection note so the provider knows what to fix.");
       return;
     }
-    void setStatus(open.id, "rejected", note);
+    void setStatus(
+      open.id,
+      "rejected",
+      note,
+      open.status === "verified" ? `reject-kyc:${open.id}` : `reject:${open.id}`,
+    );
   }
 
   const docs = open
@@ -298,6 +318,9 @@ export default function ProviderVerificationPage() {
         onRow={setOpen}
         rowActions={rowActions}
         searchPlaceholder="Filter applications…"
+        loading={loading}
+        loadingLabel="Loading applications…"
+        emptyLabel="No applications in this view."
       />
       <div className="mt-3 flex items-center justify-between text-sm text-muted">
         <span>
@@ -382,8 +405,8 @@ export default function ProviderVerificationPage() {
               ) : null}
               {open.has_pending_edit ? (
                 <div className="flex flex-wrap gap-2">
-                  <Btn onClick={() => void setStatus(open.id, "verified")}>Approve edit</Btn>
-                  <Btn kind="danger" onClick={() => void setStatus(open.id, "rejected")}>
+                  <Btn loading={busyAction === `approve-edit:${open.id}`} loadingLabel="Approving…" disabled={!!busyAction} onClick={() => void setStatus(open.id, "verified", undefined, `approve-edit:${open.id}`)}>Approve edit</Btn>
+                  <Btn kind="danger" loading={busyAction === `reject-edit:${open.id}`} loadingLabel="Rejecting…" disabled={!!busyAction} onClick={() => void setStatus(open.id, "rejected", undefined, `reject-edit:${open.id}`)}>
                     Reject edit only
                   </Btn>
                 </div>
@@ -398,8 +421,8 @@ export default function ProviderVerificationPage() {
                     rows={3}
                   />
                   <div className="flex flex-wrap gap-2">
-                    <Btn onClick={() => void setStatus(open.id, "verified")}>Verify (set Active)</Btn>
-                    <Btn kind="danger" onClick={rejectOpen}>
+                    <Btn loading={busyAction === `verify:${open.id}`} loadingLabel="Verifying…" disabled={!!busyAction} onClick={() => void setStatus(open.id, "verified", undefined, `verify:${open.id}`)}>Verify (set Active)</Btn>
+                    <Btn kind="danger" loading={busyAction === `reject:${open.id}`} loadingLabel="Rejecting…" disabled={!!busyAction} onClick={rejectOpen}>
                       Reject with note
                     </Btn>
                   </div>
@@ -414,15 +437,15 @@ export default function ProviderVerificationPage() {
                     className={`${inputClass} min-h-[4.5rem]`}
                     rows={3}
                   />
-                  <Btn kind="danger" onClick={rejectOpen}>
+                  <Btn kind="danger" loading={busyAction === `reject-kyc:${open.id}`} loadingLabel="Rejecting…" disabled={!!busyAction} onClick={rejectOpen}>
                     Reject KYC with note
                   </Btn>
                 </>
               ) : null}
               {open.status === "rejected" ? (
                 <div className="flex flex-wrap gap-2">
-                  <Btn onClick={() => void setStatus(open.id, "pending")}>Reactivate to pending</Btn>
-                  <Btn onClick={() => void setStatus(open.id, "verified")}>Set Active</Btn>
+                  <Btn loading={busyAction === `pending:${open.id}`} loadingLabel="Updating…" disabled={!!busyAction} onClick={() => void setStatus(open.id, "pending", undefined, `pending:${open.id}`)}>Reactivate to pending</Btn>
+                  <Btn loading={busyAction === `activate:${open.id}`} loadingLabel="Activating…" disabled={!!busyAction} onClick={() => void setStatus(open.id, "verified", undefined, `activate:${open.id}`)}>Set Active</Btn>
                 </div>
               ) : null}
             </div>

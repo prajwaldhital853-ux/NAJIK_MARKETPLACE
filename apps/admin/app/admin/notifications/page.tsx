@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { PageHeader, SummaryStrip } from "@/components/admin/page-frame";
+import { PageHeader, SummaryStrip, AdminLoadingState } from "@/components/admin/page-frame";
 import { Btn, Field, StatusBadge, inputClass } from "@/components/admin/ui";
 import { InboxList } from "@/components/admin/inbox-list";
 import { formatNptDateTime } from "@/lib/format";
@@ -44,15 +44,22 @@ export default function NotificationsPage() {
   const [audience, setAudience] = useState<(typeof AUDIENCES)[number]["value"]>("all");
   const [imageUri, setImageUri] = useState("");
   const [imageName, setImageName] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (opts?: { refresh?: boolean }) => {
     if (!apiSession) return;
+    if (opts?.refresh) setRefreshing(true);
+    else setLoading(true);
     try {
       setNotices(await listAppNotices());
       setError("");
     } catch (err) {
       setNotices([]);
       setError(err instanceof Error ? err.message : "Could not load notices.");
+    } finally {
+      if (opts?.refresh) setRefreshing(false);
+      else setLoading(false);
     }
   }, [apiSession]);
 
@@ -63,7 +70,7 @@ export default function NotificationsPage() {
       return;
     }
     void load();
-    const id = window.setInterval(() => void load(), ADMIN_POLL_FALLBACK_MS);
+    const id = window.setInterval(() => void load({ refresh: true }), ADMIN_POLL_FALLBACK_MS);
     return () => window.clearInterval(id);
   }, [apiSession, load]);
 
@@ -138,6 +145,9 @@ export default function NotificationsPage() {
 
       {error ? <p className="mb-4 text-sm text-red">{error}</p> : null}
 
+      {loading ? <AdminLoadingState label="Loading notifications…" /> : null}
+
+      {!loading ? (
       <div className="grid gap-4 xl:grid-cols-3">
         <div className="space-y-3 xl:col-span-2">
           {notices.length === 0 && !error ? (
@@ -218,12 +228,13 @@ export default function NotificationsPage() {
                 </div>
               ) : null}
             </Field>
-            <Btn onClick={() => void send()} disabled={busy}>
-              {busy ? "Sending…" : "Send to app"}
+            <Btn onClick={() => void send()} loading={busy} loadingLabel="Sending…" disabled={busy}>
+              Send to app
             </Btn>
           </div>
         </aside>
       </div>
+      ) : null}
     </div>
   );
 }
@@ -234,10 +245,11 @@ function NoticeCard({
   onToggle,
 }: {
   notice: AppNotice;
-  onRemove: () => void;
-  onToggle: () => void;
+  onRemove: () => Promise<void>;
+  onToggle: () => Promise<void>;
 }) {
   const [preview, setPreview] = useState("");
+  const [busyAction, setBusyAction] = useState<"pause" | "remove" | null>(null);
 
   useEffect(() => {
     if (!notice.image_uri) {
@@ -276,10 +288,28 @@ function NoticeCard({
         <span>{formatNptDateTime(notice.created_at)}</span>
       </div>
       <div className="mt-3 flex flex-wrap gap-2">
-        <Btn kind="ghost" onClick={onToggle}>
+        <Btn
+          kind="ghost"
+          loading={busyAction === "pause"}
+          loadingLabel={notice.is_active ? "Pausing…" : "Activating…"}
+          disabled={!!busyAction}
+          onClick={() => {
+            setBusyAction("pause");
+            void onToggle().finally(() => setBusyAction(null));
+          }}
+        >
           {notice.is_active ? "Pause" : "Activate"}
         </Btn>
-        <Btn kind="danger" onClick={onRemove}>
+        <Btn
+          kind="danger"
+          loading={busyAction === "remove"}
+          loadingLabel="Removing…"
+          disabled={!!busyAction}
+          onClick={() => {
+            setBusyAction("remove");
+            void onRemove().finally(() => setBusyAction(null));
+          }}
+        >
           Remove from app
         </Btn>
       </div>

@@ -2,10 +2,10 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { PageHeader, SummaryStrip } from "@/components/admin/page-frame";
+import { PageHeader, SummaryStrip, AdminTableLoadingRow } from "@/components/admin/page-frame";
 import { Btn, StatusBadge } from "@/components/admin/ui";
 import { formatNptDateTime } from "@/lib/format";
-import { ADMIN_POLL_MS } from "@/lib/live-inbox";
+import { ADMIN_POLL_FALLBACK_MS } from "@/lib/event-stream";
 import { useSession } from "@/lib/session";
 import { listStaffBookings, type StaffBooking } from "@/lib/staff-api";
 
@@ -17,6 +17,7 @@ export default function OrdersPage() {
   const router = useRouter();
   const pathname = usePathname();
   const [rows, setRows] = useState<StaffBooking[]>([]);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [tab, setTab] = useState<(typeof STATUS_TABS)[number]>(
     params.get("status") === "pending"
@@ -32,6 +33,7 @@ export default function OrdersPage() {
 
   async function load() {
     if (!apiSession) return;
+    setLoading(true);
     try {
       const status = tab === "All" ? undefined : tab.toLowerCase();
       setRows(await listStaffBookings(status));
@@ -39,16 +41,19 @@ export default function OrdersPage() {
     } catch (err) {
       setRows([]);
       setError(err instanceof Error ? err.message : "Could not load bookings.");
+    } finally {
+      setLoading(false);
     }
   }
 
   useEffect(() => {
     if (!apiSession) {
+      setLoading(false);
       setError("Sign in with a staff account to view bookings.");
       return;
     }
     void load();
-    const id = window.setInterval(() => void load(), ADMIN_POLL_MS);
+    const id = window.setInterval(() => void load(), ADMIN_POLL_FALLBACK_MS);
     return () => window.clearInterval(id);
   }, [apiSession, tab]);
 
@@ -102,7 +107,10 @@ export default function OrdersPage() {
             </tr>
           </thead>
           <tbody>
-            {rows.map((row) => (
+            {loading ? (
+              <AdminTableLoadingRow colSpan={6} label="Loading bookings…" />
+            ) : (
+              rows.map((row) => (
               <tr key={row.id} className="border-t border-line">
                 <td className="px-4 py-3 font-medium">{row.listing_title}</td>
                 <td className="px-4 py-3">{row.requester_name}</td>
@@ -113,8 +121,9 @@ export default function OrdersPage() {
                   <StatusBadge status={row.status === "accepted" ? "active" : row.status} />
                 </td>
               </tr>
-            ))}
-            {!rows.length ? (
+              ))
+            )}
+            {!loading && !rows.length ? (
               <tr>
                 <td colSpan={6} className="px-4 py-10 text-center text-muted">No bookings in this filter.</td>
               </tr>

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { X } from "lucide-react";
-import { PageHeader, SummaryStrip } from "@/components/admin/page-frame";
+import { PageHeader, SummaryStrip, AdminTableLoadingRow } from "@/components/admin/page-frame";
 import { Btn, StatusBadge } from "@/components/admin/ui";
 import { formatNptDateTime } from "@/lib/format";
 import { ADMIN_POLL_FALLBACK_MS } from "@/lib/event-stream";
@@ -38,7 +38,8 @@ export default function ReviewsPage() {
   const [error, setError] = useState("");
   const [tab, setTab] = useState<(typeof KIND_TABS)[number]>(tabFromParams(params.get("kind")));
   const [openId, setOpenId] = useState<string | null>(params.get("id"));
-  const [busy, setBusy] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [busyAction, setBusyAction] = useState<string | null>(null);
 
   function writeTab(next: (typeof KIND_TABS)[number], id?: string | null) {
     setTab(next);
@@ -59,6 +60,7 @@ export default function ReviewsPage() {
 
   async function load() {
     if (!apiSession) return;
+    setLoading(true);
     try {
       const kind = tab === "Comments" ? "comment" : tab === "Reviews" ? "review" : "all";
       const hidden = tab === "Hidden" ? true : undefined;
@@ -73,11 +75,14 @@ export default function ReviewsPage() {
       setSummary(null);
       setRows([]);
       setError(err instanceof Error ? err.message : "Could not load reviews.");
+    } finally {
+      setLoading(false);
     }
   }
 
   useEffect(() => {
     if (!apiSession) {
+      setLoading(false);
       setError("Sign in with a staff account to moderate comments and reviews.");
       return;
     }
@@ -98,7 +103,7 @@ export default function ReviewsPage() {
 
   async function moderate(action: "hide" | "show" | "delete") {
     if (!open) return;
-    setBusy(true);
+    setBusyAction(action);
     try {
       if (open.kind === "comment") await patchEngagementComment(open.id, action);
       else await patchEngagementReview(open.id, action);
@@ -108,7 +113,7 @@ export default function ReviewsPage() {
     } catch (err) {
       toast(err instanceof Error ? err.message : "Action failed");
     } finally {
-      setBusy(false);
+      setBusyAction(null);
     }
   }
 
@@ -163,7 +168,10 @@ export default function ReviewsPage() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((row) => (
+              {loading ? (
+                <AdminTableLoadingRow colSpan={7} label="Loading reviews…" />
+              ) : (
+                filtered.map((row) => (
                 <tr
                   key={`${row.kind}-${row.id}`}
                   className="cursor-pointer border-t border-line hover:bg-elevated/60 text-ink"
@@ -182,8 +190,9 @@ export default function ReviewsPage() {
                     <StatusBadge status={row.is_hidden ? "hidden" : "active"} />
                   </td>
                 </tr>
-              ))}
-              {!filtered.length ? (
+                ))
+              )}
+              {!loading && !filtered.length ? (
                 <tr>
                   <td colSpan={7} className="px-4 py-8 text-center text-muted">No comments or reviews in this filter.</td>
                 </tr>
@@ -232,11 +241,11 @@ export default function ReviewsPage() {
             <p className="mt-2 text-xs text-muted">{formatNptDateTime(open.created_at)}</p>
             <div className="mt-4 flex flex-wrap gap-2">
               {!open.is_hidden ? (
-                <Btn kind="ghost" disabled={busy} onClick={() => void moderate("hide")}>Hide</Btn>
+                <Btn kind="ghost" loading={busyAction === "hide"} loadingLabel="Hiding…" disabled={!!busyAction} onClick={() => void moderate("hide")}>Hide</Btn>
               ) : (
-                <Btn kind="ghost" disabled={busy} onClick={() => void moderate("show")}>Show again</Btn>
+                <Btn kind="ghost" loading={busyAction === "show"} loadingLabel="Restoring…" disabled={!!busyAction} onClick={() => void moderate("show")}>Show again</Btn>
               )}
-              <Btn kind="danger" disabled={busy} onClick={() => void moderate("delete")}>Delete</Btn>
+              <Btn kind="danger" loading={busyAction === "delete"} loadingLabel="Deleting…" disabled={!!busyAction} onClick={() => void moderate("delete")}>Delete</Btn>
             </div>
           </div>
         </div>

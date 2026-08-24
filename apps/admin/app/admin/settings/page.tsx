@@ -31,6 +31,8 @@ export default function SettingsPage() {
   const [maintenance, setMaintenance] = useState(false);
   const [signatoryPreview, setSignatoryPreview] = useState("/id-card/authorized-signatory.png");
   const [signBusy, setSignBusy] = useState(false);
+  const [saveBusy, setSaveBusy] = useState(false);
+  const [flagsBusy, setFlagsBusy] = useState(false);
 
   useEffect(() => {
     if (!apiSession) return;
@@ -86,7 +88,20 @@ export default function SettingsPage() {
           <Field label="Dashain featured cap">
             <input className={inputClass} value={featCap} onChange={(e) => setFeatCap(e.target.value)} />
           </Field>
-          <Btn onClick={() => toast(`Saved ${name} · SLA ${kycSla}h · cap ${featCap}`)}>Save workspace</Btn>
+          <Btn
+            loading={saveBusy}
+            loadingLabel="Saving…"
+            disabled={saveBusy}
+            onClick={() => {
+              setSaveBusy(true);
+              window.setTimeout(() => {
+                toast(`Saved ${name} · SLA ${kycSla}h · cap ${featCap}`);
+                setSaveBusy(false);
+              }, 350);
+            }}
+          >
+            Save workspace
+          </Btn>
         </section>
 
         <section className="card-glow space-y-4 rounded-2xl border border-line bg-card p-5">
@@ -121,11 +136,18 @@ export default function SettingsPage() {
           <p className="text-xs leading-relaxed text-muted">Version 2.5.0 · Provider queue remains at /admin/providers.</p>
           <Btn
             kind="ghost"
-            onClick={() =>
-              toast(
-                `${theme} theme · auto-verify ${autoVerify ? "on" : "off"} · maintenance ${maintenance ? "on" : "off"}`,
-              )
-            }
+            loading={flagsBusy}
+            loadingLabel="Applying…"
+            disabled={flagsBusy}
+            onClick={() => {
+              setFlagsBusy(true);
+              window.setTimeout(() => {
+                toast(
+                  `${theme} theme · auto-verify ${autoVerify ? "on" : "off"} · maintenance ${maintenance ? "on" : "off"}`,
+                );
+                setFlagsBusy(false);
+              }, 350);
+            }}
           >
             Apply flags
           </Btn>

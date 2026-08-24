@@ -24,6 +24,7 @@ function roleFromParams(raw: string | null): "buyer" | "provider" | undefined {
 export default function UsersPage() {
   const { apiSession } = useSession();
   const admin = useAdmin();
+  const { inboxReady } = admin;
   const params = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
@@ -34,7 +35,15 @@ export default function UsersPage() {
   const [open, setOpen] = useState<User | null>(null);
   const [listingsUser, setListingsUser] = useState<User | null>(null);
   const [note, setNote] = useState("");
+  const [busyAction, setBusyAction] = useState<string | null>(null);
   const autoOpenedId = useRef<string | null>(null);
+
+  const STATUS_LABELS: Record<string, string> = {
+    note: "Sending…",
+    active: "Activating…",
+    deactivated: "Deactivating…",
+    blocked: "Blocking…",
+  };
 
   const role = roleFromParams(params.get("role"));
   const query = (params.get("q") || "").trim();
@@ -279,6 +288,9 @@ export default function UsersPage() {
         }}
         rowActions={rowActions}
         hideSearch
+        loading={!inboxReady || searching}
+        loadingLabel={searching ? "Searching…" : "Loading users…"}
+        emptyLabel="No users in this view."
       />
 
       <DetailOverlay
@@ -329,15 +341,20 @@ export default function UsersPage() {
               <div className="flex flex-wrap gap-2">
                 <Btn
                   kind="primary"
+                  loading={busyAction === "note"}
+                  loadingLabel={STATUS_LABELS.note}
+                  disabled={!!busyAction}
                   onClick={() => {
                     if (!note.trim()) {
                       admin.toast("Write a note before sending.");
                       return;
                     }
+                    setBusyAction("note");
                     void admin
                       .patch("users", open.id, { staff_warning: note.trim(), notes: note.trim() })
                       .then(() => admin.toast("Note sent to user."))
-                      .catch((err: unknown) => admin.toast(err instanceof Error ? err.message : "Could not send note."));
+                      .catch((err: unknown) => admin.toast(err instanceof Error ? err.message : "Could not send note."))
+                      .finally(() => setBusyAction(null));
                   }}
                 >
                   Send note
@@ -346,14 +363,19 @@ export default function UsersPage() {
                   <Btn
                     key={s}
                     kind={s === "blocked" || s === "deactivated" ? "danger" : "ghost"}
+                    loading={busyAction === s}
+                    loadingLabel={STATUS_LABELS[s]}
+                    disabled={!!busyAction}
                     onClick={() => {
                       const patchData = note.trim()
                         ? { status: s, staff_warning: note.trim(), notes: note.trim() }
                         : { status: s };
+                      setBusyAction(s);
                       void admin
                         .patch("users", open.id, patchData)
                         .then(() => admin.toast(`${s.charAt(0).toUpperCase()}${s.slice(1)}.`))
-                        .catch((err: unknown) => admin.toast(err instanceof Error ? err.message : "Could not update."));
+                        .catch((err: unknown) => admin.toast(err instanceof Error ? err.message : "Could not update."))
+                        .finally(() => setBusyAction(null));
                     }}
                   >
                     {s.charAt(0).toUpperCase() + s.slice(1)}

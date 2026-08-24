@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { StaffIdCardVisual } from "@/components/admin/staff-id-card-visual";
-import { PageHeader, SummaryStrip } from "@/components/admin/page-frame";
+import { PageHeader, SummaryStrip, AdminLoadingState } from "@/components/admin/page-frame";
 import { Btn, Field, StatusBadge, inputClass } from "@/components/admin/ui";
 import { formatNptDateTime, formatNptTime } from "@/lib/format";
 import { ADMIN_POLL_FALLBACK_MS } from "@/lib/event-stream";
@@ -57,6 +57,8 @@ export default function IdCardsPage() {
   const pathname = usePathname();
   const filter = tabFromParams(params.get("status"));
   const [items, setItems] = useState<ProviderIdCard[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [busyAction, setBusyAction] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(params.get("id"));
@@ -86,6 +88,7 @@ export default function IdCardsPage() {
 
   async function load() {
     if (!apiSession) return;
+    setLoading(true);
     try {
       const rows = await listProviderIdCards();
       setItems(rows);
@@ -107,12 +110,15 @@ export default function IdCardsPage() {
     } catch (err) {
       setItems([]);
       setError(err instanceof Error ? err.message : "Could not load ID cards.");
+    } finally {
+      setLoading(false);
     }
   }
 
   useEffect(() => {
     if (!apiSession) {
       setItems([]);
+      setLoading(false);
       setError("Sign in with a staff account to manage seller ID cards.");
       return;
     }
@@ -199,6 +205,8 @@ export default function IdCardsPage() {
   }
 
   async function act(id: string, action: "approve" | "revoke" | "block" | "unblock") {
+    const key = `${id}:${action}`;
+    setBusyAction(key);
     try {
       await patchProviderIdCard(id, action === "unblock" ? "approve" : action);
       toast(
@@ -212,8 +220,17 @@ export default function IdCardsPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not update card access.");
       toast(err instanceof Error ? err.message : "Could not update card access.");
+    } finally {
+      setBusyAction(null);
     }
   }
+
+  const actionLabel = (action: "approve" | "revoke" | "block" | "unblock") =>
+    action === "approve" || action === "unblock"
+      ? "Approving…"
+      : action === "block"
+        ? "Blocking…"
+        : "Revoking…";
 
   const requested = items.filter((i) => i.access_status === "requested");
   const approved = items.filter((i) => i.access_status === "approved");
@@ -285,8 +302,8 @@ export default function IdCardsPage() {
             </Field>
           </div>
           <div className="mt-3">
-            <Btn disabled={brandBusy || !apiSession} onClick={() => void saveEmergencyContact()}>
-              {brandBusy ? "Saving…" : "Save contact for all cards"}
+            <Btn loading={brandBusy} loadingLabel="Saving…" disabled={brandBusy || !apiSession} onClick={() => void saveEmergencyContact()}>
+              Save contact for all cards
             </Btn>
           </div>
         </div>
@@ -310,11 +327,14 @@ export default function IdCardsPage() {
         {updatedAt ? <p className="text-[11px] text-muted">Updated {formatNptTime(updatedAt.toISOString())}</p> : null}
       </div>
       {error ? <p className="mb-4 text-sm text-red">{error}</p> : null}
-      {visible.length === 0 && !error ? (
+      {loading ? (
+        <AdminLoadingState label="Loading ID cards…" />
+      ) : visible.length === 0 && !error ? (
         <section className="card-glow rounded-2xl border border-line bg-card p-6 text-sm text-muted">
           No ID cards in this filter.
         </section>
       ) : null}
+      {!loading ? (
       <div className="space-y-3">
         {visible.map((card) => (
           <section key={card.id} className="card-glow rounded-2xl border border-line bg-card p-4 text-ink">
@@ -339,17 +359,22 @@ export default function IdCardsPage() {
                 See user ID card
               </Btn>
               {card.access_status !== "approved" ? (
-                <Btn onClick={() => void act(card.id, card.access_status === "blocked" ? "unblock" : "approve")}>
+                <Btn
+                  loading={busyAction === `${card.id}:${card.access_status === "blocked" ? "unblock" : "approve"}`}
+                  loadingLabel={actionLabel(card.access_status === "blocked" ? "unblock" : "approve")}
+                  disabled={!!busyAction}
+                  onClick={() => void act(card.id, card.access_status === "blocked" ? "unblock" : "approve")}
+                >
                   {card.access_status === "blocked" ? "Unblock ID card" : "Approve download / print"}
                 </Btn>
               ) : null}
               {card.access_status === "approved" ? (
-                <Btn kind="ghost" onClick={() => void act(card.id, "revoke")}>
+                <Btn kind="ghost" loading={busyAction === `${card.id}:revoke`} loadingLabel="Revoking…" disabled={!!busyAction} onClick={() => void act(card.id, "revoke")}>
                   Revoke access
                 </Btn>
               ) : null}
               {card.access_status !== "blocked" ? (
-                <Btn kind="danger" onClick={() => void act(card.id, "block")}>
+                <Btn kind="danger" loading={busyAction === `${card.id}:block`} loadingLabel="Blocking…" disabled={!!busyAction} onClick={() => void act(card.id, "block")}>
                   Block
                 </Btn>
               ) : null}
@@ -357,6 +382,7 @@ export default function IdCardsPage() {
           </section>
         ))}
       </div>
+      ) : null}
 
       {selected ? (
         <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/55 p-4 sm:p-6">
@@ -440,17 +466,22 @@ export default function IdCardsPage() {
 
             <div className="mt-4 flex flex-wrap gap-2">
               {selected.access_status !== "approved" ? (
-                <Btn onClick={() => void act(selected.id, selected.access_status === "blocked" ? "unblock" : "approve")}>
+                <Btn
+                  loading={busyAction === `${selected.id}:${selected.access_status === "blocked" ? "unblock" : "approve"}`}
+                  loadingLabel={actionLabel(selected.access_status === "blocked" ? "unblock" : "approve")}
+                  disabled={!!busyAction}
+                  onClick={() => void act(selected.id, selected.access_status === "blocked" ? "unblock" : "approve")}
+                >
                   {selected.access_status === "blocked" ? "Unblock ID card" : "Approve download / print"}
                 </Btn>
               ) : null}
               {selected.access_status === "approved" ? (
-                <Btn kind="ghost" onClick={() => void act(selected.id, "revoke")}>
+                <Btn kind="ghost" loading={busyAction === `${selected.id}:revoke`} loadingLabel="Revoking…" disabled={!!busyAction} onClick={() => void act(selected.id, "revoke")}>
                   Revoke access
                 </Btn>
               ) : null}
               {selected.access_status !== "blocked" ? (
-                <Btn kind="danger" onClick={() => void act(selected.id, "block")}>
+                <Btn kind="danger" loading={busyAction === `${selected.id}:block`} loadingLabel="Blocking…" disabled={!!busyAction} onClick={() => void act(selected.id, "block")}>
                   Block card
                 </Btn>
               ) : null}

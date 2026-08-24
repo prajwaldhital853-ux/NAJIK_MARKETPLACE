@@ -87,11 +87,11 @@ const buyerPrimary: BuyerItem[] = [
 ];
 
 const buyerSecondary: BuyerItem[] = [
-  { icon: "heart-outline", title: "Saved", tab: "Saved", color: "#4B5563", bg: "transparent" },
-  { icon: "search-outline", title: "Explore", tab: "Explore", color: "#4B5563", bg: "transparent" },
-  { icon: "notifications-outline", title: "Notifications", tab: "Home", color: "#4B5563", bg: "transparent" },
-  { icon: "settings-outline", title: "Settings", tab: "Profile", color: "#4B5563", bg: "transparent" },
-  { icon: "help-circle-outline", title: "Help & Support", tab: "Profile", color: "#4B5563", bg: "transparent" },
+  { icon: "heart-outline", title: "Saved", tab: "Saved", color: "#374151", bg: "transparent" },
+  { icon: "search-outline", title: "Explore", tab: "Explore", color: "#374151", bg: "transparent" },
+  { icon: "notifications-outline", title: "Notifications", tab: "Home", color: "#374151", bg: "transparent" },
+  { icon: "settings-outline", title: "Settings", tab: "Profile", color: "#374151", bg: "transparent" },
+  { icon: "help-circle-outline", title: "Help & Support", tab: "Profile", color: "#374151", bg: "transparent" },
   { icon: "power-outline", title: "Logout", tab: "Logout", color: "#E53935", bg: "transparent", danger: true },
 ];
 
@@ -412,7 +412,7 @@ function BuyerDrawer({ navigation }: { navigation: DrawerContentComponentProps["
   const drawerW = Math.min(Dimensions.get("window").width * 0.78, 300);
   const scale = drawerW / 300;
   const s = (v: number) => Math.round(v * scale);
-  const headerH = s(72);
+  const headerH = s(50);
 
   function goTab(tab: string) {
     navigation.navigate("Tabs", { screen: tab } as never);
@@ -430,15 +430,15 @@ function BuyerDrawer({ navigation }: { navigation: DrawerContentComponentProps["
         <Svg
           width="100%"
           height={headerH}
-          viewBox="0 0 340 72"
+          viewBox="0 0 340 50"
           preserveAspectRatio="xMidYMax slice"
           style={{ position: "absolute", left: 0, right: 0, bottom: 0 }}
         >
-          <Path d="M0 72 L0 46 L36 30 L68 42 L108 18 L148 38 L188 12 L228 34 L264 20 L304 38 L340 24 L340 72 Z" fill="#E8F2F8" />
-          <Path d="M0 72 L0 54 L48 38 L86 48 L128 28 L172 44 L214 24 L258 46 L300 34 L340 40 L340 72 Z" fill="#D5E6F2" />
-          <Path d="M0 72 L0 60 L54 50 L96 58 L150 42 L196 56 L248 46 L298 58 L340 50 L340 72 Z" fill="#C5DCEC" />
+          <Path d="M0 50 L340 50 L340 34 L300 28 L258 36 L214 22 L172 32 L128 24 L86 34 L48 26 L0 32 Z" fill="#F4F8FB" />
+          <Path d="M0 50 L340 50 L340 40 L298 36 L248 42 L196 34 L148 40 L96 36 L48 42 L0 38 Z" fill="#EAF2F8" />
+          <Path d="M0 50 L340 50 L340 46 L280 44 L220 47 L160 43 L100 46 L40 44 L0 46 Z" fill="#DFECF4" />
         </Svg>
-        <View style={{ paddingTop: insets.top + s(6), alignItems: "center" }}>
+        <View style={{ paddingTop: insets.top + s(4), alignItems: "center" }}>
           <NajikLogo size="sm" showTagline={false} layout="row" />
         </View>
       </View>
@@ -500,7 +500,7 @@ function BuyerDrawer({ navigation }: { navigation: DrawerContentComponentProps["
                 backgroundColor: active ? "#E7F6EC" : "transparent",
               }}
             >
-              <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: s(10), paddingVertical: s(8) }}>
+              <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: s(10), paddingVertical: s(9) }}>
                 <View
                   style={{
                     width: s(30),
@@ -514,10 +514,10 @@ function BuyerDrawer({ navigation }: { navigation: DrawerContentComponentProps["
                   <Ionicons name={item.icon} size={s(17)} color={item.color} />
                 </View>
                 <View style={{ flex: 1, marginLeft: s(10) }}>
-                  <Text style={{ fontWeight: "800", fontSize: s(13), color: active ? "#068A22" : "#111827" }}>{item.title}</Text>
-                  {!active && item.sub ? <Text style={{ color: "#8A8F98", fontSize: s(10), marginTop: 1 }}>{item.sub}</Text> : null}
+                  <Text style={{ fontWeight: "800", fontSize: s(15), color: active ? "#068A22" : "#111827" }}>{item.title}</Text>
+                  {!active && item.sub ? <Text style={{ color: "#6B7280", fontSize: s(11), marginTop: 2 }}>{item.sub}</Text> : null}
                 </View>
-                <Ionicons name="chevron-forward" size={s(15)} color={active ? "#068A22" : "#C4C7CC" } />
+                <Ionicons name="chevron-forward" size={s(15)} color={active ? "#068A22" : "#9CA3AF" } />
               </View>
             </Pressable>
           );
@@ -543,11 +543,11 @@ function BuyerDrawer({ navigation }: { navigation: DrawerContentComponentProps["
             }}
             style={{ marginHorizontal: s(10), borderRadius: s(10) }}
           >
-            <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: s(8), paddingVertical: s(8) }}>
+            <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: s(8), paddingVertical: s(9) }}>
               <View style={{ width: s(28), alignItems: "center" }}>
-                <Ionicons name={item.icon} size={s(18)} color={item.color} />
+                <Ionicons name={item.icon} size={s(19)} color={item.color} />
               </View>
-              <Text style={{ flex: 1, marginLeft: s(8), fontSize: s(12), fontWeight: "600", color: item.danger ? "#E53935" : "#242326" }}>
+              <Text style={{ flex: 1, marginLeft: s(8), fontSize: s(14), fontWeight: "700", color: item.danger ? "#E53935" : "#111827" }}>
                 {item.title}
               </Text>
               {item.badge ? (

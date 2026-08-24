@@ -67,7 +67,9 @@ export function ResourcePage<T extends { id: string; status?: string; staff_warn
   const [tab, setTab] = useState(() => tabFromStatus(statusParam, tabs));
   const [open, setOpen] = useState<T | null>(null);
   const [note, setNote] = useState("");
+  const [busyAction, setBusyAction] = useState<string | null>(null);
   const admin = useAdmin();
+  const { inboxReady } = admin;
   const openId = params.get("id");
   const autoOpenedId = useRef<string | null>(null);
 
@@ -156,6 +158,19 @@ export function ResourcePage<T extends { id: string; status?: string; staff_warn
     });
   }, [filtered]);
 
+  const STATUS_LABELS: Record<string, string> = {
+    note: "Sending…",
+    clear: "Clearing…",
+    delete: "Deleting…",
+    active: "Activating…",
+    blocked: "Blocking…",
+    deactivated: "Deactivating…",
+    rejected: "Rejecting…",
+    pending: "Updating…",
+    invited: "Updating…",
+    disabled: "Updating…",
+  };
+
   const rowActions: RowMenuAction<T>[] = [
     {
       label: "Delete",
@@ -207,6 +222,9 @@ export function ResourcePage<T extends { id: string; status?: string; staff_warn
           if (storeKey === "users") admin.markInboxSeen(`user-${row.id}`);
         }}
         rowActions={rowActions}
+        loading={!inboxReady}
+        loadingLabel="Loading…"
+        emptyLabel="No records in this view."
       />
       <DetailOverlay
         open={!!open}
@@ -258,11 +276,15 @@ export function ResourcePage<T extends { id: string; status?: string; staff_warn
                       <>
                         <Btn
                           kind="primary"
+                          loading={busyAction === "note"}
+                          loadingLabel={STATUS_LABELS.note}
+                          disabled={!!busyAction}
                           onClick={() => {
                             if (!note.trim()) {
                               admin.toast("Write a note before sending.");
                               return;
                             }
+                            setBusyAction("note");
                             void admin
                               .patch(storeKey, open.id, { staff_warning: note.trim(), notes: note.trim() })
                               .then(() => {
@@ -271,14 +293,19 @@ export function ResourcePage<T extends { id: string; status?: string; staff_warn
                               })
                               .catch((err: unknown) => {
                                 admin.toast(err instanceof Error ? err.message : "Could not send note.");
-                              });
+                              })
+                              .finally(() => setBusyAction(null));
                           }}
                         >
                           Send note
                         </Btn>
                         <Btn
                           kind="ghost"
+                          loading={busyAction === "clear"}
+                          loadingLabel={STATUS_LABELS.clear}
+                          disabled={!!busyAction}
                           onClick={() => {
+                            setBusyAction("clear");
                             void admin
                               .patch(storeKey, open.id, { staff_warning: "", notes: "" })
                               .then(() => {
@@ -288,7 +315,8 @@ export function ResourcePage<T extends { id: string; status?: string; staff_warn
                               })
                               .catch((err: unknown) => {
                                 admin.toast(err instanceof Error ? err.message : "Could not clear note.");
-                              });
+                              })
+                              .finally(() => setBusyAction(null));
                           }}
                         >
                           Clear note
@@ -299,6 +327,9 @@ export function ResourcePage<T extends { id: string; status?: string; staff_warn
                       <Btn
                         key={s}
                         kind={s === "blocked" || s === "deactivated" || s === "rejected" || s === "hidden" ? "danger" : "ghost"}
+                        loading={busyAction === s}
+                        loadingLabel={STATUS_LABELS[s] || "Updating…"}
+                        disabled={!!busyAction}
                         onClick={() => {
                           if (s === "rejected" && storeKey === "kyc" && !note.trim()) {
                             admin.toast("Add a rejection note before rejecting.");
@@ -312,6 +343,7 @@ export function ResourcePage<T extends { id: string; status?: string; staff_warn
                                 : storeKey === "users" && note.trim()
                                   ? { status: s, staff_warning: note.trim(), notes: note.trim() }
                                   : { status: s };
+                          setBusyAction(s);
                           void admin
                             .patch(storeKey, open.id, patchData)
                             .then(() => {
@@ -340,7 +372,8 @@ export function ResourcePage<T extends { id: string; status?: string; staff_warn
                             })
                             .catch((err: unknown) => {
                               admin.toast(err instanceof Error ? err.message : "Could not update.");
-                            });
+                            })
+                            .finally(() => setBusyAction(null));
                         }}
                       >
                         {s === "pending" ? "Reactivate" : s === "rejected" ? "Reject with note" : s}
@@ -349,9 +382,13 @@ export function ResourcePage<T extends { id: string; status?: string; staff_warn
                     {allowDelete ? (
                       <Btn
                         kind="danger"
+                        loading={busyAction === "delete"}
+                        loadingLabel={STATUS_LABELS.delete}
+                        disabled={!!busyAction}
                         onClick={() => {
                           const message = deleteConfirm || "Delete this record permanently? This cannot be undone.";
                           if (!window.confirm(message)) return;
+                          setBusyAction("delete");
                           void admin
                             .remove(storeKey!, open.id)
                             .then(() => {
@@ -360,7 +397,8 @@ export function ResourcePage<T extends { id: string; status?: string; staff_warn
                             })
                             .catch((err: unknown) => {
                               admin.toast(err instanceof Error ? err.message : "Could not delete.");
-                            });
+                            })
+                            .finally(() => setBusyAction(null));
                         }}
                       >
                         Delete
@@ -372,9 +410,13 @@ export function ResourcePage<T extends { id: string; status?: string; staff_warn
               {storeKey && allowDelete && !statusActions?.length ? (
                 <Btn
                   kind="danger"
+                  loading={busyAction === "delete"}
+                  loadingLabel={STATUS_LABELS.delete}
+                  disabled={!!busyAction}
                   onClick={() => {
                     const message = deleteConfirm || "Delete this record permanently? This cannot be undone.";
                     if (!window.confirm(message)) return;
+                    setBusyAction("delete");
                     void admin
                       .remove(storeKey, open.id)
                       .then(() => {
@@ -383,7 +425,8 @@ export function ResourcePage<T extends { id: string; status?: string; staff_warn
                       })
                       .catch((err: unknown) => {
                         admin.toast(err instanceof Error ? err.message : "Could not delete.");
-                      });
+                      })
+                      .finally(() => setBusyAction(null));
                   }}
                 >
                   Delete

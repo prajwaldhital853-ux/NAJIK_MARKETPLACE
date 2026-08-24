@@ -34,7 +34,7 @@ import { isProvider } from "../demo";
 import { catalogMeta, listingById, type CatalogItem } from "../data/catalog";
 import { apiCategoryForKey, liveListingById, listingsToCatalog, listingToCatalog } from "../data/liveListings";
 import { rankSimilarListings, relatedKeywordsFor } from "../data/similarListings";
-import { fetchListing, fetchListingFeed, postListingComment, postListingReview, toggleListingSave, type ApiListing } from "../listingsApi";
+import { fetchListing, fetchListingFeed, postListingComment, postListingReview, recordListingViewOnServer, toggleListingSave, type ApiListing } from "../listingsApi";
 import { peekListingDetail, rememberListingDetail } from "../listingCache";
 import { recordListingView } from "../listingViews";
 import { emitListingsChanged, subscribeListingsChanged } from "../listingsRefresh";
@@ -78,6 +78,12 @@ export function ListingDetailScreen() {
     useCallback(() => {
       if (!id) return;
       void dismissTarget({ target: "listing", target_id: normTargetId(id) });
+      if (!/^[0-9a-f-]{36}$/i.test(id)) return;
+      void recordListingViewOnServer(id).then((result) => {
+        if (!result?.recorded) return;
+        setLive((prev) => (prev && prev.id === id ? { ...prev, view_count: result.view_count } : prev));
+        setItem((prev) => (prev && prev.id === id ? { ...prev, viewCount: result.view_count } : prev));
+      });
     }, [id, dismissTarget]),
   );
 

@@ -160,13 +160,28 @@ export function prefetchListing(id: string) {
   prefetchListingDetail(fetchListing, id);
 }
 
-export async function fetchListing(id: string) {
-  const cached = peekListingDetail(id);
-  if (cached) return cached;
+export async function fetchListing(id: string, options?: { bypassCache?: boolean }) {
+  if (!options?.bypassCache) {
+    const cached = peekListingDetail(id);
+    if (cached) return cached;
+  }
   const token = await optionalAppAccessToken();
   const row = await api<ApiListing>(`/api/listings/${id}/`, { token });
   rememberListingDetail(row);
   return row;
+}
+
+export async function recordListingViewOnServer(id: string) {
+  if (!/^[0-9a-f-]{36}$/i.test(id)) return null;
+  const token = await optionalAppAccessToken();
+  try {
+    return await api<{ view_count: number; recorded: boolean }>(`/api/listings/${id}/view/`, {
+      method: "POST",
+      token,
+    });
+  } catch {
+    return null;
+  }
 }
 
 export async function fetchMyListings() {

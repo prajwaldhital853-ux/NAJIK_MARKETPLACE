@@ -58,6 +58,7 @@ def transaction_kind_label(kind: str) -> str:
         SellerWalletTransaction.KIND_REFERRAL_REWARD: "Invite & Earn",
         SellerWalletTransaction.KIND_LOAD: "Bank top-up",
         SellerWalletTransaction.KIND_LISTING_FEE: "Listing fee",
+        SellerWalletTransaction.KIND_BOOST_FEE: "Boost promotion",
         SellerWalletTransaction.KIND_ADMIN_CREDIT: "Admin credit",
         SellerWalletTransaction.KIND_ADMIN_DEBIT: "Admin debit",
         SellerWalletTransaction.KIND_REFUND: "Refund",

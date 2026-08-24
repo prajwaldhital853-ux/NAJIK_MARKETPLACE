@@ -23,6 +23,7 @@ import {
 } from "../promotionsApi";
 import { fetchSellerPaymentsMe } from "../paymentsApi";
 import { friendlyError } from "../api";
+import { emitWalletChanged } from "../walletRefresh";
 import { colors, shadow } from "../theme";
 
 const GREEN = "#1B7D2C";
@@ -118,6 +119,7 @@ export function PromotionsBody() {
     try {
       await createBoostCampaign(listing.id, selectedPack.days);
       setPickerOpen(false);
+      emitWalletChanged();
       Alert.alert(
         "Boost started",
         `“${listing.title}” is now promoted for ${selectedPack.days} days.`,

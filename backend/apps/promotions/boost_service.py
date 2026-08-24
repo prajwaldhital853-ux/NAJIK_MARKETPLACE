@@ -5,6 +5,7 @@ from datetime import timedelta
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
+from django.db.models import F
 from django.utils import timezone
 
 from apps.core.models import SellerWallet, SellerWalletTransaction
@@ -426,10 +427,10 @@ def record_boost_impressions_for_listing_ids(listing_ids: list):
     BoostCampaign.objects.bulk_update(campaigns, ["impression_count", "last_impression_at"])
 
 
-def record_boost_view(campaign: BoostCampaign):
-    """Track when a boosted listing detail is viewed."""
-    campaign.view_count += 1
-    campaign.save(update_fields=["view_count"])
+def record_boost_view(campaign: BoostCampaign, multiplier: int = 1):
+    """Track listing detail opens (actual count; display uses seller_view_multiplier)."""
+    BoostCampaign.objects.filter(pk=campaign.pk).update(view_count=F("view_count") + 1)
+    campaign.refresh_from_db(fields=["view_count"])
 
 
 def record_boost_inquiry(campaign: BoostCampaign):

@@ -216,8 +216,12 @@ class ListingModerationTests(TestCase):
         live = anon.get(f"/api/listings/{listing_id}/")
         self.assertEqual(live.status_code, 200)
         self.assertEqual(live.data["title"], "3 BHK house in Lahan")
-        self.assertEqual(live.data["view_count"], 1)
+        self.assertEqual(live.data["view_count"], 0)
         self.assertEqual(live.data["pending_edit"], {})
+        viewed = anon.post(f"/api/listings/{listing_id}/view/")
+        self.assertEqual(viewed.status_code, 200, viewed.data)
+        self.assertEqual(viewed.data["view_count"], 1)
+        self.assertTrue(viewed.data["recorded"])
 
         approved_edit = staff.patch(f"/api/admin/listings/{listing_id}/", {"status": "approved"}, format="json")
         self.assertEqual(approved_edit.status_code, 200, approved_edit.data)

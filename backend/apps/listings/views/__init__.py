@@ -257,6 +257,46 @@ class ListingFeedView(APIView):
         return Response(rows)
 
 
+def record_listing_view_event(listing: Listing, viewer=None) -> int:
+    """Count every listing open. Boosted listings add multiplier to campaign stats only."""
+    Listing.objects.filter(pk=listing.pk).update(view_count=F("view_count") + 1)
+    listing.refresh_from_db(fields=["view_count"])
+
+    try:
+        from apps.promotions.models import BoostCampaign, BoostPricing
+        from apps.promotions.boost_service import record_boost_view
+
+        campaign = BoostCampaign.objects.filter(
+            listing_id=listing.id,
+            status=BoostCampaign.STATUS_ACTIVE,
+            ends_at__gt=timezone.now(),
+        ).first()
+        if campaign:
+            record_boost_view(campaign)
+    except Exception:
+        pass
+
+    return listing.view_count
+
+
+class ListingViewRecordView(APIView):
+    """Record a listing view on every open (repeat visits count)."""
+
+    authentication_classes = [OptionalAppJWTAuthentication]
+    permission_classes = [AllowAny]
+
+    def post(self, request, pk):
+        listing = get_object_or_404(Listing, pk=pk)
+        user = request.user if getattr(request.user, "is_authenticated", False) else None
+        is_owner = bool(user and getattr(user, "id", None) == listing.owner_id)
+        if listing.status != Listing.STATUS_APPROVED:
+            return Response({"detail": "Listing not found."}, status=status.HTTP_404_NOT_FOUND)
+        if is_owner:
+            return Response({"view_count": listing.view_count, "recorded": False})
+        view_count = record_listing_view_event(listing, viewer=user)
+        return Response({"view_count": view_count, "recorded": True})
+
+
 class ListingPublicDetailView(APIView):
     authentication_classes = [OptionalAppJWTAuthentication]
     permission_classes = [AllowAny]
@@ -267,26 +307,6 @@ class ListingPublicDetailView(APIView):
         is_owner = bool(user and getattr(user, "id", None) == listing.owner_id)
         if listing.status != Listing.STATUS_APPROVED and not is_owner:
             return Response({"detail": "Listing not found."}, status=status.HTTP_404_NOT_FOUND)
-        if listing.status == Listing.STATUS_APPROVED and not is_owner:
-            Listing.objects.filter(pk=listing.pk).update(view_count=F("view_count") + 1)
-            listing.view_count += 1
-            
-            # Track boost campaign view if active
-            try:
-                from apps.promotions.models import BoostCampaign
-                from apps.promotions.boost_service import record_boost_view
-                
-                active_campaign = BoostCampaign.objects.filter(
-                    listing=listing,
-                    status=BoostCampaign.STATUS_ACTIVE,
-                    ends_at__gt=timezone.now(),
-                ).first()
-                
-                if active_campaign:
-                    record_boost_view(active_campaign)
-            except Exception:
-                pass
-        
         return Response(ListingSerializer(listing, context={"request": request}).data)
 
 

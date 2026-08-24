@@ -7,6 +7,7 @@ from apps.listings.views import (
     ListingMineView,
     ListingPhotoFileView,
     ListingPublicDetailView,
+    ListingViewRecordView,
     ListingReviewView,
     ListingSaveView,
     ListingSoldView,
@@ -33,6 +34,7 @@ urlpatterns = [
     path("<uuid:pk>/comments/", ListingCommentView.as_view(), name="listing-comments"),
     path("<uuid:pk>/reviews/", ListingReviewView.as_view(), name="listing-reviews"),
     path("<uuid:pk>/save/", ListingSaveView.as_view(), name="listing-save"),
+    path("<uuid:pk>/view/", ListingViewRecordView.as_view(), name="listing-view"),
     path("<uuid:pk>/", ListingPublicDetailView.as_view(), name="listing-detail"),
     path("<uuid:pk>/photos/<uuid:photo_id>/", ListingPhotoFileView.as_view(), name="listing-photo"),
 ]

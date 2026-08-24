@@ -1,6 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useEffect, useState } from "react";
 import { fetchSellerEarningsSummary } from "../earningsApi";
+import { emitWalletChanged, subscribeWalletChanged } from "../walletRefresh";
 import type { DrawerContentComponentProps } from "@react-navigation/drawer";
 import { useDrawerStatus } from "@react-navigation/drawer";
 import { Pressable, ScrollView, Text, View } from "react-native";
@@ -108,10 +109,14 @@ export function DrawerContent({ navigation }: DrawerContentComponentProps) {
   const drawerStatus = useDrawerStatus();
 
   useEffect(() => {
-    if (!provider || drawerStatus !== "open") return;
-    void fetchSellerEarningsSummary()
-      .then(setBalances)
-      .catch(() => setBalances(null));
+    if (!provider) return;
+    const loadBalances = () => {
+      void fetchSellerEarningsSummary()
+        .then(setBalances)
+        .catch(() => setBalances(null));
+    };
+    if (drawerStatus === "open") loadBalances();
+    return subscribeWalletChanged(loadBalances);
   }, [provider, drawerStatus]);
 
   if (!provider) {

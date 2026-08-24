@@ -26,7 +26,7 @@ export function UserListingsPanel({
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const all = await listStaffListings({ owner: userId });
+      const all = await listStaffListings({ owner: userId, page_size: 50 });
       setRows(all);
       setError("");
     } catch (err) {

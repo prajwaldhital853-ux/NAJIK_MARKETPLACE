@@ -35,6 +35,14 @@ def email(prefix="u"):
     return f"{prefix}{uuid.uuid4().hex[:10]}@example.com"
 
 
+def user_rows(payload):
+    if isinstance(payload, list):
+        return payload
+    if isinstance(payload, dict) and isinstance(payload.get("results"), list):
+        return payload["results"]
+    return []
+
+
 @override_settings(REST_FRAMEWORK=NO_THROTTLE, OTP_STUB=True, DEBUG=True, MEDIA_ROOT=tempfile.gettempdir())
 class AuthFlowTests(TestCase):
     def setUp(self):
@@ -514,9 +522,9 @@ class AuthFlowTests(TestCase):
         self.auth(login.data["access"])
         listed = self.client.get("/api/admin/users/")
         self.assertEqual(listed.status_code, 200, listed.data)
-        emails = [row["email"] for row in listed.data]
+        emails = [row["email"] for row in user_rows(listed.data)]
         self.assertIn(body["email"], emails)
-        row = next(item for item in listed.data if item["email"] == body["email"])
+        row = next(item for item in user_rows(listed.data) if item["email"] == body["email"])
         self.assertEqual(row["account_type"], "provider")
         self.assertIn("date_joined", row)
 
@@ -537,7 +545,7 @@ class AuthFlowTests(TestCase):
         self.assertEqual(deleted.status_code, 204)
         listed = self.client.get("/api/admin/users/")
         self.assertEqual(listed.status_code, 200)
-        emails = [row["email"] for row in listed.data]
+        emails = [row["email"] for row in user_rows(listed.data)]
         self.assertNotIn(body["email"], emails)
 
     def test_staff_can_block_and_activate_app_user(self):

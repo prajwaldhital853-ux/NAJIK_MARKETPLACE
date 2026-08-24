@@ -6,6 +6,7 @@ to listings that still have none (no SSH required).
 
 import random
 from io import BytesIO
+from pathlib import Path
 
 from django.core.files.base import ContentFile
 from django.core.management.base import BaseCommand
@@ -280,10 +281,37 @@ def _demo_jpeg(name: str, color_index: int = 0) -> ContentFile:
     return ContentFile(pool[color_index % len(pool)], name=name)
 
 
-def _attach_listing_photos(listing: Listing) -> int:
-    """Add 4–5 mixed photos if the listing has none."""
-    if listing.photos.exists():
-        return 0
+def _real_listing_photos(limit: int = 200):
+    return list(
+        ListingPhoto.objects.filter(
+            listing__owner__email__isnull=False,
+        )
+        .exclude(listing__owner__email__iendswith="@najik-demo.com")
+        .exclude(image="")
+        .select_related("listing")
+        .order_by("?")[:limit]
+    )
+
+
+def _copy_photo_from_source(listing: Listing, source: ListingPhoto, sort_order: int) -> bool:
+    if not source.image:
+        return False
+    try:
+        src_path = Path(source.image.path)
+        if not src_path.is_file():
+            return False
+        ext = src_path.suffix or ".jpg"
+        filename = f"demo_{listing.id}_photo_{sort_order}{ext}"
+        photo = ListingPhoto(listing=listing, sort_order=sort_order)
+        with src_path.open("rb") as handle:
+            photo.image.save(filename, ContentFile(handle.read()), save=False)
+        photo.save()
+        return True
+    except Exception:
+        return False
+
+
+def _attach_generated_photos(listing: Listing) -> int:
     pool = _photo_pool()
     start = hash(str(listing.id)) % len(pool)
     count = 4 + (start % 2)
@@ -299,6 +327,33 @@ def _attach_listing_photos(listing: Listing) -> int:
         photo.save()
         saved += 1
     return saved
+
+
+def _attach_listing_photos(listing: Listing, *, refresh: bool = False) -> int:
+    """Add 4–5 photos from real seller listings, or generated colors as fallback."""
+    if listing.photos.exists() and not refresh:
+        return 0
+    if refresh:
+        listing.photos.all().delete()
+
+    sources = _real_listing_photos(limit=80)
+    if not sources:
+        return _attach_generated_photos(listing)
+
+    start = hash(str(listing.id)) % len(sources)
+    count = min(4 + (start % 2), len(sources))
+    saved = 0
+    used = set()
+    for i in range(count):
+        source = sources[(start + i) % len(sources)]
+        if source.id in used:
+            continue
+        used.add(source.id)
+        if _copy_photo_from_source(listing, source, i):
+            saved += 1
+    if saved:
+        return saved
+    return _attach_generated_photos(listing)
 
 
 def _pick_listing_pair(seller_index: int):
@@ -372,10 +427,16 @@ class Command(BaseCommand):
             default="demo123",
             help="Password for all demo seller accounts",
         )
+        parser.add_argument(
+            "--refresh-photos",
+            action="store_true",
+            help="Replace placeholder demo listing photos with copies from real seller listings",
+        )
 
     def handle(self, *args, **options):
         count = max(1, min(options["count"], 500))
         password = options["password"]
+        refresh_photos = bool(options.get("refresh_photos"))
         created_users = 0
         created_listings = 0
         created_apps = 0
@@ -467,7 +528,7 @@ class Command(BaseCommand):
                 if created:
                     created_listings += 1
                 try:
-                    added = _attach_listing_photos(listing)
+                    added = _attach_listing_photos(listing, refresh=refresh_photos)
                     if added:
                         photos_added += added
                 except Exception as photo_exc:

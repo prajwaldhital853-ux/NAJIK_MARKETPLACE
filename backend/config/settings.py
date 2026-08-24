@@ -87,6 +87,13 @@ if not DATABASE_URL.startswith(("postgres://", "postgresql://")):
     )
 DATABASES = {"default": env.db("DATABASE_URL")}
 
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+        "LOCATION": "najik",
+    }
+}
+
 AUTH_USER_MODEL = "accounts.AppUser"
 
 AUTH_PASSWORD_VALIDATORS = [

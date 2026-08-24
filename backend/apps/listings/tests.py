@@ -32,6 +32,14 @@ def email(prefix="s"):
     return f"{prefix}{uuid.uuid4().hex[:10]}@example.com"
 
 
+def listing_rows(payload):
+    if isinstance(payload, list):
+        return payload
+    if isinstance(payload, dict) and isinstance(payload.get("results"), list):
+        return payload["results"]
+    return []
+
+
 @override_settings(REST_FRAMEWORK=NO_THROTTLE, OTP_STUB=True, MEDIA_ROOT=tempfile.gettempdir())
 class ListingModerationTests(TestCase):
     def setUp(self):
@@ -126,17 +134,17 @@ class ListingModerationTests(TestCase):
         anon = APIClient()
         feed = anon.get("/api/listings/feed/")
         self.assertEqual(feed.status_code, 200)
-        self.assertEqual(len(feed.data), 1)
-        self.assertEqual(feed.data[0]["id"], listing_id)
+        self.assertEqual(len(listing_rows(feed.data)), 1)
+        self.assertEqual(listing_rows(feed.data)[0]["id"], listing_id)
 
         mine = self.client.get("/api/listings/me/")
-        self.assertEqual(len(mine.data), 1)
-        self.assertEqual(mine.data[0]["status"], "approved")
+        self.assertEqual(len(listing_rows(mine.data)), 1)
+        self.assertEqual(listing_rows(mine.data)[0]["status"], "approved")
 
         staff = self.staff_client()
         listed = staff.get("/api/admin/listings/")
         self.assertEqual(listed.status_code, 200)
-        self.assertEqual(len(listed.data), 1)
+        self.assertEqual(len(listing_rows(listed.data)), 1)
 
         rejected = staff.patch(
             f"/api/admin/listings/{listing_id}/",
@@ -155,9 +163,9 @@ class ListingModerationTests(TestCase):
         self.assertIn("unclear", rejected.data["admin_reason"])
 
         mine = self.client.get("/api/listings/me/")
-        self.assertEqual(mine.data[0]["admin_reason"], "Photos are unclear and the price looks unrealistic.")
+        self.assertEqual(listing_rows(mine.data)[0]["admin_reason"], "Photos are unclear and the price looks unrealistic.")
         feed = anon.get("/api/listings/feed/")
-        self.assertEqual(feed.data, [])
+        self.assertEqual(listing_rows(feed.data), [])
 
         republish = self.client.patch(
             f"/api/listings/me/{listing_id}/",
@@ -168,14 +176,14 @@ class ListingModerationTests(TestCase):
         self.assertEqual(republish.data["status"], "approved")
 
         feed = anon.get("/api/listings/feed/")
-        self.assertEqual(len(feed.data), 1)
-        self.assertEqual(feed.data[0]["title"], "Updated house in Lahan")
+        self.assertEqual(len(listing_rows(feed.data)), 1)
+        self.assertEqual(listing_rows(feed.data)[0]["title"], "Updated house in Lahan")
         self.assertEqual(Listing.objects.get(pk=listing_id).status, Listing.STATUS_APPROVED)
-        owner_id = feed.data[0]["owner_id"]
+        owner_id = listing_rows(feed.data)[0]["owner_id"]
         by_owner = anon.get(f"/api/listings/feed/?owner={owner_id}")
-        self.assertEqual(len(by_owner.data), 1)
+        self.assertEqual(len(listing_rows(by_owner.data)), 1)
         empty = anon.get("/api/listings/feed/?owner=00000000-0000-0000-0000-000000000000")
-        self.assertEqual(empty.data, [])
+        self.assertEqual(listing_rows(empty.data), [])
 
         buyer = APIClient()
         signed = buyer.post(
@@ -277,7 +285,7 @@ class ListingModerationTests(TestCase):
             self.assertEqual(posted.status_code, 201, posted.data)
         feed = APIClient().get("/api/listings/feed/")
         self.assertEqual(feed.status_code, 200)
-        titles = {row["title"] for row in feed.data}
+        titles = {row["title"] for row in listing_rows(feed.data)}
         self.assertTrue({"House A", "House B", "House C"}.issubset(titles))
 
     def test_feed_hides_marked_sold_listings(self):
@@ -288,7 +296,7 @@ class ListingModerationTests(TestCase):
         sold = self.client.post(f"/api/listings/me/{listing_id}/sold/", {"sold": True}, format="json")
         self.assertEqual(sold.status_code, 200, sold.data)
         feed = APIClient().get("/api/listings/feed/")
-        self.assertEqual(feed.data, [])
+        self.assertEqual(listing_rows(feed.data), [])
 
         _, p, _ = self.verified_provider()
         posted = self.client.post("/api/listings/me/", self.payload(p), format="json")
@@ -299,7 +307,7 @@ class ListingModerationTests(TestCase):
         self.assertEqual(deleted.status_code, 204)
         self.assertFalse(Listing.objects.filter(pk=listing_id).exists())
         feed = APIClient().get("/api/listings/feed/")
-        self.assertEqual(feed.data, [])
+        self.assertEqual(listing_rows(feed.data), [])
 
     def test_job_listing_can_omit_photos(self):
         _, p, _ = self.verified_provider()
@@ -366,18 +374,18 @@ class ListingModerationTests(TestCase):
         staff = self.staff_client()
         listed = staff.get("/api/admin/listings/")
         self.assertEqual(listed.status_code, 200)
-        ids = [row["id"] for row in listed.data]
+        ids = [row["id"] for row in listing_rows(listed.data)]
         self.assertNotIn(draft.data["id"], ids)
         self.assertIn(job.data["id"], ids)
         self.assertIn(house.data["id"], ids)
 
         jobs_only = staff.get("/api/admin/listings/?category=jobs")
         self.assertEqual(jobs_only.status_code, 200)
-        self.assertEqual([row["id"] for row in jobs_only.data], [job.data["id"]])
-        self.assertTrue(all(row["category"] == "jobs" for row in jobs_only.data))
+        self.assertEqual([row["id"] for row in listing_rows(jobs_only.data)], [job.data["id"]])
+        self.assertTrue(all(row["category"] == "jobs" for row in listing_rows(jobs_only.data)))
 
         properties_only = staff.get("/api/admin/listings/?category=property")
-        self.assertEqual([row["id"] for row in properties_only.data], [house.data["id"]])
+        self.assertEqual([row["id"] for row in listing_rows(properties_only.data)], [house.data["id"]])
 
     def test_public_listing_ignores_invalid_bearer_token(self):
         _, p, _ = self.verified_provider()

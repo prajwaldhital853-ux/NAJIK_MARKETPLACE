@@ -210,7 +210,7 @@ class ListingSerializer(serializers.ModelSerializer):
     owner_photo_url = serializers.SerializerMethodField()
     comments = serializers.SerializerMethodField()
     reviews = serializers.SerializerMethodField()
-    save_count = serializers.IntegerField(source="saves.count", read_only=True)
+    save_count = serializers.SerializerMethodField()
     comment_count = serializers.SerializerMethodField()
     review_count = serializers.SerializerMethodField()
     rating_avg = serializers.SerializerMethodField()
@@ -292,6 +292,8 @@ class ListingSerializer(serializers.ModelSerializer):
         return request.build_absolute_uri(f"/api/listings/sellers/{owner.id}/photo/")
 
     def get_comments(self, obj):
+        if self.context.get("compact"):
+            return []
         _, _, _, is_staff = viewer_flags(self)
         qs = obj.comments.filter(parent__isnull=True).select_related("author").prefetch_related("replies", "replies__author")
         if not is_staff:
@@ -299,6 +301,8 @@ class ListingSerializer(serializers.ModelSerializer):
         return ListingCommentSerializer(qs.order_by("-created_at"), many=True, context=self.context).data
 
     def get_reviews(self, obj):
+        if self.context.get("compact"):
+            return []
         _, _, _, is_staff = viewer_flags(self)
         seller_rows = seller_reviews_for_owner(obj.owner_id, is_staff=is_staff)[:100]
         seller_data = SellerReviewSerializer(seller_rows, many=True, context=self.context).data
@@ -314,7 +318,16 @@ class ListingSerializer(serializers.ModelSerializer):
                 seen.add(row["author_id"])
         return merged[:100]
 
+    def get_save_count(self, obj):
+        annotated = getattr(obj, "_save_count", None)
+        if annotated is not None:
+            return int(annotated)
+        return obj.saves.count()
+
     def get_comment_count(self, obj):
+        annotated = getattr(obj, "_comment_count", None)
+        if annotated is not None:
+            return int(annotated)
         _, _, _, is_staff = viewer_flags(self)
         qs = obj.comments.all()
         if not is_staff:
@@ -322,10 +335,14 @@ class ListingSerializer(serializers.ModelSerializer):
         return qs.count()
 
     def get_review_count(self, obj):
+        if self.context.get("compact"):
+            return 0
         _, _, _, is_staff = viewer_flags(self)
         return seller_reviews_for_owner(obj.owner_id, is_staff=is_staff).count()
 
     def get_rating_avg(self, obj):
+        if self.context.get("compact"):
+            return 0
         _, _, _, is_staff = viewer_flags(self)
         rows = seller_reviews_for_owner(obj.owner_id, is_staff=is_staff)
         from django.db.models import Avg
@@ -352,6 +369,9 @@ class ListingSerializer(serializers.ModelSerializer):
         return {}
 
     def get_saved_by_me(self, obj):
+        annotated = getattr(obj, "_saved_by_me", None)
+        if annotated is not None:
+            return bool(annotated)
         request = self.context.get("request")
         user = getattr(request, "user", None) if request else None
         if not user or not getattr(user, "is_authenticated", False) or not hasattr(user, "account_type"):
@@ -369,11 +389,17 @@ class ListingSerializer(serializers.ModelSerializer):
         return bool(user and getattr(user, "is_authenticated", False) and getattr(user, "id", None) == obj.owner_id)
 
     def get_is_boosted(self, obj):
+        boosted_ids = self.context.get("boosted_ids")
+        if boosted_ids is not None:
+            return obj.id in boosted_ids
         from apps.promotions.boost_service import listing_is_actively_boosted
 
         return listing_is_actively_boosted(obj.id)
 
     def get_boost_paused(self, obj):
+        paused_ids = self.context.get("paused_ids")
+        if paused_ids is not None:
+            return obj.id in paused_ids
         from apps.promotions.models import BoostCampaign
 
         return BoostCampaign.objects.filter(listing_id=obj.id, status=BoostCampaign.STATUS_PAUSED).exists()
@@ -381,6 +407,10 @@ class ListingSerializer(serializers.ModelSerializer):
     def get_has_live_boost(self, obj):
         if not self._is_owner(obj):
             return False
+        boosted_ids = self.context.get("boosted_ids")
+        paused_ids = self.context.get("paused_ids")
+        if boosted_ids is not None or paused_ids is not None:
+            return obj.id in (boosted_ids or set()) or obj.id in (paused_ids or set())
         from apps.promotions.boost_service import listing_has_live_boost
 
         return listing_has_live_boost(obj.id)
@@ -476,6 +506,9 @@ class ListingWriteSerializer(serializers.Serializer):
             reviewed_at=timezone.now() if publish else None,
             is_promoted=False,
         )
+        from apps.listings.listing_cards import bump_listing_feed_cache
+
+        bump_listing_feed_cache()
         for index, photo in enumerate(photos):
             ListingPhoto.objects.create(listing=listing, image=photo, sort_order=index)
         if publish and listing.status == Listing.STATUS_APPROVED:
@@ -536,6 +569,9 @@ class ListingWriteSerializer(serializers.Serializer):
                     ListingPhoto.objects.create(listing=instance, image=photo, sort_order=index, is_pending=True)
             instance.pending_edit = edit
             instance.save(update_fields=["pending_edit", "updated_at"])
+            from apps.listings.listing_cards import bump_listing_feed_cache
+
+            bump_listing_feed_cache()
             return instance
 
         for key, value in validated_data.items():
@@ -547,6 +583,9 @@ class ListingWriteSerializer(serializers.Serializer):
             instance.is_promoted = False
             instance.pending_edit = {}
         instance.save()
+        from apps.listings.listing_cards import bump_listing_feed_cache
+
+        bump_listing_feed_cache()
         if photos is not None:
             instance.photos.all().delete()
             for index, photo in enumerate(photos):

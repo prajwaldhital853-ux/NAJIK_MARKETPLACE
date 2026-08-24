@@ -84,7 +84,16 @@ class StaffAppUserListView(APIView):
 
     def get(self, request):
         items = AppUser.objects.select_related("provider_application").order_by("-date_joined")
-        return Response(StaffAppUserSerializer(items, many=True, context={"request": request}).data)
+        from apps.listings.listing_cards import paginate_queryset, parse_page
+
+        page, page_size = parse_page(request, default_size=50, max_size=100)
+        page_items, meta = paginate_queryset(items, page, page_size)
+        return Response(
+            {
+                "results": StaffAppUserSerializer(page_items, many=True, context={"request": request}).data,
+                **meta,
+            }
+        )
 
 
 class StaffAppUserDetailView(APIView):

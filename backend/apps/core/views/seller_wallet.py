@@ -169,6 +169,8 @@ class SellerPaymentsMeView(APIView):
                 "loaded_balance_label": paisa_to_label(loaded_paisa),
                 "refer_earn_total_paisa": refer_earn_paisa,
                 "refer_earn_total_label": paisa_to_label(refer_earn_paisa),
+                "refer_earn_remaining_paisa": refer_earn_paisa,
+                "refer_earn_remaining_label": paisa_to_label(refer_earn_paisa),
                 "config": payment_config_payload(request, cfg),
                 "pending_load": load_request_payload(request, pending) if pending else None,
                 "can_request_load": pending is None and cfg.is_active,

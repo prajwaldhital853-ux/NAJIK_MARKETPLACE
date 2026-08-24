@@ -2,7 +2,8 @@ import mimetypes
 import re
 from math import cos, radians
 
-from django.db.models import Avg, F, Prefetch, Q
+from django.core.cache import cache
+from django.db.models import Avg, Count, F, Prefetch, Q
 from django.http import FileResponse
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -55,6 +56,15 @@ def listing_queryset():
     )
 
 
+from apps.listings.listing_cards import (
+    bump_listing_feed_cache,
+    compact_listing_context,
+    listing_card_queryset,
+    listing_counts,
+    listing_feed_cache_key,
+    paginate_queryset,
+    parse_page,
+)
 from apps.listings.urgent import active_urgent_filter, exclude_sold_listings, expire_urgent_listings, is_sold_extras
 
 
@@ -137,7 +147,11 @@ class ListingFeedView(APIView):
 
     def get(self, request):
         expire_urgent_listings()
-        
+        cache_key = listing_feed_cache_key(request.META.get("QUERY_STRING", ""))
+        cached = cache.get(cache_key)
+        if cached is not None:
+            return Response(cached)
+
         # Pagination params
         try:
             page = max(1, int(request.query_params.get("page") or 1))
@@ -155,7 +169,7 @@ class ListingFeedView(APIView):
             except (TypeError, ValueError):
                 pass
         
-        items = exclude_sold_listings(listing_queryset().filter(status=Listing.STATUS_APPROVED))
+        items = exclude_sold_listings(listing_card_queryset().filter(status=Listing.STATUS_APPROVED))
         urgent_only = request.query_params.get("urgent") == "1"
         if urgent_only:
             items = items.filter(active_urgent_filter())
@@ -256,11 +270,11 @@ class ListingFeedView(APIView):
                 record_boost_impressions_for_listing_ids(impression_ids)
             paginated = slice_items[start_idx:end_idx]
             has_next = len(slice_items) > end_idx
-            rows = ListingSerializer(paginated, many=True, context={"request": request}).data
+            rows = ListingSerializer(paginated, many=True, context=compact_listing_context(request, paginated)).data
         else:
-            paginated = items[start_idx:end_idx]
+            paginated = list(items[start_idx:end_idx])
             has_next = items[end_idx:end_idx+1].exists()
-            rows = ListingSerializer(paginated, many=True, context={"request": request}).data
+            rows = ListingSerializer(paginated, many=True, context=compact_listing_context(request, paginated)).data
         
         min_price = request.query_params.get("min_price")
         max_price = request.query_params.get("max_price")
@@ -277,13 +291,16 @@ class ListingFeedView(APIView):
         
         # Return paginated response (backward compat: if legacy limit used, return array; else object)
         if legacy_limit:
-            return Response(rows)
-        return Response({
-            "results": rows,
-            "page": page,
-            "page_size": page_size,
-            "has_next": has_next,
-        })
+            payload = rows
+        else:
+            payload = {
+                "results": rows,
+                "page": page,
+                "page_size": page_size,
+                "has_next": has_next,
+            }
+        cache.set(cache_key, payload, 20)
+        return Response(payload)
 
 
 def record_listing_view_event(listing: Listing, viewer=None) -> int:
@@ -426,17 +443,15 @@ class ListingMineView(APIView):
             except (TypeError, ValueError):
                 pass
         
-        items = listing_queryset().filter(owner=request.user).select_related(
-            "owner", "owner__provider_application"
-        ).prefetch_related("photos")
+        items = listing_card_queryset(request.user).filter(owner=request.user).order_by("-created_at")
         
         start_idx = (page - 1) * page_size
         end_idx = start_idx + page_size
         
-        paginated = items[start_idx:end_idx]
+        paginated = list(items[start_idx:end_idx])
         has_next = items[end_idx:end_idx+1].exists()
         
-        serialized = ListingSerializer(paginated, many=True, context={"request": request}).data
+        serialized = ListingSerializer(paginated, many=True, context=compact_listing_context(request, paginated)).data
         
         # Return paginated response (backward compat: if legacy limit used, return array; else object)
         if legacy_limit:
@@ -511,6 +526,7 @@ class ListingMineDetailView(APIView):
                 )
         
         listing.delete()
+        bump_listing_feed_cache()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
@@ -717,12 +733,7 @@ class StaffListingListView(APIView):
     permission_classes = [IsStaffUser]
 
     def get(self, request):
-        items = listing_queryset().order_by("-created_at")
-        status_filter = request.query_params.get("status")
-        if status_filter:
-            items = items.filter(status=status_filter)
-        else:
-            items = items.exclude(status=Listing.STATUS_DRAFT)
+        items = listing_card_queryset().order_by("-created_at").exclude(status=Listing.STATUS_DRAFT)
         category = request.query_params.get("category")
         if category:
             cats = [item.strip() for item in category.split(",") if item.strip()]
@@ -732,7 +743,18 @@ class StaffListingListView(APIView):
             items = items.filter(owner_id=owner)
         if request.query_params.get("urgent") == "1":
             items = items.filter(active_urgent_filter())
-        return Response(ListingSerializer(items, many=True, context={"request": request}).data)
+        counts = listing_counts(items)
+        status_filter = request.query_params.get("status")
+        if status_filter:
+            items = items.filter(status=status_filter)
+        page, page_size = parse_page(request, default_size=20, max_size=50)
+        page_items, meta = paginate_queryset(items, page, page_size)
+        rows = ListingSerializer(page_items, many=True, context=compact_listing_context(request, page_items)).data
+        return Response({
+            "results": rows,
+            **meta,
+            "counts": counts,
+        })
 
 
 class StaffListingDetailView(APIView):
@@ -771,11 +793,13 @@ class StaffListingDetailView(APIView):
                 )
                 sync_listing_promoted_flag(listing.id)
         listing = listing_queryset().get(pk=listing.pk)
+        bump_listing_feed_cache()
         return Response(ListingSerializer(listing, context={"request": request}).data)
 
     def delete(self, request, pk):
         listing = get_object_or_404(Listing, pk=pk)
         listing.delete()
+        bump_listing_feed_cache()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 

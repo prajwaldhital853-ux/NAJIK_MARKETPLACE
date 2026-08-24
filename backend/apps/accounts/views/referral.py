@@ -109,6 +109,10 @@ class ReferEarnMeView(APIView):
         all_sent = Referral.objects.filter(referrer=user).count()
         joined_count = all_sent
         earned_count = Referral.objects.filter(referrer=user, status=Referral.STATUS_EARNED).count()
+        from apps.core.seller_wallet_service import get_or_create_wallet, paisa_to_label, wallet_balance_breakdown
+
+        wallet = get_or_create_wallet(user)
+        refer_remain_paisa, _loaded_paisa = wallet_balance_breakdown(wallet)
         return Response(
             {
                 "invite_code": code,
@@ -123,6 +127,9 @@ class ReferEarnMeView(APIView):
                     "earned_count": earned_count,
                     "earned_total": earned_total,
                     "earned_total_label": f"Rs. {earned_total}",
+                    "available_total": refer_remain_paisa // 100,
+                    "available_total_label": paisa_to_label(refer_remain_paisa),
+                    "wallet_total_label": paisa_to_label(wallet.balance_paisa),
                 },
                 "recent": [referral_row_payload(row) for row in rows],
             }

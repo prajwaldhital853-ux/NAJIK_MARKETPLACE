@@ -2,7 +2,7 @@ import { relativeTime } from "./format";
 import type { User } from "./demo-data";
 import type { ProviderApplication, StaffListing, ComplaintTicket, SellerLoadRequestRow } from "./staff-api";
 
-export const ADMIN_POLL_MS = 5000;
+export const ADMIN_POLL_MS = 15000;
 export const OPEN_INBOX_KEY = "najik_admin_open_inbox";
 export const SEEN_INBOX_KEY = "najik_admin_seen_inbox_v1";
 

@@ -37,7 +37,7 @@ def get_or_create_wallet(provider) -> SellerWallet:
 
 
 def wallet_balance_breakdown(wallet: SellerWallet) -> tuple[int, int]:
-    """Refer & Earn spendable balance and loaded balance (fees consume refer earn first)."""
+    """Refer & Earn remaining and loaded remaining. Debits consume invite first."""
     refer_credited = (
         SellerWalletTransaction.objects.filter(
             wallet=wallet,
@@ -45,16 +45,27 @@ def wallet_balance_breakdown(wallet: SellerWallet) -> tuple[int, int]:
         ).aggregate(total=Sum("amount_paisa"))["total"]
         or 0
     )
-    fees_paisa = (
+    debit_paisa = (
         SellerWalletTransaction.objects.filter(
             wallet=wallet,
-            kind=SellerWalletTransaction.KIND_LISTING_FEE,
+            kind__in=[
+                SellerWalletTransaction.KIND_LISTING_FEE,
+                SellerWalletTransaction.KIND_BOOST_FEE,
+                SellerWalletTransaction.KIND_ADMIN_DEBIT,
+            ],
         ).aggregate(total=Sum("amount_paisa"))["total"]
         or 0
     )
-    total_fees = abs(int(fees_paisa))
+    refunds_paisa = (
+        SellerWalletTransaction.objects.filter(
+            wallet=wallet,
+            kind=SellerWalletTransaction.KIND_REFUND,
+        ).aggregate(total=Sum("amount_paisa"))["total"]
+        or 0
+    )
+    net_debits = max(0, abs(int(debit_paisa)) - max(0, int(refunds_paisa)))
     refer_credited = int(refer_credited)
-    refer_consumed = min(refer_credited, total_fees)
+    refer_consumed = min(refer_credited, net_debits)
     refer_earn_paisa = max(0, refer_credited - refer_consumed)
     loaded_paisa = max(0, int(wallet.balance_paisa) - refer_earn_paisa)
     return refer_earn_paisa, loaded_paisa

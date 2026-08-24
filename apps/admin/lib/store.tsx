@@ -40,9 +40,9 @@ import { getStaffRefreshToken } from "./auth";
 import {
   deleteAppUser,
   deleteStaffListing,
-  listAppUsers,
+  listAppUsersPage,
   listProviderApplications,
-  listStaffListings,
+  listStaffListingsPage,
   listStaffLoadRequests,
   listComplaints,
   patchAppUser,
@@ -137,6 +137,11 @@ export function AdminStoreProvider({ children }: { children: React.ReactNode }) 
   const [liveUsers, setLiveUsers] = useState<User[]>([]);
   const [liveActivity, setLiveActivity] = useState<Activity[]>([]);
   const [liveListings, setLiveListings] = useState<StaffListing[]>([]);
+  const [listingTotals, setListingTotals] = useState<{
+    total: number;
+    pending: number;
+    by_category?: Record<string, number>;
+  } | null>(null);
   const [liveApplications, setLiveApplications] = useState<ProviderApplication[]>([]);
   const [liveReports, setLiveReports] = useState<ComplaintTicket[]>([]);
   const [liveLoadRequests, setLiveLoadRequests] = useState<SellerLoadRequestRow[]>([]);
@@ -174,6 +179,7 @@ export function AdminStoreProvider({ children }: { children: React.ReactNode }) 
         setLiveUsers([]);
         setLiveActivity([]);
         setLiveListings([]);
+        setListingTotals(null);
         setLiveApplications([]);
         setLiveReports([]);
         setLiveLoadRequests([]);
@@ -182,24 +188,33 @@ export function AdminStoreProvider({ children }: { children: React.ReactNode }) 
         return;
       }
       try {
-        const [rows, listings, applications, complaints, loads, payments] = await Promise.all([
-          listAppUsers(),
-          listStaffListings(),
+        const [usersPage, pendingPage, recentPage, applications, complaints, loads, payments] = await Promise.all([
+          listAppUsersPage({ page_size: 100 }),
+          listStaffListingsPage({ status: "pending", page_size: 50 }),
+          listStaffListingsPage({ page_size: 25 }),
           listProviderApplications(),
           listComplaints().catch(() => [] as ComplaintTicket[]),
           listStaffLoadRequests().catch(() => [] as SellerLoadRequestRow[]),
           getStaffPaymentsSummary("month").catch(() => null),
         ]);
         if (!alive) return;
-        const sortedListings = [...listings].sort(
+        const merged = [...pendingPage.results];
+        const seen = new Set(merged.map((row) => row.id));
+        for (const row of recentPage.results) {
+          if (seen.has(row.id)) continue;
+          seen.add(row.id);
+          merged.push(row);
+        }
+        const sortedListings = merged.sort(
           (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
         );
-        const sortedUsers = [...rows].sort(
+        const sortedUsers = [...usersPage.results].sort(
           (a, b) => new Date(b.date_joined).getTime() - new Date(a.date_joined).getTime(),
         );
         setLiveUsers(sortedUsers.map(mapDirectoryUser));
         setLiveActivity(sortedUsers.map(mapDirectoryActivity));
         setLiveListings(sortedListings);
+        setListingTotals(recentPage.counts || pendingPage.counts || null);
         setLiveApplications(applications);
         setLiveReports(complaints);
         setLiveLoadRequests(loads);
@@ -376,7 +391,8 @@ export function AdminStoreProvider({ children }: { children: React.ReactNode }) 
     });
   }, [liveUsers, users, liveListings]);
 
-  const listingCount = (category: string) => liveListings.filter((row) => row.category === category).length;
+  const listingCount = (category: string) =>
+    listingTotals?.by_category?.[category] ?? liveListings.filter((row) => row.category === category).length;
 
   const kpis = useMemo(
     () => ({
@@ -394,7 +410,7 @@ export function AdminStoreProvider({ children }: { children: React.ReactNode }) 
       usedItemUsers: mergedUsers.filter((u) => /used|marketplace/i.test(u.category)).length,
       shopUsers: mergedUsers.filter((u) => /shop|business/i.test(u.category)).length,
       properties: listingCount("property"),
-      listings: liveListings.length,
+      listings: listingTotals?.total ?? liveListings.length,
       jobs: listingCount("jobs"),
       vehicles: listingCount("vehicles"),
       usedItems: listingCount("marketplace"),
@@ -403,7 +419,7 @@ export function AdminStoreProvider({ children }: { children: React.ReactNode }) 
       revenue: paymentsSummary?.total_revenue_rupees ?? paymentsSummary?.admin_credit_total_rupees ?? 0,
       revenueDelta: 0,
     }),
-    [mergedUsers, liveListings, paymentsSummary],
+    [mergedUsers, liveListings, listingTotals, paymentsSummary],
   );
 
   const growth = useMemo(() => {
@@ -420,7 +436,7 @@ export function AdminStoreProvider({ children }: { children: React.ReactNode }) 
       index === GROWTH.Services.length - 1 ? { ...point, v: listingCount("services") } : point,
     );
     return { ...GROWTH, Users: usersSeries, Properties: propertiesSeries, Jobs: jobsSeries, Services: servicesSeries };
-  }, [mergedUsers.length, liveListings]);
+  }, [mergedUsers.length, liveListings, listingTotals]);
 
   const categories = useMemo(() => {
     const counts: Record<string, number> = {

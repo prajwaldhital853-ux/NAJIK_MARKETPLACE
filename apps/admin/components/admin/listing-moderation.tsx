@@ -10,7 +10,7 @@ import { Avatar, Btn, StatusBadge, inputClass } from "@/components/admin/ui";
 import { formatNptDateTime, formatNptTime, relativeTime } from "@/lib/format";
 import { useSession } from "@/lib/session";
 import { ADMIN_POLL_MS } from "@/lib/live-inbox";
-import { deleteStaffListing, listStaffListings, patchStaffListing, type StaffListing } from "@/lib/staff-api";
+import { deleteStaffListing, listStaffListingsPage, patchStaffListing, type StaffListing } from "@/lib/staff-api";
 import { UrgentListingControls } from "./urgent-listing-controls";
 
 const TABS = ["Pending", "All", "Approved", "Rejected", "Deactivated", "Urgent"] as const;
@@ -41,6 +41,15 @@ export function ListingModeration({
   const openId = params.get("id");
   const autoOpenedId = useRef<string | null>(null);
   const [items, setItems] = useState<StaffListing[]>([]);
+  const [page, setPage] = useState(1);
+  const [hasNext, setHasNext] = useState(false);
+  const [counts, setCounts] = useState<{
+    total: number;
+    pending: number;
+    approved?: number;
+    rejected?: number;
+    deactivated?: number;
+  } | null>(null);
   const [error, setError] = useState("");
   const [tab, setTab] = useState<(typeof TABS)[number]>(() => tabFromParam(params.get("status")));
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
@@ -59,7 +68,26 @@ export function ListingModeration({
   async function load() {
     if (!apiSession) return;
     try {
-      setItems(await listStaffListings(category ? { category } : undefined));
+      const status =
+        tab === "Pending"
+          ? "pending"
+          : tab === "Approved"
+            ? "approved"
+            : tab === "Rejected"
+              ? "rejected"
+              : tab === "Deactivated"
+                ? "deactivated"
+                : undefined;
+      const data = await listStaffListingsPage({
+        category,
+        status,
+        urgent: tab === "Urgent" || undefined,
+        page,
+        page_size: 20,
+      });
+      setItems(data.results);
+      setHasNext(data.has_next);
+      if (data.counts) setCounts(data.counts);
       setUpdatedAt(new Date());
       setError("");
     } catch (err) {
@@ -70,6 +98,7 @@ export function ListingModeration({
 
   useEffect(() => {
     setTab(tabFromParam(params.get("status")));
+    setPage(1);
   }, [params]);
 
   useEffect(() => {
@@ -81,7 +110,7 @@ export function ListingModeration({
     void load();
     const id = window.setInterval(() => void load(), ADMIN_POLL_MS);
     return () => window.clearInterval(id);
-  }, [apiSession, category]);
+  }, [apiSession, category, tab, page]);
 
   useEffect(() => {
     setOpen((prev) => (prev ? items.find((i) => i.id === prev.id) || prev : prev));
@@ -109,6 +138,7 @@ export function ListingModeration({
   function setTabAndUrl(next: string) {
     const nextTab = (TABS.find((t) => t === next) || "All") as (typeof TABS)[number];
     setTab(nextTab);
+    setPage(1);
     const q = new URLSearchParams();
     // Keep category-style filters that identify the page, drop sticky status/type/featured
     // so switching tabs never stays stuck on a previous sidebar query.
@@ -156,7 +186,7 @@ export function ListingModeration({
     }
   }
 
-  const pending = items.filter((i) => i.status === "pending" || i.has_pending_edit);
+  const pendingCount = counts?.pending ?? items.filter((i) => i.status === "pending" || i.has_pending_edit).length;
 
   const visible = useMemo(() => {
     const featuredOnly = params.get("featured") === "1";
@@ -285,11 +315,11 @@ export function ListingModeration({
       />
       <SummaryStrip
         items={[
-          { label: "Listings", value: items.length, tone: "brand" },
-          { label: "Pending / edits", value: pending.length, tone: "amber" },
-          { label: "Approved", value: items.filter((i) => i.status === "approved").length, tone: "green" },
-          { label: "Rejected", value: items.filter((i) => i.status === "rejected").length, tone: "red" },
-          { label: "Deactivated", value: items.filter((i) => i.status === "deactivated").length, tone: "amber" },
+          { label: "Listings", value: counts?.total ?? items.length, tone: "brand" },
+          { label: "Pending / edits", value: pendingCount, tone: "amber" },
+          { label: "Approved", value: counts?.approved ?? items.filter((i) => i.status === "approved").length, tone: "green" },
+          { label: "Rejected", value: counts?.rejected ?? items.filter((i) => i.status === "rejected").length, tone: "red" },
+          { label: "Deactivated", value: counts?.deactivated ?? items.filter((i) => i.status === "deactivated").length, tone: "amber" },
         ]}
       />
       <div className="mb-3 flex justify-end">
@@ -306,6 +336,27 @@ export function ListingModeration({
         rowActions={rowActions}
         searchPlaceholder="Filter listings…"
       />
+      <div className="mt-3 flex items-center justify-between">
+        <p className="text-[11px] text-muted">Page {page}</p>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            disabled={page <= 1}
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            className="rounded-xl border border-line px-3 py-1.5 text-sm font-semibold text-ink disabled:opacity-40"
+          >
+            Previous
+          </button>
+          <button
+            type="button"
+            disabled={!hasNext}
+            onClick={() => setPage((p) => p + 1)}
+            className="rounded-xl border border-line px-3 py-1.5 text-sm font-semibold text-ink disabled:opacity-40"
+          >
+            Next
+          </button>
+        </div>
+      </div>
 
       <DetailOverlay
         open={!!open}

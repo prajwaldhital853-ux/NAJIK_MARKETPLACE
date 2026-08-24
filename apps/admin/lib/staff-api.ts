@@ -194,8 +194,47 @@ export type AppDirectoryUser = {
   other_document_uri?: string | null;
 };
 
-export async function listAppUsers() {
-  return staffRequest<AppDirectoryUser[]>("/api/admin/users/");
+export type StaffPage<T> = {
+  results: T[];
+  page: number;
+  page_size: number;
+  count: number;
+  has_next: boolean;
+  counts?: {
+    total: number;
+    pending: number;
+    approved?: number;
+    rejected?: number;
+    deactivated?: number;
+    by_category?: Record<string, number>;
+  };
+};
+
+function unwrapStaffPage<T>(data: T[] | StaffPage<T> | undefined, page = 1, pageSize = 25): StaffPage<T> {
+  if (Array.isArray(data)) {
+    return { results: data, page, page_size: pageSize, count: data.length, has_next: false };
+  }
+  const results = Array.isArray(data?.results) ? data.results : [];
+  return {
+    results,
+    page: Number(data?.page) || page,
+    page_size: Number(data?.page_size) || pageSize,
+    count: Number(data?.count) || results.length,
+    has_next: Boolean(data?.has_next),
+    counts: data?.counts,
+  };
+}
+
+export async function listAppUsersPage(query?: { page?: number; page_size?: number }) {
+  const params = new URLSearchParams();
+  params.set("page", String(query?.page || 1));
+  params.set("page_size", String(query?.page_size || 100));
+  const data = await staffRequest<AppDirectoryUser[] | StaffPage<AppDirectoryUser>>(`/api/admin/users/?${params.toString()}`);
+  return unwrapStaffPage(data, query?.page || 1, query?.page_size || 100);
+}
+
+export async function listAppUsers(query?: { page?: number; page_size?: number }) {
+  return (await listAppUsersPage(query)).results;
 }
 
 export async function patchAppUser(
@@ -248,14 +287,34 @@ export type StaffListing = {
   owner_id: string;
 };
 
-export async function listStaffListings(query?: { category?: string; status?: string; owner?: string; urgent?: boolean }) {
+export async function listStaffListingsPage(query?: {
+  category?: string;
+  status?: string;
+  owner?: string;
+  urgent?: boolean;
+  page?: number;
+  page_size?: number;
+}) {
   const params = new URLSearchParams();
   if (query?.category) params.set("category", query.category);
   if (query?.status) params.set("status", query.status);
   if (query?.owner) params.set("owner", query.owner);
   if (query?.urgent) params.set("urgent", "1");
-  const suffix = params.toString() ? `?${params.toString()}` : "";
-  return staffRequest<StaffListing[]>(`/api/admin/listings/${suffix}`);
+  params.set("page", String(query?.page || 1));
+  params.set("page_size", String(query?.page_size || 20));
+  const data = await staffRequest<StaffListing[] | StaffPage<StaffListing>>(`/api/admin/listings/?${params.toString()}`);
+  return unwrapStaffPage(data, query?.page || 1, query?.page_size || 20);
+}
+
+export async function listStaffListings(query?: {
+  category?: string;
+  status?: string;
+  owner?: string;
+  urgent?: boolean;
+  page?: number;
+  page_size?: number;
+}) {
+  return (await listStaffListingsPage(query)).results;
 }
 
 export async function patchStaffListing(

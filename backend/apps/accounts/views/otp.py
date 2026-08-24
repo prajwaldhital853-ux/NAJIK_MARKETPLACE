@@ -48,8 +48,9 @@ class OtpVerifyView(APIView):
                 user.phone = ident
             user.phone_verified = True
             user.save(update_fields=["phone", "phone_verified"])
-            from apps.accounts.models.referral import qualify_referral_for_buyer
+            from apps.accounts.models.referral import generate_referral_code, qualify_referral_for_buyer
 
+            generate_referral_code(user)
             qualify_referral_for_buyer(user)
         else:
             if user.email and user.email.lower() != ident:

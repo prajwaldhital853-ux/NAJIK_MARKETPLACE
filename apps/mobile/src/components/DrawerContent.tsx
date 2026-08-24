@@ -11,7 +11,7 @@ import { useAuth } from "../context/AuthContext";
 import type { CatalogKey } from "../data/catalog";
 import type { SellerPage } from "../data/sellerHub";
 import { isPendingProvider, isProvider, isRejectedProvider, isVerifiedProvider } from "../demo";
-import { openBookings, openCategory, openMapSearch, openSellerPage } from "../navigation/browse";
+import { openBookings, openBuyerInviteEarn, openCategory, openMapSearch, openSellerPage } from "../navigation/browse";
 import { Avatar } from "./Avatar";
 import { NajikLogo } from "./NajikLogo";
 import { PressScale } from "./PressScale";
@@ -70,6 +70,7 @@ type BuyerItem = {
   bg: string;
   badge?: number;
   danger?: boolean;
+  invite?: boolean;
 };
 
 const buyerPrimary: BuyerItem[] = [
@@ -88,6 +89,7 @@ const buyerPrimary: BuyerItem[] = [
 
 const buyerSecondary: BuyerItem[] = [
   { icon: "heart-outline", title: "Saved", tab: "Saved", color: "#374151", bg: "transparent" },
+  { icon: "gift-outline", title: "Invite & Earn", tab: "", color: "#1B7D2C", bg: "transparent", invite: true },
   { icon: "search-outline", title: "Explore", tab: "Explore", color: "#374151", bg: "transparent" },
   { icon: "notifications-outline", title: "Notifications", tab: "Home", color: "#374151", bg: "transparent" },
   { icon: "settings-outline", title: "Settings", tab: "Profile", color: "#374151", bg: "transparent" },
@@ -161,68 +163,71 @@ export function DrawerContent({ navigation }: DrawerContentComponentProps) {
 
   return (
     <View style={{ flex: 1, backgroundColor: "#fff" }}>
-      <View style={{ backgroundColor: HEADER_GREEN, paddingTop: insets.top + k(4), paddingHorizontal: k(12), paddingBottom: k(8) }}>
-        <Pressable onPress={() => navigation.closeDrawer()} style={{ alignSelf: "flex-end", padding: k(3) }} hitSlop={10}>
-          <Ionicons name="close" size={k(14)} color="#fff" />
+      <View style={{ backgroundColor: HEADER_GREEN, paddingTop: insets.top + k(2), paddingHorizontal: k(10), paddingBottom: k(5) }}>
+        <Pressable onPress={() => navigation.closeDrawer()} style={{ alignSelf: "flex-end", padding: k(2) }} hitSlop={10}>
+          <Ionicons name="close" size={k(12)} color="#fff" />
         </Pressable>
 
-        <View style={{ flexDirection: "row", alignItems: "center", marginTop: k(2) }}>
-          <Avatar name={name} uri={photo || undefined} size={k(38)} />
-          <View style={{ flex: 1, marginLeft: k(10) }}>
-            <View style={{ flexDirection: "row", alignItems: "center", gap: k(4) }}>
-              <Text style={{ color: "#fff", fontWeight: "800", fontSize: k(12) }} numberOfLines={1}>
+        <View style={{ flexDirection: "row", alignItems: "center", marginTop: k(1) }}>
+          <Avatar name={name} uri={photo || undefined} size={k(30)} />
+          <View style={{ flex: 1, marginLeft: k(8), minWidth: 0 }}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: k(3) }}>
+              <Text style={{ color: "#fff", fontWeight: "800", fontSize: k(10.5), flexShrink: 1 }} numberOfLines={1}>
                 {name}
               </Text>
-              {verified ? <Ionicons name="checkmark-circle" size={k(10)} color="#2ED573" /> : null}
+              {verified ? <Ionicons name="checkmark-circle" size={k(9)} color="#2ED573" /> : null}
             </View>
-            <Text style={{ color: "#CFE9DA", fontSize: k(8.5), marginTop: k(2) }} numberOfLines={1}>
+            <Text style={{ color: "#CFE9DA", fontSize: k(7.5), marginTop: 1 }} numberOfLines={1}>
               {role}
             </Text>
           </View>
+          <PressScale
+            onPress={() => goTab("Profile")}
+            style={{
+              borderWidth: 1,
+              borderColor: "rgba(255,255,255,0.85)",
+              paddingHorizontal: k(8),
+              paddingVertical: k(3),
+              borderRadius: 999,
+              flexDirection: "row",
+              alignItems: "center",
+              gap: k(2),
+            }}
+          >
+            <Text style={{ color: "#fff", fontWeight: "700", fontSize: k(7.5) }}>Profile</Text>
+            <Ionicons name="chevron-forward" size={k(8)} color="#fff" />
+          </PressScale>
         </View>
-
-        <PressScale
-          onPress={() => goTab("Profile")}
-          style={{
-            marginTop: k(10),
-            marginLeft: k(54),
-            alignSelf: "flex-start",
-            borderWidth: 1,
-            borderColor: "rgba(255,255,255,0.85)",
-            paddingHorizontal: k(12),
-            paddingVertical: k(5),
-            borderRadius: 999,
-            flexDirection: "row",
-            alignItems: "center",
-            gap: k(4),
-          }}
-        >
-          <Text style={{ color: "#fff", fontWeight: "700", fontSize: k(9) }}>View Profile</Text>
-          <Ionicons name="chevron-forward" size={k(9)} color="#fff" />
-        </PressScale>
 
         {balances ? (
           <View
             style={{
-              marginTop: k(8),
+              marginTop: k(5),
               backgroundColor: "rgba(255,255,255,0.12)",
-              borderRadius: k(8),
-              padding: k(8),
+              borderRadius: k(7),
+              paddingHorizontal: k(6),
+              paddingVertical: k(5),
             }}
           >
-            <Text style={{ color: "#E8F8EE", fontSize: k(7.5), fontWeight: "700" }}>Your balances</Text>
-            <View style={{ flexDirection: "row", marginTop: k(4), gap: k(4) }}>
+            <Text style={{ color: "#E8F8EE", fontSize: k(6.5), fontWeight: "700" }}>Your balances</Text>
+            <View style={{ flexDirection: "row", marginTop: k(3), gap: k(3) }}>
               <View style={{ flex: 1 }}>
-                <Text style={{ color: "#CFE9DA", fontSize: k(7) }}>Loaded</Text>
-                <Text style={{ color: "#fff", fontWeight: "800", fontSize: k(9), marginTop: 1 }}>{balances.loaded_balance_label}</Text>
+                <Text style={{ color: "#CFE9DA", fontSize: k(6.5) }}>Loaded</Text>
+                <Text style={{ color: "#fff", fontWeight: "800", fontSize: k(8), marginTop: 1 }} numberOfLines={1}>
+                  {balances.loaded_balance_label}
+                </Text>
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={{ color: "#CFE9DA", fontSize: k(7) }}>Refer & Earn</Text>
-                <Text style={{ color: "#fff", fontWeight: "800", fontSize: k(9), marginTop: 1 }}>{balances.referrer_balance_label}</Text>
+                <Text style={{ color: "#CFE9DA", fontSize: k(6.5) }}>Refer & Earn</Text>
+                <Text style={{ color: "#fff", fontWeight: "800", fontSize: k(8), marginTop: 1 }} numberOfLines={1}>
+                  {balances.referrer_balance_label}
+                </Text>
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={{ color: "#CFE9DA", fontSize: k(7) }}>Combined</Text>
-                <Text style={{ color: "#fff", fontWeight: "800", fontSize: k(9), marginTop: 1 }}>{balances.combined_balance_label}</Text>
+                <Text style={{ color: "#CFE9DA", fontSize: k(6.5) }}>Combined</Text>
+                <Text style={{ color: "#fff", fontWeight: "800", fontSize: k(8), marginTop: 1 }} numberOfLines={1}>
+                  {balances.combined_balance_label}
+                </Text>
               </View>
             </View>
           </View>
@@ -411,6 +416,7 @@ function BuyerDrawer({ navigation }: { navigation: DrawerContentComponentProps["
   const current = drawer.routes[drawer.index];
   const activeCatalog = current.name === "CategoryBrowse" ? (current.params as { key?: CatalogKey } | undefined)?.key : undefined;
   const onHome = current.name === "Tabs";
+  const onInvite = current.name === "BuyerInviteEarn";
 
   const drawerW = Math.min(Dimensions.get("window").width * 0.78, 300);
   const scale = drawerW / 300;
@@ -528,10 +534,17 @@ function BuyerDrawer({ navigation }: { navigation: DrawerContentComponentProps["
 
         <View style={{ height: 1, backgroundColor: "#EFF1F2", marginHorizontal: s(14), marginVertical: s(6) }} />
 
-        {buyerSecondary.map((item) => (
+        {buyerSecondary.map((item) => {
+          const active = item.invite ? onInvite : false;
+          return (
           <PressScale
             key={item.title}
             onPress={async () => {
+              if (item.invite) {
+                openBuyerInviteEarn(navigation);
+                navigation.closeDrawer();
+                return;
+              }
               if (item.danger) {
                 navigation.closeDrawer();
                 await logout();
@@ -544,13 +557,25 @@ function BuyerDrawer({ navigation }: { navigation: DrawerContentComponentProps["
               }
               goTab(item.tab);
             }}
-            style={{ marginHorizontal: s(10), borderRadius: s(10) }}
+            style={{
+              marginHorizontal: s(10),
+              borderRadius: s(10),
+              backgroundColor: active ? "#E7F6EC" : "transparent",
+            }}
           >
             <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: s(8), paddingVertical: s(9) }}>
               <View style={{ width: s(28), alignItems: "center" }}>
-                <Ionicons name={item.icon} size={s(19)} color={item.color} />
+                <Ionicons name={item.icon} size={s(19)} color={active ? "#068A22" : item.color} />
               </View>
-              <Text style={{ flex: 1, marginLeft: s(8), fontSize: s(14), fontWeight: "700", color: item.danger ? "#E53935" : "#111827" }}>
+              <Text
+                style={{
+                  flex: 1,
+                  marginLeft: s(8),
+                  fontSize: s(14),
+                  fontWeight: "700",
+                  color: item.danger ? "#E53935" : active ? "#068A22" : "#111827",
+                }}
+              >
                 {item.title}
               </Text>
               {item.badge ? (
@@ -569,10 +594,11 @@ function BuyerDrawer({ navigation }: { navigation: DrawerContentComponentProps["
                   <Text style={{ color: "#fff", fontSize: s(9), fontWeight: "800" }}>{item.badge}</Text>
                 </View>
               ) : null}
-              {item.danger ? null : <Ionicons name="chevron-forward" size={s(14)} color="#C4C7CC" />}
+              {item.danger ? null : <Ionicons name="chevron-forward" size={s(14)} color={active ? "#068A22" : "#C4C7CC"} />}
             </View>
           </PressScale>
-        ))}
+          );
+        })}
 
         <Text style={{ textAlign: "center", color: "#9AA0A6", fontSize: s(10), marginTop: s(12) }}>Version 1.0.4</Text>
       </ScrollView>

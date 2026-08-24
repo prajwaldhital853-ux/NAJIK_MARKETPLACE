@@ -77,6 +77,9 @@ class MeView(APIView):
                 existing = AppUser.objects.filter(phone=phone).exclude(pk=user.pk).first()
                 if existing:
                     return Response({"detail": identity_taken_message(existing, "phone")}, status=status.HTTP_400_BAD_REQUEST)
+                if user.phone != phone:
+                    user.phone_verified = False
+                    updates.append("phone_verified")
                 user.phone = phone
                 updates.append("phone")
         if "allow_buyer_calls" in data:

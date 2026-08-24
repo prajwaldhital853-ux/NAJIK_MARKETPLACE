@@ -129,14 +129,21 @@ def _referrer_is_eligible(referrer) -> bool:
     return app.status == ProviderApplication.STATUS_VERIFIED
 
 
-def _buyer_referrer_is_eligible(referrer) -> bool:
+def _buyer_can_share_invite_code(referrer) -> bool:
     from apps.accounts.models import AppUser
 
     if referrer.account_type != AppUser.ACCOUNT_USER:
         return False
     if not referrer.is_active or referrer.account_status != AppUser.STATUS_ACTIVE:
         return False
-    return bool(referrer.phone_verified)
+    return True
+
+
+def _buyer_referrer_is_eligible(referrer) -> bool:
+    """Referrer can receive rewards when a referred buyer completes all steps."""
+    if not _buyer_can_share_invite_code(referrer):
+        return False
+    return bool(referrer.phone_verified or referrer.email_verified)
 
 
 def _referrer_audience(referrer) -> str:
@@ -147,7 +154,7 @@ def _referrer_audience(referrer) -> str:
 
 def _referrer_is_eligible_for_audience(referrer, audience: str) -> bool:
     if audience == ReferEarnConfig.AUDIENCE_USER:
-        return _buyer_referrer_is_eligible(referrer)
+        return _buyer_can_share_invite_code(referrer)
     return _referrer_is_eligible(referrer)
 
 

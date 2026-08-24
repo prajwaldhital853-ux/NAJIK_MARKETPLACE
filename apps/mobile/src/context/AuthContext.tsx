@@ -17,10 +17,9 @@ import {
   updateSellerProfile,
   verifyOtp,
 } from "../authApi";
-import { isProvider, contactVerified } from "../demo";
+import { isProvider, contactVerified, needsBuyerPhoneVerify } from "../demo";
 import { pollMyListingsIfChanged, resetListingsPoll } from "../listingsApi";
 import { subscribeAppRefresh } from "../listingsRefresh";
-import { setLoginHint } from "../loginHint";
 import { peekProviderRegisterDraft, takeProviderRegisterDraft } from "../providerRegisterDraft";
 import { setAuthSessionActive, setSessionKickHandler } from "../sessionKick";
 import type { AccountType, AppUser } from "../types";
@@ -85,6 +84,8 @@ function userLiveKey(user: AppUser) {
     user.phone,
     user.address,
     user.needs_profile,
+    user.phone_verified ? "1" : "0",
+    user.email_verified ? "1" : "0",
     user.photo_uri,
     user.service_type,
     user.has_pending_edit,
@@ -127,7 +128,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const access = await ensureAppAccessToken();
         const me = await fetchMe(access);
         setUser(me);
-        if (!isProvider(me) && !contactVerified(me)) setAwaitingSignupOtp(true);
+        if (needsBuyerPhoneVerify(me) || (!isProvider(me) && !contactVerified(me) && !me.phone)) {
+          setAwaitingSignupOtp(true);
+        }
       } catch (err) {
         if (err instanceof ApiError && err.status === 401) {
           await clearAppTokens();
@@ -251,16 +254,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       async loginGoogle(payload, accountType = "user") {
         const me = await loginWithGoogle(payload, accountType);
         resetListingsPoll();
-        setAwaitingSignupOtp(false);
+        setAwaitingSignupOtp(needsBuyerPhoneVerify(me) || (!isProvider(me) && !contactVerified(me) && !me.phone));
         setUser(me);
       },
       async completeBuyerDetails(payload) {
-        setUser(await completeBuyerProfile(payload));
+        const me = await completeBuyerProfile(payload);
+        setAwaitingSignupOtp(needsBuyerPhoneVerify(me));
+        setUser(me);
       },
       async register(payload) {
         const me = await registerAccount(payload);
         setUser(me);
-        setAwaitingSignupOtp(!contactVerified(me));
+        setAwaitingSignupOtp(needsBuyerPhoneVerify(me) || (!contactVerified(me) && !me.phone));
       },
       async completeProviderSignup(code) {
         const draft = peekProviderRegisterDraft();
@@ -290,13 +295,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       async verifyContact(purpose, code) {
         const me = await verifyOtp(purpose, code);
         if (!isProvider(me)) {
-          setLoginHint("Phone verified. Sign in to continue.", me.phone || me.email || undefined);
-          const refresh = await getAppRefreshToken();
-          const access = await getAppAccessToken();
-          if (refresh) await logoutAccount(refresh, access);
-          await clearAppTokens();
           setAwaitingSignupOtp(false);
-          setUser(null);
+          setUser(me);
           return;
         }
         const draft = takeProviderRegisterDraft();

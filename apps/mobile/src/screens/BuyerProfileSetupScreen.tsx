@@ -68,7 +68,7 @@ export function BuyerProfileSetupScreen() {
       <View style={{ backgroundColor: colors.white, borderRadius: 24, padding: 20, marginTop: 20, borderWidth: 1, borderColor: colors.border, ...shadow.card }}>
         <Text style={{ fontSize: 24, fontWeight: "800" }}>Complete your profile</Text>
         <Text style={{ color: colors.textSecondary, marginTop: 6 }}>
-          First time with this Google account. Name can replace the Google name. Phone is required.
+          First time with this Google account. Name can replace the Google name. Phone is required — you will verify it with OTP next.
         </Text>
         <Field icon="person-outline" placeholder="Your name" value={fullName} onChangeText={setFullName} onFocus={onInputFocus} />
         <View style={{ marginTop: 12, flexDirection: "row", alignItems: "center", borderWidth: 1, borderColor: colors.border, borderRadius: 12, paddingHorizontal: 12, height: 50, gap: 8 }}>
@@ -98,7 +98,7 @@ export function BuyerProfileSetupScreen() {
           onPress={() => void submit()}
           style={{ marginTop: 16, backgroundColor: GREEN, borderRadius: 28, height: 52, alignItems: "center", justifyContent: "center", opacity: busy ? 0.7 : 1 }}
         >
-          <Text style={{ color: "#fff", fontWeight: "800" }}>{busy ? "Saving…" : "Continue to NAJIK"}</Text>
+          <Text style={{ color: "#fff", fontWeight: "800" }}>{busy ? "Saving…" : "Continue to phone verification"}</Text>
         </PressScale>
         <PressScale onPress={() => void logout()} style={{ marginTop: 14, alignItems: "center" }}>
           <Text style={{ color: colors.muted, fontWeight: "700" }}>Use a different Google account</Text>

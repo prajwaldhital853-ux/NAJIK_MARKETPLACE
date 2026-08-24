@@ -12,6 +12,10 @@ export function needsBuyerProfile(user?: AppUser | null) {
   return Boolean(user && user.account_type === "user" && user.needs_profile);
 }
 
+export function needsBuyerPhoneVerify(user?: AppUser | null) {
+  return Boolean(user && user.account_type === "user" && user.phone && !user.phone_verified);
+}
+
 export function needsContactVerify(user?: AppUser | null) {
   return isProvider(user) && !contactVerified(user);
 }

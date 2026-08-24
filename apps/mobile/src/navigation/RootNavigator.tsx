@@ -5,9 +5,10 @@ import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { useEffect } from "react";
 import { ActivityIndicator, Dimensions, Platform, StatusBar, View } from "react-native";
 import { DrawerContent } from "../components/DrawerContent";
+import { BuyerPhoneVerifyModal } from "../components/BuyerPhoneVerifyModal";
 import { TabBar } from "../components/TabBar";
 import { useAuth } from "../context/AuthContext";
-import { isProvider, needsBuyerProfile, needsContactVerify, needsSellerApplication } from "../demo";
+import { isProvider, needsBuyerPhoneVerify, needsBuyerProfile, needsContactVerify, needsSellerApplication } from "../demo";
 import { ExploreScreen } from "../screens/ExploreScreen";
 import { MapSearchScreen } from "../screens/MapSearchScreen";
 import { HomeScreen } from "../screens/HomeScreen";
@@ -119,17 +120,19 @@ function MainDrawer() {
 }
 
 export function RootNavigator() {
-  const { user, loading, awaitingSignupOtp } = useAuth();
+  const { user, loading } = useAuth();
 
   const gate = !user
     ? "guest"
-    : awaitingSignupOtp || needsContactVerify(user)
-      ? "otp"
-      : needsBuyerProfile(user)
-        ? "buyer-profile"
+    : needsBuyerProfile(user)
+      ? "buyer-profile"
+      : needsContactVerify(user)
+        ? "otp"
         : needsSellerApplication(user)
           ? "apply"
           : "main";
+
+  const showBuyerPhoneVerify = Boolean(user && needsBuyerPhoneVerify(user) && !needsBuyerProfile(user));
 
   useEffect(() => {
     if (gate === "guest" || gate === "otp") {
@@ -174,6 +177,7 @@ export function RootNavigator() {
           </>
         ) : null}
       </Stack.Navigator>
+      {showBuyerPhoneVerify ? <BuyerPhoneVerifyModal /> : null}
     </NavigationContainer>
   );
 }

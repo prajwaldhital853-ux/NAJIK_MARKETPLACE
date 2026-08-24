@@ -4,6 +4,7 @@ import * as Clipboard from "expo-clipboard";
 import { useCallback, useState } from "react";
 import { Linking, Modal, Pressable, ScrollView, Share, StyleSheet, Text, View } from "react-native";
 import QRCode from "react-native-qrcode-svg";
+import { friendlyError } from "../api";
 import { fetchReferEarnMe } from "../referralsApi";
 import { shadow } from "../theme";
 import { PressScale } from "./PressScale";
@@ -49,15 +50,23 @@ function QuickRow({
 export function InviteEarnBody({ audience = "provider" }: { audience?: "provider" | "user" }) {
   const [data, setData] = useState<Awaited<ReturnType<typeof fetchReferEarnMe>> | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
   const [showQr, setShowQr] = useState(false);
   const [howOpen, setHowOpen] = useState(false);
   const isBuyer = audience === "user";
 
   const reload = useCallback(() => {
+    setLoading(true);
     void fetchReferEarnMe()
-      .then(setData)
-      .catch(() => setData(null))
+      .then((payload) => {
+        setData(payload);
+        setError("");
+      })
+      .catch((err) => {
+        setData(null);
+        setError(friendlyError(err, "Could not load your invite code. Pull to refresh or try again."));
+      })
       .finally(() => setLoading(false));
   }, []);
 
@@ -152,6 +161,12 @@ export function InviteEarnBody({ audience = "provider" }: { audience?: "provider
           { n: stats?.wallet_total_label ?? "Rs. 0", l: "Wallet total" },
         ]}
       />
+
+      {!loading && error ? (
+        <View style={{ marginHorizontal: 16, marginTop: 12, backgroundColor: "#FEF2F2", borderRadius: 12, padding: 12, borderWidth: 1, borderColor: "#FECACA" }}>
+          <Text style={{ color: "#B91C1C", fontWeight: "700", fontSize: 13 }}>{error}</Text>
+        </View>
+      ) : null}
 
       <View style={{ marginHorizontal: 16, marginTop: 12, backgroundColor: "#fff", borderRadius: 16, padding: 14, ...shadow.card }}>
         <Text style={{ color: "#6B7280", fontWeight: "700", fontSize: 12 }}>Your active invite code (one-time)</Text>

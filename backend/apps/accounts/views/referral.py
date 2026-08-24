@@ -116,7 +116,7 @@ class ReferEarnMeView(APIView):
     def get(self, request):
         user = request.user
         from apps.accounts.models.referral import (
-            _buyer_referrer_is_eligible,
+            _buyer_can_share_invite_code,
             _referrer_audience,
             _referrer_is_eligible,
             ensure_fresh_invite_code,
@@ -125,13 +125,8 @@ class ReferEarnMeView(APIView):
 
         audience = _referrer_audience(user)
         if audience == ReferEarnConfig.AUDIENCE_USER:
-            if user.account_type != AppUser.ACCOUNT_USER:
+            if not _buyer_can_share_invite_code(user):
                 return Response({"detail": "Refer & Earn is not available for this account."}, status=status.HTTP_403_FORBIDDEN)
-            if not _buyer_referrer_is_eligible(user):
-                return Response(
-                    {"detail": "Verify your phone to unlock your invite code and earn rewards."},
-                    status=status.HTTP_403_FORBIDDEN,
-                )
         elif user.account_type != AppUser.ACCOUNT_PROVIDER or not _referrer_is_eligible(user):
             return Response(
                 {"detail": "Complete verification to unlock your invite code and earn rewards."},

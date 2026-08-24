@@ -1,6 +1,7 @@
 """Seed 100 demo seller accounts with 2 approved listings each."""
 
 import random
+from io import BytesIO
 
 from django.core.files.base import ContentFile
 from django.core.management.base import BaseCommand
@@ -243,8 +244,13 @@ LISTING_TEMPLATES = [
 ]
 
 
-def _dummy_file(name: str) -> ContentFile:
-    return ContentFile(b"demo-seed-placeholder", name=name)
+def _demo_jpeg(name: str) -> ContentFile:
+    """Minimal valid JPEG for Cloudinary (placeholder text is rejected as Invalid image file)."""
+    from PIL import Image
+
+    buf = BytesIO()
+    Image.new("RGB", (64, 64), color=(30, 125, 44)).save(buf, format="JPEG", quality=85)
+    return ContentFile(buf.getvalue(), name=name)
 
 
 def _pick_listing_pair(seller_index: int):
@@ -351,25 +357,30 @@ class Command(BaseCommand):
 
             # Verified provider application (required for admin + verified feed)
             if not ProviderApplication.objects.filter(owner=user).exists():
-                app = ProviderApplication(
-                    owner=user,
-                    full_name=seller_data["full_name"],
-                    address=seller_data["address"],
-                    contact=seller_data["phone"],
-                    phone=seller_data["phone"],
-                    email=seller_data["email"],
-                    service_type=seller_data["service_type"],
-                    status=ProviderApplication.STATUS_VERIFIED,
-                    reviewed_at=timezone.now(),
-                    profile_data={
-                        "business_name": seller_data["business_name"],
-                        "demo_seed": True,
-                    },
-                )
-                app.nagrita.save("nagrita_demo.jpg", _dummy_file("nagrita_demo.jpg"), save=False)
-                app.photo.save("photo_demo.jpg", _dummy_file("photo_demo.jpg"), save=False)
-                app.save()
-                created_apps += 1
+                try:
+                    app = ProviderApplication(
+                        owner=user,
+                        full_name=seller_data["full_name"],
+                        address=seller_data["address"],
+                        contact=seller_data["phone"],
+                        phone=seller_data["phone"],
+                        email=seller_data["email"],
+                        service_type=seller_data["service_type"],
+                        status=ProviderApplication.STATUS_VERIFIED,
+                        reviewed_at=timezone.now(),
+                        profile_data={
+                            "business_name": seller_data["business_name"],
+                            "demo_seed": True,
+                        },
+                    )
+                    app.nagrita.save(f"nagrita_{user.id}.jpg", _demo_jpeg("nagrita_demo.jpg"), save=False)
+                    app.photo.save(f"photo_{user.id}.jpg", _demo_jpeg("photo_demo.jpg"), save=False)
+                    app.save()
+                    created_apps += 1
+                except Exception as exc:
+                    self.stdout.write(
+                        self.style.WARNING(f"  [!] Verified app skipped for {user.full_name}: {exc}")
+                    )
 
             SellerWallet.objects.get_or_create(
                 provider=user,

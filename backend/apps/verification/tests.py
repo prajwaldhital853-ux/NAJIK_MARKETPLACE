@@ -144,8 +144,8 @@ class SellerKycTests(TestCase):
         staff = self.staff_client()
         listed = staff.get("/api/admin/verification/applications/")
         self.assertEqual(listed.status_code, 200)
-        self.assertEqual(len(listed.data), 1)
-        row = listed.data[0]
+        self.assertEqual(len(listed.data.get("results", listed.data)), 1)
+        row = (listed.data.get("results") or listed.data)[0]
         self.assertEqual(row["status"], "pending")
         self.assertEqual(row["full_name"], "Seller One")
         self.assertEqual(row["address"], "Lahan-10, Siraha")

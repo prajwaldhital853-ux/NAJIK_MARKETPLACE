@@ -509,6 +509,9 @@ class ListingWriteSerializer(serializers.Serializer):
         from apps.listings.listing_cards import bump_listing_feed_cache
 
         bump_listing_feed_cache()
+        from apps.listings.listing_cards import sync_listing_search_index
+
+        sync_listing_search_index(listing)
         for index, photo in enumerate(photos):
             ListingPhoto.objects.create(listing=listing, image=photo, sort_order=index)
         if publish and listing.status == Listing.STATUS_APPROVED:
@@ -572,6 +575,9 @@ class ListingWriteSerializer(serializers.Serializer):
             from apps.listings.listing_cards import bump_listing_feed_cache
 
             bump_listing_feed_cache()
+            from apps.listings.listing_cards import sync_listing_search_index
+
+            sync_listing_search_index(instance)
             return instance
 
         for key, value in validated_data.items():
@@ -586,6 +592,9 @@ class ListingWriteSerializer(serializers.Serializer):
         from apps.listings.listing_cards import bump_listing_feed_cache
 
         bump_listing_feed_cache()
+        from apps.listings.listing_cards import sync_listing_search_index
+
+        sync_listing_search_index(instance)
         if photos is not None:
             instance.photos.all().delete()
             for index, photo in enumerate(photos):

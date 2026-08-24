@@ -94,6 +94,16 @@ CACHES = {
     }
 }
 
+REDIS_URL = env("REDIS_URL", default="")
+ELASTICSEARCH_URL = env("ELASTICSEARCH_URL", default="")
+ADMIN_SSE_HEARTBEAT_S = env.int("ADMIN_SSE_HEARTBEAT_S", default=25)
+
+if REDIS_URL:
+    CACHES["default"] = {
+        "BACKEND": "django.core.cache.backends.redis.RedisCache",
+        "LOCATION": REDIS_URL,
+    }
+
 AUTH_USER_MODEL = "accounts.AppUser"
 
 AUTH_PASSWORD_VALIDATORS = [

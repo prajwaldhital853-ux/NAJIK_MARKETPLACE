@@ -130,7 +130,11 @@ class StaffComplaintListView(APIView):
             qs = qs.filter(severity=severity)
         if kind in {Complaint.KIND_USER, Complaint.KIND_LISTING, Complaint.KIND_CHAT}:
             qs = qs.filter(kind=kind)
-        return Response(ComplaintSerializer(qs, many=True).data)
+        from apps.listings.listing_cards import paginate_queryset, parse_page
+
+        page, page_size = parse_page(request, default_size=25, max_size=100)
+        page_items, meta = paginate_queryset(qs, page, page_size)
+        return Response({"results": ComplaintSerializer(page_items, many=True).data, **meta})
 
 
 class StaffComplaintDetailView(APIView):

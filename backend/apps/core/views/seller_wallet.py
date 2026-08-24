@@ -271,18 +271,20 @@ class StaffLoadRequestListView(APIView):
             SellerLoadRequest.STATUS_REJECTED,
         }:
             qs = qs.filter(status=status_filter)
-        rows = qs[:300]
-        return Response(
-            [
-                {
-                    **load_request_payload(request, row),
-                    "provider_id": str(row.provider_id),
-                    "provider_name": row.provider.full_name or "",
-                    "provider_phone": row.provider.phone or "",
-                }
-                for row in rows
-            ]
-        )
+        from apps.listings.listing_cards import paginate_queryset, parse_page
+
+        page, page_size = parse_page(request, default_size=25, max_size=100)
+        page_items, meta = paginate_queryset(qs, page, page_size)
+        rows = [
+            {
+                **load_request_payload(request, row),
+                "provider_id": str(row.provider_id),
+                "provider_name": row.provider.full_name or "",
+                "provider_phone": row.provider.phone or "",
+            }
+            for row in page_items
+        ]
+        return Response({"results": rows, **meta})
 
 
 class StaffLoadRequestApproveView(APIView):

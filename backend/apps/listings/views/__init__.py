@@ -62,83 +62,11 @@ from apps.listings.listing_cards import (
     listing_card_queryset,
     listing_counts,
     listing_feed_cache_key,
+    paginate_feed_with_boost,
     paginate_queryset,
     parse_page,
 )
 from apps.listings.urgent import active_urgent_filter, exclude_sold_listings, expire_urgent_listings, is_sold_extras
-
-
-def apply_feed_boost_priority(items, single_cat: str | None, limit: int) -> tuple[list, list[str]]:
-    """
-    Reorder queryset results: all active boosted listings first (rotation order),
-    then organic. Returns (ordered_listings, boosted_ids_in_result).
-    """
-    from apps.promotions.models import BoostPricing
-    from apps.promotions.boost_service import (
-        expire_campaigns,
-        get_all_boosted_listings,
-        get_boosted_listings_for_category,
-    )
-
-    expire_campaigns()
-    pricing = BoostPricing.get_solo()
-    if not pricing.is_active:
-        sliced = list(items[:limit])
-        return sliced, []
-
-    if single_cat:
-        slot_limit = pricing.max_slots_per_category_feed
-        boosted_ids = get_boosted_listings_for_category(single_cat, limit=slot_limit)
-    else:
-        slot_limit = pricing.max_active_boosts_platform
-        boosted_ids = get_all_boosted_listings(limit=slot_limit)
-
-    if not boosted_ids:
-        return list(items[:limit]), []
-
-    boosted_qs = items.filter(id__in=boosted_ids)
-    organic_qs = items.exclude(id__in=boosted_ids)
-    boosted_map = {str(lid): idx for idx, lid in enumerate(boosted_ids)}
-    boosted_items = sorted(list(boosted_qs), key=lambda x: boosted_map.get(str(x.id), 999))
-    ordered = list(boosted_items) + list(organic_qs)
-    slice_items = ordered[:limit]
-    impression_ids = [str(item.id) for item in slice_items if str(item.id) in boosted_map]
-    return slice_items, impression_ids
-
-
-def apply_boost_priority(items, category: str | None, limit: int) -> list:
-    """
-    Inject boosted listings at top of results using category rotation.
-    Returns list of serialized listing data with boosted items first.
-    """
-    from apps.promotions.boost_service import get_boosted_listings_for_category, expire_campaigns
-    from apps.promotions.models import BoostPricing
-    
-    expire_campaigns()
-    
-    if not category:
-        # Multi-category or no category: take from queryset without boost priority
-        return items
-    
-    pricing = BoostPricing.get_solo()
-    if not pricing.is_active:
-        return items
-    
-    # Get boosted listing IDs for this category (already rotated and sorted)
-    boosted_ids = get_boosted_listings_for_category(category, limit=pricing.max_slots_per_category_feed)
-    
-    if not boosted_ids:
-        return items
-    
-    # Split: boosted items first, then organic
-    boosted_qs = items.filter(id__in=boosted_ids)
-    organic_qs = items.exclude(id__in=boosted_ids)
-    
-    # Preserve boost rotation order
-    boosted_map = {str(lid): idx for idx, lid in enumerate(boosted_ids)}
-    boosted_items = sorted(list(boosted_qs), key=lambda x: boosted_map.get(str(x.id), 999))
-    
-    return list(boosted_items) + list(organic_qs)
 
 
 class ListingFeedView(APIView):
@@ -174,9 +102,30 @@ class ListingFeedView(APIView):
         if urgent_only:
             items = items.filter(active_urgent_filter())
         q = (request.query_params.get("q") or "").strip()
-        if q:
-            items = items.filter(listing_search_q(q))
         category = request.query_params.get("category")
+        single_cat = None
+        if category:
+            cats = [item.strip() for item in category.split(",") if item.strip()]
+            if len(cats) == 1:
+                single_cat = cats[0]
+        if q:
+            from apps.listings.elasticsearch import search_listing_ids
+
+            es_ids = search_listing_ids(q, category=single_cat)
+            if es_ids is not None:
+                if not es_ids:
+                    items = items.none()
+                else:
+                    from django.db.models import Case, IntegerField, When
+
+                    order = Case(
+                        *[When(pk=pk, then=pos) for pos, pk in enumerate(es_ids)],
+                        default=len(es_ids),
+                        output_field=IntegerField(),
+                    )
+                    items = items.filter(pk__in=es_ids).order_by(order)
+            else:
+                items = items.filter(listing_search_q(q))
         if category:
             cats = [item.strip() for item in category.split(",") if item.strip()]
             if len(cats) == 1:
@@ -250,30 +199,27 @@ class ListingFeedView(APIView):
         else:
             items = items.order_by("-created_at")
         
-        # Apply boost priority
+        # Calculate pagination — boost injection on page 1 only; SQL LIMIT/OFFSET thereafter
         single_cat = None
         if category:
             cats = [item.strip() for item in category.split(",") if item.strip()]
             if len(cats) == 1:
                 single_cat = cats[0]
-        
-        # Calculate pagination indices
-        start_idx = (page - 1) * page_size
-        end_idx = start_idx + page_size
-        
-        # Boost priority: category-scoped or global (recommendation / home feeds)
+
         if sort in ("new", "popular"):
             from apps.promotions.boost_service import record_boost_impressions_for_listing_ids
 
-            slice_items, impression_ids = apply_feed_boost_priority(items, single_cat, end_idx + 1)
+            paginated, impression_ids, has_next = paginate_feed_with_boost(
+                items, single_cat, page, page_size, sort=sort
+            )
             if impression_ids:
                 record_boost_impressions_for_listing_ids(impression_ids)
-            paginated = slice_items[start_idx:end_idx]
-            has_next = len(slice_items) > end_idx
             rows = ListingSerializer(paginated, many=True, context=compact_listing_context(request, paginated)).data
         else:
+            start_idx = (page - 1) * page_size
+            end_idx = start_idx + page_size
             paginated = list(items[start_idx:end_idx])
-            has_next = items[end_idx:end_idx+1].exists()
+            has_next = items[end_idx : end_idx + 1].exists()
             rows = ListingSerializer(paginated, many=True, context=compact_listing_context(request, paginated)).data
         
         min_price = request.query_params.get("min_price")

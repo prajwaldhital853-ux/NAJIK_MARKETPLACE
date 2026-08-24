@@ -125,8 +125,20 @@ export type ProviderApplication = {
   email_verified?: boolean;
 };
 
-export async function listProviderApplications() {
-  return staffRequest<ProviderApplication[]>("/api/admin/verification/applications/");
+export async function listProviderApplicationsPage(query?: { page?: number; page_size?: number; status?: string; pending?: boolean }) {
+  const params = new URLSearchParams();
+  params.set("page", String(query?.page || 1));
+  params.set("page_size", String(query?.page_size || 25));
+  if (query?.status) params.set("status", query.status);
+  if (query?.pending) params.set("pending", "1");
+  const data = await staffRequest<ProviderApplication[] | StaffPage<ProviderApplication>>(
+    `/api/admin/verification/applications/?${params.toString()}`,
+  );
+  return unwrapStaffPage(data, query?.page || 1, query?.page_size || 25);
+}
+
+export async function listProviderApplications(query?: { page?: number; page_size?: number; status?: string; pending?: boolean }) {
+  return (await listProviderApplicationsPage(query)).results;
 }
 
 export async function patchProviderApplication(
@@ -545,9 +557,23 @@ export type SellerLoadRequestRow = {
   provider_phone: string;
 };
 
+export async function listStaffLoadRequestsPage(query?: {
+  status?: "pending" | "approved" | "rejected";
+  page?: number;
+  page_size?: number;
+}) {
+  const params = new URLSearchParams();
+  if (query?.status) params.set("status", query.status);
+  params.set("page", String(query?.page || 1));
+  params.set("page_size", String(query?.page_size || 25));
+  const data = await staffRequest<SellerLoadRequestRow[] | StaffPage<SellerLoadRequestRow>>(
+    `/api/admin/app-control/load-requests/?${params.toString()}`,
+  );
+  return unwrapStaffPage(data, query?.page || 1, query?.page_size || 25);
+}
+
 export async function listStaffLoadRequests(status?: "pending" | "approved" | "rejected") {
-  const q = status ? `?status=${status}` : "";
-  return staffRequest<SellerLoadRequestRow[]>(`/api/admin/app-control/load-requests${q}`);
+  return (await listStaffLoadRequestsPage(status ? { status, page_size: 100 } : { page_size: 100 })).results;
 }
 
 export async function approveStaffLoadRequest(id: string) {
@@ -711,13 +737,20 @@ export type ComplaintTicket = {
   resolved_at?: string | null;
 };
 
-export async function listComplaints(params?: { status?: string; severity?: string; kind?: string }) {
+export async function listComplaints(params?: { status?: string; severity?: string; kind?: string; page?: number; page_size?: number }) {
   const qs = new URLSearchParams();
   if (params?.status) qs.set("status", params.status);
   if (params?.severity) qs.set("severity", params.severity);
   if (params?.kind) qs.set("kind", params.kind);
+  qs.set("page", String(params?.page || 1));
+  qs.set("page_size", String(params?.page_size || 25));
   const suffix = qs.toString() ? `?${qs}` : "";
-  return staffRequest<ComplaintTicket[]>(`/api/admin/reports/${suffix}`);
+  const data = await staffRequest<ComplaintTicket[] | StaffPage<ComplaintTicket>>(`/api/admin/reports/${suffix}`);
+  return unwrapStaffPage(data, params?.page || 1, params?.page_size || 25);
+}
+
+export async function listComplaintsRows(params?: { status?: string; severity?: string; kind?: string; page?: number; page_size?: number }) {
+  return (await listComplaints(params)).results;
 }
 
 export async function fetchComplaint(id: string) {

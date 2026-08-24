@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Btn, Field, inputClass } from "./ui";
-import { ADMIN_POLL_MS } from "@/lib/live-inbox";
+import { ADMIN_POLL_FALLBACK_MS } from "@/lib/event-stream";
 import {
   approveStaffLoadRequest,
   fetchStaffImage,
@@ -201,7 +201,7 @@ export function SellerLoadRequestsPanel({ embedded, onChanged }: { embedded?: bo
 
   useEffect(() => {
     void load();
-    const id = window.setInterval(() => void load(), ADMIN_POLL_MS);
+    const id = window.setInterval(() => void load(), ADMIN_POLL_FALLBACK_MS);
     return () => window.clearInterval(id);
   }, [load]);
 

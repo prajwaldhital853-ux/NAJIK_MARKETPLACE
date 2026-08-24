@@ -5,7 +5,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { PageHeader, SummaryStrip } from "@/components/admin/page-frame";
 import { Btn, StatusBadge, inputClass } from "@/components/admin/ui";
 import { formatNptDateTime, formatNptTime } from "@/lib/format";
-import { ADMIN_POLL_MS } from "@/lib/live-inbox";
+import { ADMIN_POLL_FALLBACK_MS } from "@/lib/event-stream";
 import { useAdmin } from "@/lib/store";
 import { useSession } from "@/lib/session";
 import { listComplaints, patchComplaint, type ComplaintTicket } from "@/lib/staff-api";
@@ -48,7 +48,10 @@ export default function ReportsPage() {
   const params = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
+  const [page, setPage] = useState(1);
   const [items, setItems] = useState<ComplaintTicket[]>([]);
+  const [hasNext, setHasNext] = useState(false);
+  const [totalCount, setTotalCount] = useState(0);
   const [error, setError] = useState("");
   const [section, setSection] = useState<"all" | ComplaintSection>(parseSectionParam(params.get("section")));
   const [tab, setTab] = useState<(typeof STATUS_TABS)[number]>(
@@ -93,10 +96,23 @@ export default function ReportsPage() {
     router.replace(suffix ? `${pathname}?${suffix}` : pathname, { scroll: false });
   }
 
-  async function load() {
+  async function load(nextPage = page) {
     if (!apiSession) return;
     try {
-      setItems(await listComplaints());
+      const status =
+        tab === "Open" ? "open" : tab === "Under review" ? "under_review" : tab === "Resolved" ? "resolved" : undefined;
+      const kind = section === "chat" ? "chat" : section === "buyer" || section === "seller" ? "user" : undefined;
+      const data = await listComplaints({
+        page: nextPage,
+        page_size: 25,
+        ...(status ? { status } : {}),
+        ...(highOnly ? { severity: "high" } : {}),
+        ...(kind ? { kind } : {}),
+      });
+      setItems(data.results);
+      setHasNext(data.has_next);
+      setTotalCount(data.count);
+      setPage(nextPage);
       setUpdatedAt(new Date());
       setError("");
     } catch (err) {
@@ -111,10 +127,11 @@ export default function ReportsPage() {
       setError("Sign in with a staff account to review reports and complaints.");
       return;
     }
-    void load();
-    const id = window.setInterval(() => void load(), ADMIN_POLL_MS);
+    setPage(1);
+    void load(1);
+    const id = window.setInterval(() => void load(page), ADMIN_POLL_FALLBACK_MS);
     return () => window.clearInterval(id);
-  }, [apiSession]);
+  }, [apiSession, tab, section, highOnly]);
 
   useEffect(() => {
     const id = params.get("id");
@@ -257,6 +274,30 @@ export default function ReportsPage() {
           </button>
         </div>
         {updatedAt ? <p className="text-[11px] text-muted">Updated {formatNptTime(updatedAt.toISOString())}</p> : null}
+      </div>
+      <div className="mb-3 flex items-center justify-between text-sm text-muted">
+        <span>
+          Page {page}
+          {totalCount ? ` · ${totalCount} total` : ""}
+        </span>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            disabled={page <= 1}
+            onClick={() => void load(page - 1)}
+            className="rounded-lg border border-line px-3 py-1 disabled:opacity-40"
+          >
+            Previous
+          </button>
+          <button
+            type="button"
+            disabled={!hasNext}
+            onClick={() => void load(page + 1)}
+            className="rounded-lg border border-line px-3 py-1 disabled:opacity-40"
+          >
+            Next
+          </button>
+        </div>
       </div>
       {error ? <p className="mb-4 text-sm text-red">{error}</p> : null}
       {visible.length === 0 && !error ? (

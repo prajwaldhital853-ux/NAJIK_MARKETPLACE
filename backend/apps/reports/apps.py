@@ -8,3 +8,6 @@ class ReportsConfig(AppConfig):
     verbose_name = "Reports"
 
     # Scam, spam, and safety queue. Feature 10.
+
+    def ready(self):
+        from apps.reports import signals  # noqa: F401

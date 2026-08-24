@@ -3,6 +3,7 @@ import type { User } from "./demo-data";
 import type { ProviderApplication, StaffListing, ComplaintTicket, SellerLoadRequestRow } from "./staff-api";
 
 export const ADMIN_POLL_MS = 15000;
+/** @deprecated Admin store uses SSE + {@link ADMIN_POLL_FALLBACK_MS} from event-stream. */
 export const OPEN_INBOX_KEY = "najik_admin_open_inbox";
 export const SEEN_INBOX_KEY = "najik_admin_seen_inbox_v1";
 

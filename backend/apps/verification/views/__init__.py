@@ -183,7 +183,18 @@ class StaffApplicationListView(APIView):
 
     def get(self, request):
         items = ProviderApplication.objects.select_related("owner", "membership_plan").order_by("-created_at")
-        return Response(ProviderApplicationSerializer(items, many=True, context={"request": request}).data)
+        status_filter = (request.query_params.get("status") or "").strip()
+        if status_filter:
+            items = items.filter(status=status_filter)
+        pending_only = request.query_params.get("pending") == "1"
+        if pending_only:
+            items = items.filter(status=ProviderApplication.STATUS_PENDING)
+        from apps.listings.listing_cards import paginate_queryset, parse_page
+
+        page, page_size = parse_page(request, default_size=25, max_size=100)
+        page_items, meta = paginate_queryset(items, page, page_size)
+        rows = ProviderApplicationSerializer(page_items, many=True, context={"request": request}).data
+        return Response({"results": rows, **meta})
 
 
 class StaffApplicationDetailView(APIView):

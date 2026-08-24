@@ -8,9 +8,9 @@ import { DetailKv, DetailOverlay } from "@/components/admin/detail-overlay";
 import { Avatar, Btn, StatusBadge, inputClass } from "@/components/admin/ui";
 import { formatNptDateTime, formatNptTime, relativeTime } from "@/lib/format";
 import { useSession } from "@/lib/session";
-import { ADMIN_POLL_MS } from "@/lib/live-inbox";
+import { ADMIN_POLL_FALLBACK_MS } from "@/lib/event-stream";
 import {
-  listProviderApplications,
+  listProviderApplicationsPage,
   patchProviderApplication,
   type ProviderApplication,
 } from "@/lib/staff-api";
@@ -40,7 +40,10 @@ export default function ProviderVerificationPage() {
   const router = useRouter();
   const pathname = usePathname();
   const filter = statusFromParams(params.get("status"));
+  const [page, setPage] = useState(1);
   const [items, setItems] = useState<ProviderApplication[]>([]);
+  const [hasNext, setHasNext] = useState(false);
+  const [totalCount, setTotalCount] = useState(0);
   const [error, setError] = useState("");
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
   const [open, setOpen] = useState<ProviderApplication | null>(null);
@@ -55,10 +58,21 @@ export default function ProviderVerificationPage() {
     }
   });
 
-  async function load() {
+  async function load(nextPage = page) {
     if (!apiSession) return;
     try {
-      setItems(await listProviderApplications());
+      const statusQuery =
+        filter === "active" ? "verified" : filter === "rejected" ? "rejected" : filter === "pending" ? "pending" : undefined;
+      const data = await listProviderApplicationsPage({
+        page: nextPage,
+        page_size: 25,
+        ...(statusQuery ? { status: statusQuery } : {}),
+        ...(filter === "pending" ? { pending: true } : {}),
+      });
+      setItems(data.results);
+      setHasNext(data.has_next);
+      setTotalCount(data.count);
+      setPage(nextPage);
       setUpdatedAt(new Date());
       setError("");
     } catch (err) {
@@ -73,12 +87,14 @@ export default function ProviderVerificationPage() {
       setError("Sign in with a staff account to review live seller applications.");
       return;
     }
-    void load();
-    const id = window.setInterval(() => void load(), ADMIN_POLL_MS);
+    setPage(1);
+    void load(1);
+    const id = window.setInterval(() => void load(page), ADMIN_POLL_FALLBACK_MS);
     return () => window.clearInterval(id);
-  }, [apiSession]);
+  }, [apiSession, filter]);
 
   function setFilter(next: StatusFilter) {
+    setPage(1);
     router.replace(next === "pending" ? `${pathname}?status=pending` : `${pathname}?status=${next}`, { scroll: false });
   }
 
@@ -260,7 +276,7 @@ export default function ProviderVerificationPage() {
       />
       <SummaryStrip
         items={[
-          { label: "Applications", value: items.length, tone: "brand" },
+          { label: "Applications", value: totalCount || items.length, tone: "brand" },
           { label: "Pending", value: pending.length, tone: "amber" },
           { label: "Active", value: active.length, tone: "green" },
           { label: "Rejected", value: rejected.length, tone: "red" },
@@ -283,6 +299,30 @@ export default function ProviderVerificationPage() {
         rowActions={rowActions}
         searchPlaceholder="Filter applications…"
       />
+      <div className="mt-3 flex items-center justify-between text-sm text-muted">
+        <span>
+          Page {page}
+          {totalCount ? ` · ${totalCount} total` : ""}
+        </span>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            disabled={page <= 1}
+            onClick={() => void load(page - 1)}
+            className="rounded-lg border border-line px-3 py-1 disabled:opacity-40"
+          >
+            Previous
+          </button>
+          <button
+            type="button"
+            disabled={!hasNext}
+            onClick={() => void load(page + 1)}
+            className="rounded-lg border border-line px-3 py-1 disabled:opacity-40"
+          >
+            Next
+          </button>
+        </div>
+      </div>
 
       <DetailOverlay
         open={!!open}

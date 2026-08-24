@@ -16,6 +16,7 @@ urlpatterns = [
     path("api/admin/app-control/", include("apps.core.staff_app_control_urls")),
     path("api/auth/", include("apps.accounts.urls")),
     path("api/admin/auth/", include("apps.staff.urls")),
+    path("api/admin/events/", include("apps.core.staff_realtime_urls")),
     path("api/verification/", include("apps.verification.urls")),
     path("api/admin/verification/", include("apps.verification.staff_urls")),
     path("api/cards/", include("apps.verification.card_urls")),

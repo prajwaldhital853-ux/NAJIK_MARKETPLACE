@@ -53,7 +53,8 @@ import {
   type SellerLoadRequestRow,
   type StaffPaymentsSummary,
 } from "./staff-api";
-import { ADMIN_POLL_MS, buildInbox, navBadges, readSeenInbox, writeSeenInbox, type InboxItem } from "./live-inbox";
+import { buildInbox, navBadges, readSeenInbox, writeSeenInbox, type InboxItem } from "./live-inbox";
+import { ADMIN_POLL_FALLBACK_MS, connectAdminEventStream } from "./event-stream";
 import { useSession } from "./session";
 
 const LIVE_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -174,7 +175,70 @@ export function AdminStoreProvider({ children }: { children: React.ReactNode }) 
 
   useEffect(() => {
     let alive = true;
-    async function load() {
+
+    async function refreshListings() {
+      const [pendingPage, recentPage] = await Promise.all([
+        listStaffListingsPage({ status: "pending", page_size: 50 }),
+        listStaffListingsPage({ page_size: 25 }),
+      ]);
+      if (!alive) return;
+      const merged = [...pendingPage.results];
+      const seen = new Set(merged.map((row) => row.id));
+      for (const row of recentPage.results) {
+        if (seen.has(row.id)) continue;
+        seen.add(row.id);
+        merged.push(row);
+      }
+      setLiveListings(
+        merged.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()),
+      );
+      setListingTotals(recentPage.counts || pendingPage.counts || null);
+    }
+
+    async function refreshUsers() {
+      const usersPage = await listAppUsersPage({ page_size: 100 });
+      if (!alive) return;
+      const sortedUsers = [...usersPage.results].sort(
+        (a, b) => new Date(b.date_joined).getTime() - new Date(a.date_joined).getTime(),
+      );
+      setLiveUsers(sortedUsers.map(mapDirectoryUser));
+      setLiveActivity(sortedUsers.map(mapDirectoryActivity));
+    }
+
+    async function refreshApplications() {
+      const page = await listProviderApplications({ pending: true, page_size: 50 });
+      if (!alive) return;
+      setLiveApplications(page);
+    }
+
+    async function refreshReports() {
+      const [openPage, reviewPage] = await Promise.all([
+        listComplaints({ status: "open", page_size: 50 }).catch(() => ({ results: [] as ComplaintTicket[] })),
+        listComplaints({ status: "under_review", page_size: 25 }).catch(() => ({ results: [] as ComplaintTicket[] })),
+      ]);
+      if (!alive) return;
+      const merged = [...openPage.results];
+      const seen = new Set(merged.map((row) => row.id));
+      for (const row of reviewPage.results) {
+        if (seen.has(row.id)) continue;
+        merged.push(row);
+      }
+      setLiveReports(merged);
+    }
+
+    async function refreshLoadRequests() {
+      const pending = await listStaffLoadRequests("pending").catch(() => [] as SellerLoadRequestRow[]);
+      if (!alive) return;
+      setLiveLoadRequests(pending);
+    }
+
+    async function refreshPayments() {
+      const payments = await getStaffPaymentsSummary("month").catch(() => null);
+      if (!alive) return;
+      setPaymentsSummary(payments);
+    }
+
+    async function loadAll() {
       if (!apiSession || !getStaffRefreshToken()) {
         setLiveUsers([]);
         setLiveActivity([]);
@@ -188,48 +252,35 @@ export function AdminStoreProvider({ children }: { children: React.ReactNode }) 
         return;
       }
       try {
-        const [usersPage, pendingPage, recentPage, applications, complaints, loads, payments] = await Promise.all([
-          listAppUsersPage({ page_size: 100 }),
-          listStaffListingsPage({ status: "pending", page_size: 50 }),
-          listStaffListingsPage({ page_size: 25 }),
-          listProviderApplications(),
-          listComplaints().catch(() => [] as ComplaintTicket[]),
-          listStaffLoadRequests().catch(() => [] as SellerLoadRequestRow[]),
-          getStaffPaymentsSummary("month").catch(() => null),
+        await Promise.all([
+          refreshUsers(),
+          refreshListings(),
+          refreshApplications(),
+          refreshReports(),
+          refreshLoadRequests(),
+          refreshPayments(),
         ]);
-        if (!alive) return;
-        const merged = [...pendingPage.results];
-        const seen = new Set(merged.map((row) => row.id));
-        for (const row of recentPage.results) {
-          if (seen.has(row.id)) continue;
-          seen.add(row.id);
-          merged.push(row);
-        }
-        const sortedListings = merged.sort(
-          (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
-        );
-        const sortedUsers = [...usersPage.results].sort(
-          (a, b) => new Date(b.date_joined).getTime() - new Date(a.date_joined).getTime(),
-        );
-        setLiveUsers(sortedUsers.map(mapDirectoryUser));
-        setLiveActivity(sortedUsers.map(mapDirectoryActivity));
-        setLiveListings(sortedListings);
-        setListingTotals(recentPage.counts || pendingPage.counts || null);
-        setLiveApplications(applications);
-        setLiveReports(complaints);
-        setLiveLoadRequests(loads);
-        setPaymentsSummary(payments);
       } catch {
         // Keep the last successful snapshot so a blip does not empty the inbox.
       } finally {
         if (alive) setInboxReady(true);
       }
     }
-    void load();
-    const id = window.setInterval(() => void load(), ADMIN_POLL_MS);
+
+    void loadAll();
+    const fallbackId = window.setInterval(() => void loadAll(), ADMIN_POLL_FALLBACK_MS);
+    const disconnect = connectAdminEventStream((event) => {
+      if (event.type === "listings_changed") void refreshListings();
+      else if (event.type === "applications_changed") void refreshApplications();
+      else if (event.type === "complaints_changed") void refreshReports();
+      else if (event.type === "load_requests_changed") void refreshLoadRequests();
+      else if (event.type === "payments_changed") void refreshPayments();
+    });
+
     return () => {
       alive = false;
-      window.clearInterval(id);
+      window.clearInterval(fallbackId);
+      disconnect();
     };
   }, [apiSession]);
 

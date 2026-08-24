@@ -164,6 +164,12 @@ def create_load_request(provider, amount_rupees: int, payment_reference: str = "
         target_id=str(load.id),
         sender_name="NAJIK Payments",
     )
+    try:
+        from apps.core.realtime import publish_event
+
+        publish_event("load_requests_changed", {"id": str(load.id)})
+    except Exception:
+        pass
     return load
 
 
@@ -202,6 +208,12 @@ def approve_load_request(load_id, staff_user):
         target_id=str(load.id),
         sender_name="NAJIK Admin",
     )
+    try:
+        from apps.core.realtime import publish_event
+
+        publish_event("load_requests_changed", {"id": str(load.id)})
+    except Exception:
+        pass
     return load
 
 
@@ -233,6 +245,12 @@ def reject_load_request(load_id, staff_user, admin_note: str):
         target_id=str(load.id),
         sender_name="NAJIK Admin",
     )
+    try:
+        from apps.core.realtime import publish_event
+
+        publish_event("load_requests_changed", {"id": str(load.id)})
+    except Exception:
+        pass
     return load
 
 

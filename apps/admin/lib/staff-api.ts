@@ -111,8 +111,10 @@ export async function staffApiLogin(email: string, password: string): Promise<St
     };
   }
 
-  saveStaffTokens(data.access, data.refresh);
-  return { status: "authenticated", staff: mapApiStaff(data.user) };
+  // TypeScript now knows data is the authenticated response
+  const authData = data as { access: string; refresh: string; user: StaffApiUser };
+  saveStaffTokens(authData.access, authData.refresh);
+  return { status: "authenticated", staff: mapApiStaff(authData.user) };
 }
 
 export async function staffApiVerifyLogin(staffId: string, code: string) {

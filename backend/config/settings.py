@@ -187,7 +187,9 @@ REST_FRAMEWORK = {
         "anon": "60/min",
         "login": "8/min",
         "register": "10/hour",
-        "staff_login": "5/min",
+        "staff_login": "3/min",  # Stricter for staff login
+        "staff_api": "100/min",  # General staff API rate limit
+        "staff_create": "5/hour",  # Creating new staff accounts
         "otp": "5/hour",
         "seller_apply": "5/hour",
         "password_reset": "5/hour",

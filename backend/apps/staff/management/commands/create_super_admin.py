@@ -30,6 +30,8 @@ class Command(BaseCommand):
             is_super_admin=True,
             is_active=True,
         )
+        # Save first to get pk in database, then set password
+        staff.save()
         staff.set_password(password)
         staff.save()
         self.stdout.write(self.style.SUCCESS(f"Created Super Admin: {staff.email}"))

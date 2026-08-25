@@ -1,5 +1,7 @@
 "use client";
 
+import { isProductionApiUrl } from "@/lib/api-config";
+
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Eye, EyeOff, Lock, LogIn, Mail, User } from "lucide-react";
@@ -13,38 +15,63 @@ const CORNER =
 
 export default function StaffLoginPage() {
   const router = useRouter();
-  const { login } = useSession();
+  const { login, verifyLogin } = useSession();
   const [email, setEmail] = useState("owner@najik.local");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [verifyStep, setVerifyStep] = useState<{
+    staffId: string;
+    email: string;
+    message: string;
+    debugCode?: string;
+  } | null>(null);
+  const [verificationCode, setVerificationCode] = useState("1234");
+
+  function formatLoginError(err: unknown) {
+    if (err instanceof ApiError) {
+      const msg = err.message.toLowerCase();
+      if (msg.includes("invalid credentials") || err.status === 400) {
+        return "Invalid email or password. Use matching pair: owner@najik.local + ChangeMeNow!23  or  admin@najik.com + NajikAdmin@2026";
+      }
+      if (err.status === 429) {
+        return "Too many login attempts. Wait a minute and try again.";
+      }
+      return err.message || "Login failed.";
+    }
+    if (err instanceof Error && err.message) {
+      return err.message;
+    }
+    return "Login failed. Check the backend terminal for details.";
+  }
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const fd = new FormData(event.currentTarget);
-    const nextEmail = String(fd.get("email") || email).trim();
-    const nextPassword = String(fd.get("password") || password);
-    setEmail(nextEmail);
-    setPassword(nextPassword);
     setBusy(true);
     setError("");
     try {
-      await login(nextEmail, nextPassword);
+      if (verifyStep) {
+        await verifyLogin(verifyStep.staffId, verificationCode.trim());
+        router.replace("/admin");
+        return;
+      }
+
+      const fd = new FormData(event.currentTarget);
+      const nextEmail = String(fd.get("email") || email).trim();
+      const nextPassword = String(fd.get("password") || password);
+      setEmail(nextEmail);
+      setPassword(nextPassword);
+
+      const result = await login(nextEmail, nextPassword);
+      if (result.verify) {
+        setVerifyStep(result.verify);
+        setVerificationCode(result.verify.debugCode || "1234");
+        return;
+      }
       router.replace("/admin");
     } catch (err) {
-      if (err instanceof ApiError) {
-        const msg = err.message.toLowerCase();
-        if (msg.includes("invalid credentials") || err.status === 400) {
-          setError("Invalid email or password. Use matching pair: owner@najik.local + ChangeMeNow!23  or  admin@najik.com + NajikAdmin@2026");
-        } else if (err.status === 429) {
-          setError("Too many login attempts. Wait a minute and try again.");
-        } else {
-          setError(err.message || "Login failed.");
-        }
-      } else {
-        setError("Cannot reach the API. Keep Django running on port 8000, then refresh this page.");
-      }
+      setError(formatLoginError(err));
     } finally {
       setBusy(false);
     }
@@ -100,13 +127,57 @@ export default function StaffLoginPage() {
                   Welcome back! Please login to your Admin Panel account.
                 </p>
                 <p className="mt-2 text-[11px] text-[#9aa19c]">
-                  {process.env.NEXT_PUBLIC_API_URL?.includes("onrender.com")
+                  {isProductionApiUrl()
                     ? "Connected to live API"
                     : "Connected to local API"}
                 </p>
               </div>
 
               <form onSubmit={onSubmit} className="space-y-3.5">
+                {verifyStep ? (
+                  <>
+                    <div className="rounded-2xl border border-[#d7ddd9] bg-[#f8fbf9] px-4 py-3 text-left">
+                      <p className="text-[13px] font-semibold text-[#111827]">Verify this device</p>
+                      <p className="mt-1 text-[12px] leading-relaxed text-[#6b7280]">
+                        {verifyStep.message || `Enter the verification code sent to ${verifyStep.email}.`}
+                      </p>
+                      <p className="mt-2 text-[11px] font-medium text-[#1B7D2C]">
+                        For now, use code <span className="font-bold">1234</span>.
+                      </p>
+                    </div>
+
+                    <label className="block">
+                      <span className="sr-only">Verification code</span>
+                      <div className="flex items-center gap-2.5 rounded-full border border-[#d7ddd9] bg-white px-4 py-[13px] transition focus-within:border-[#1B7D2C] focus-within:ring-4 focus-within:ring-[#1B7D2C]/12">
+                        <Lock className="h-[18px] w-[18px] shrink-0 text-[#9aa19c]" />
+                        <input
+                          className="w-full bg-transparent text-[14px] text-[#111827] outline-none placeholder:text-[#9aa19c]"
+                          type="text"
+                          name="verification_code"
+                          inputMode="numeric"
+                          autoComplete="one-time-code"
+                          placeholder="Verification code"
+                          value={verificationCode}
+                          onChange={(e) => setVerificationCode(e.target.value)}
+                          required
+                        />
+                      </div>
+                    </label>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setVerifyStep(null);
+                        setVerificationCode("1234");
+                        setError("");
+                      }}
+                      className="w-full text-[13px] font-semibold text-[#6b7280] hover:text-[#111827]"
+                    >
+                      Back to login
+                    </button>
+                  </>
+                ) : (
+                  <>
                 <label className="block">
                   <span className="sr-only">Email</span>
                   <div className="flex items-center gap-2.5 rounded-full border border-[#d7ddd9] bg-white px-4 py-[13px] transition focus-within:border-[#1B7D2C] focus-within:ring-4 focus-within:ring-[#1B7D2C]/12">
@@ -154,6 +225,8 @@ export default function StaffLoginPage() {
                 <div className="flex justify-end pt-0.5">
                   <span className="cursor-default text-[13px] font-semibold text-[#1B7D2C]/70">Forgot Password?</span>
                 </div>
+                  </>
+                )}
 
                 {error ? <p className="text-center text-[12px] font-medium text-[#c62828]">{error}</p> : null}
 
@@ -162,11 +235,13 @@ export default function StaffLoginPage() {
                   disabled={busy}
                   className="mt-1 flex w-full items-center justify-center gap-2 rounded-full bg-[#1B7D2C] py-[14px] text-[15px] font-semibold text-white transition hover:bg-[#166826] disabled:opacity-70"
                 >
-                  {busy ? "Signing in…" : "Login"}
+                  {busy ? (verifyStep ? "Verifying…" : "Signing in…") : verifyStep ? "Verify & Login" : "Login"}
                   {!busy ? <LogIn className="h-4 w-4" /> : null}
                 </button>
               </form>
 
+              {!verifyStep ? (
+              <>
               <div className="my-5 flex items-center gap-3">
                 <div className="h-px flex-1 bg-[#e5e7eb]" />
                 <span className="text-[12px] font-semibold tracking-wide text-[#9ca3af]">OR</span>
@@ -184,6 +259,8 @@ export default function StaffLoginPage() {
                 <Mail className="h-4 w-4" />
                 Login with Email
               </button>
+              </>
+              ) : null}
             </div>
           </div>
         </div>

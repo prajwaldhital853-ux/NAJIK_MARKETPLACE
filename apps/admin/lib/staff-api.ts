@@ -1,5 +1,6 @@
 import { api, ApiError } from "./api";
 import { getStaffAccessToken, getStaffRefreshToken, saveStaffTokens } from "./auth";
+import { getDeviceFingerprint } from "./device";
 import type { Staff } from "./demo-data";
 import { accessTokenFresh } from "./jwt";
 
@@ -58,6 +59,24 @@ type StaffApiUser = {
   is_super_admin: boolean;
 };
 
+type StaffLoginApiResponse =
+  | {
+      access: string;
+      refresh: string;
+      user: StaffApiUser;
+    }
+  | {
+      requires_verification: true;
+      staff_id: string;
+      email: string;
+      message: string;
+      debug_code?: string;
+    };
+
+export type StaffLoginResult =
+  | { status: "authenticated"; staff: Staff }
+  | { status: "verify"; staffId: string; email: string; message: string; debugCode?: string };
+
 export function mapApiStaff(user: StaffApiUser): Staff {
   return {
     id: user.id,
@@ -72,13 +91,54 @@ export function mapApiStaff(user: StaffApiUser): Staff {
   };
 }
 
-export async function staffApiLogin(email: string, password: string) {
-  const data = await api<{ access: string; refresh: string; user: StaffApiUser }>("/api/admin/auth/login/", {
+export async function staffApiLogin(email: string, password: string): Promise<StaffLoginResult> {
+  const data = await api<StaffLoginApiResponse>("/api/admin/auth/login/", {
     method: "POST",
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({
+      email,
+      password,
+      device_fingerprint: getDeviceFingerprint(),
+    }),
   });
+
+  if ("requires_verification" in data && data.requires_verification) {
+    return {
+      status: "verify",
+      staffId: data.staff_id,
+      email: data.email,
+      message: data.message,
+      debugCode: data.debug_code,
+    };
+  }
+
+  saveStaffTokens(data.access, data.refresh);
+  return { status: "authenticated", staff: mapApiStaff(data.user) };
+}
+
+export async function staffApiVerifyLogin(staffId: string, code: string) {
+  const data = await api<{ access: string; refresh: string; user: StaffApiUser }>(
+    "/api/admin/auth/verify-email/",
+    {
+      method: "POST",
+      body: JSON.stringify({
+        staff_id: staffId,
+        code,
+        device_fingerprint: getDeviceFingerprint(),
+      }),
+    },
+  );
   saveStaffTokens(data.access, data.refresh);
   return mapApiStaff(data.user);
+}
+
+export async function staffApiResendVerification(staffId: string) {
+  return api<{ message: string; debug_code?: string }>("/api/admin/auth/resend-verification/", {
+    method: "POST",
+    body: JSON.stringify({
+      staff_id: staffId,
+      device_fingerprint: getDeviceFingerprint(),
+    }),
+  });
 }
 
 export async function restoreStaffApiSession() {
@@ -1131,4 +1191,166 @@ export type StaffBooking = {
 export async function listStaffBookings(status?: string) {
   const suffix = status ? `?status=${encodeURIComponent(status)}` : "";
   return staffRequest<StaffBooking[]>(`/api/admin/listings/bookings/${suffix}`);
+}
+
+// ====== RBAC Staff Management ======
+
+export type StaffRole = {
+  id: string;
+  name: string;
+  description: string;
+  is_active: boolean;
+  is_system_role: boolean;
+  permissions?: Permission[];
+  permission_ids?: string[];
+  staff_count?: number;
+  created_at?: string;
+};
+
+export type Permission = {
+  id: string;
+  code: string;
+  page: string;
+  page_display: string;
+  action: string;
+  action_display: string;
+  description: string;
+};
+
+export type PermissionGroup = {
+  page: string;
+  page_display: string;
+  permissions: Permission[];
+};
+
+export type StaffMember = {
+  id: string;
+  email: string;
+  full_name: string;
+  role: StaffRole | null;
+  is_super_admin: boolean;
+  must_change_password: boolean;
+  date_joined: string;
+  last_login: string | null;
+  is_active: boolean;
+  is_locked: boolean;
+  permissions: string[];
+};
+
+export async function listStaffMembers() {
+  const data = await staffRequest<{ staff: StaffMember[] }>("/api/admin/auth/staff/");
+  return data.staff;
+}
+
+export async function createStaffMember(payload: {
+  email: string;
+  full_name: string;
+  password: string;
+  role_id?: string;
+  is_super_admin?: boolean;
+}) {
+  return staffRequest<StaffMember>("/api/admin/auth/staff/", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function getStaffMember(staffId: string) {
+  return staffRequest<StaffMember>(`/api/admin/auth/staff/${staffId}/`);
+}
+
+export async function updateStaffMember(staffId: string, payload: {
+  full_name?: string;
+  role_id?: string | null;
+  is_active?: boolean;
+  is_super_admin?: boolean;
+}) {
+  return staffRequest<StaffMember>(`/api/admin/auth/staff/${staffId}/`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteStaffMember(staffId: string) {
+  return staffRequest(`/api/admin/auth/staff/${staffId}/`, {
+    method: "DELETE",
+  });
+}
+
+export async function resetStaffPassword(staffId: string, newPassword: string) {
+  return staffRequest(`/api/admin/auth/staff/${staffId}/reset-password/`, {
+    method: "POST",
+    body: JSON.stringify({ new_password: newPassword }),
+  });
+}
+
+export async function listRoles() {
+  return staffRequest<StaffRole[]>("/api/admin/auth/roles/");
+}
+
+export async function createRole(payload: {
+  name: string;
+  description: string;
+  permission_ids: string[];
+}) {
+  return staffRequest<StaffRole>("/api/admin/auth/roles/", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function getRole(roleId: string) {
+  return staffRequest<StaffRole>(`/api/admin/auth/roles/${roleId}/`);
+}
+
+export async function updateRole(roleId: string, payload: {
+  name?: string;
+  description?: string;
+  permission_ids?: string[];
+  is_active?: boolean;
+}) {
+  return staffRequest<StaffRole>(`/api/admin/auth/roles/${roleId}/`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteRole(roleId: string) {
+  return staffRequest(`/api/admin/auth/roles/${roleId}/`, {
+    method: "DELETE",
+  });
+}
+
+export async function listPermissions() {
+  return staffRequest<{
+    pages: PermissionGroup[];
+    all_permissions: Permission[];
+  }>("/api/admin/auth/permissions/");
+}
+
+export type PasswordStrength = {
+  valid: boolean;
+  length: boolean;
+  uppercase: boolean;
+  lowercase: boolean;
+  number: boolean;
+  special: boolean;
+};
+
+export async function checkPasswordStrength(password: string) {
+  return staffRequest<PasswordStrength>("/api/admin/auth/password/check-strength/", {
+    method: "POST",
+    body: JSON.stringify({ password }),
+  });
+}
+
+export async function changeOwnPassword(payload: {
+  current_password: string;
+  new_password: string;
+  confirm_password: string;
+}) {
+  return staffRequest("/api/admin/auth/me/password/", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
 }

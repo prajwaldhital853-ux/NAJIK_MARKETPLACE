@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import type { Staff } from "./demo-data";
 import { ApiError } from "./api";
 import { clearStaffTokens } from "./auth";
-import { keepStaffSessionAlive, restoreStaffApiSession, staffApiLogin } from "./staff-api";
+import { keepStaffSessionAlive, restoreStaffApiSession, staffApiLogin, staffApiVerifyLogin } from "./staff-api";
 import { OPEN_INBOX_KEY } from "./live-inbox";
 
 const KEEP_ALIVE_MS = 10 * 60 * 1000;
@@ -14,7 +14,8 @@ const SessionCtx = createContext<{
   staff: Staff | null;
   ready: boolean;
   apiSession: boolean;
-  login: (email: string, password: string) => Promise<Staff>;
+  login: (email: string, password: string) => Promise<{ staff?: Staff; verify?: { staffId: string; email: string; message: string; debugCode?: string } }>;
+  verifyLogin: (staffId: string, code: string) => Promise<Staff>;
   logout: () => void;
 } | null>(null);
 
@@ -89,7 +90,32 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
 
   const login = useCallback(async (email: string, password: string) => {
     try {
-      const live = await staffApiLogin(email, password);
+      const result = await staffApiLogin(email, password);
+      if (result.status === "verify") {
+        return {
+          verify: {
+            staffId: result.staffId,
+            email: result.email,
+            message: result.message,
+            debugCode: result.debugCode,
+          },
+        };
+      }
+      sessionStorage.setItem(OPEN_INBOX_KEY, "1");
+      setStaff(result.staff);
+      setApiSession(true);
+      return { staff: result.staff };
+    } catch (err) {
+      clearStaffTokens();
+      setStaff(null);
+      setApiSession(false);
+      throw err;
+    }
+  }, []);
+
+  const verifyLogin = useCallback(async (staffId: string, code: string) => {
+    try {
+      const live = await staffApiVerifyLogin(staffId, code);
       sessionStorage.setItem(OPEN_INBOX_KEY, "1");
       setStaff(live);
       setApiSession(true);
@@ -103,8 +129,8 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const value = useMemo(
-    () => ({ staff, ready, apiSession, login, logout }),
-    [staff, ready, apiSession, login, logout],
+    () => ({ staff, ready, apiSession, login, verifyLogin, logout }),
+    [staff, ready, apiSession, login, verifyLogin, logout],
   );
 
   return <SessionCtx.Provider value={value}>{children}</SessionCtx.Provider>;

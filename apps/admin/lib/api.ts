@@ -1,8 +1,6 @@
-const API_URL = (process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000").replace(/\/$/, "");
+import { getApiBaseUrl } from "./api-config";
 
-export function getApiBaseUrl() {
-  return API_URL;
-}
+export { getApiBaseUrl } from "./api-config";
 
 export class ApiError extends Error {
   status: number;
@@ -18,11 +16,12 @@ export async function api<T>(
   options: RequestInit & { token?: string } = {},
 ): Promise<T> {
   const { token, headers, ...rest } = options;
+  const apiUrl = getApiBaseUrl();
   // Django APPEND_SLASH requires a trailing slash on POST routes.
   const normalizedPath = path.endsWith("/") || path.includes("?") ? path : `${path}/`;
   let response: Response;
   try {
-    response = await fetch(`${API_URL}${normalizedPath}`, {
+    response = await fetch(`${apiUrl}${normalizedPath}`, {
       ...rest,
       headers: {
         "Content-Type": "application/json",
@@ -33,7 +32,7 @@ export async function api<T>(
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Network error";
     throw new ApiError(
-      `${msg}. Check NEXT_PUBLIC_API_URL (${API_URL}) and that the backend is running.`,
+      `${msg}. Check API URL (${apiUrl}) and that the backend is running.`,
       0,
     );
   }

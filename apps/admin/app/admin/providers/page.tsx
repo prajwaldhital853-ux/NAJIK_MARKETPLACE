@@ -8,12 +8,14 @@ import { DetailKv, DetailOverlay } from "@/components/admin/detail-overlay";
 import { Avatar, Btn, StatusBadge, inputClass } from "@/components/admin/ui";
 import { formatNptDateTime, formatNptTime, relativeTime } from "@/lib/format";
 import { useSession } from "@/lib/session";
+import { useAdmin } from "@/lib/store";
 import { ADMIN_POLL_FALLBACK_MS } from "@/lib/event-stream";
 import {
   listProviderApplicationsPage,
   patchProviderApplication,
   type ProviderApplication,
 } from "@/lib/staff-api";
+import { formatAdminError, formatRbacDeniedMessage, toastAdminError } from "@/lib/rbac";
 import { usePageRbac } from "@/lib/use-page-rbac";
 
 const TABS = [
@@ -37,7 +39,14 @@ function statusFromParams(raw: string | null): StatusFilter {
 
 export default function ProviderVerificationPage() {
   const { apiSession } = useSession();
+  const admin = useAdmin();
   const { canUpdate, readOnly } = usePageRbac("kyc_verification");
+
+  function showAccessError(action: "update" | "delete" = "update") {
+    const message = formatRbacDeniedMessage(action, "kyc_verification");
+    setError(message);
+    admin.toast(message);
+  }
   const params = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
@@ -131,7 +140,7 @@ export default function ProviderVerificationPage() {
     actionKey?: string,
   ) {
     if (!canUpdate) {
-      setError("You only have view access for KYC verification.");
+      showAccessError("update");
       return;
     }
     const key = actionKey || `${status}:${id}`;
@@ -140,7 +149,9 @@ export default function ProviderVerificationPage() {
       await patchProviderApplication(id, status, rejection_note);
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not update status.");
+      const message = formatAdminError(err, "Could not update status.");
+      setError(message);
+      admin.toast(message);
     } finally {
       setBusyAction(null);
     }

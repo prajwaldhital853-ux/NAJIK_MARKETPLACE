@@ -8,6 +8,7 @@ import { DetailKv, DetailOverlay } from "./detail-overlay";
 import { Avatar, Btn, Field, StatusBadge, inputClass } from "./ui";
 import { useAdmin } from "@/lib/store";
 import { STORE_KEY_PAGE } from "@/lib/rbac";
+import { toastAdminError } from "@/lib/rbac";
 import { usePageRbac } from "@/lib/use-page-rbac";
 
 function rowTimestamp(row: Record<string, unknown>): number {
@@ -194,7 +195,7 @@ export function ResourcePage<T extends { id: string; status?: string; staff_warn
                   admin.toast("Deleted.");
                   if (open?.id === row.id) closeDrawer();
                 })
-                .catch((err: unknown) => admin.toast(err instanceof Error ? err.message : "Could not delete."));
+                .catch((err: unknown) => toastAdminError(admin.toast, err, "Could not delete."));
             },
           },
         ]
@@ -212,7 +213,7 @@ export function ResourcePage<T extends { id: string; status?: string; staff_warn
               void admin
                 .patch(storeKey, row.id, { status: "blocked" })
                 .then(() => admin.toast("Blocked."))
-                .catch((err: unknown) => admin.toast(err instanceof Error ? err.message : "Could not block."));
+                .catch((err: unknown) => toastAdminError(admin.toast, err, "Could not block."));
             },
           },
         ]
@@ -309,7 +310,7 @@ export function ResourcePage<T extends { id: string; status?: string; staff_warn
                                 setOpen({ ...open, staff_warning: note.trim() } as T);
                               })
                               .catch((err: unknown) => {
-                                admin.toast(err instanceof Error ? err.message : "Could not send note.");
+                                toastAdminError(admin.toast, err, "Could not send note.");
                               })
                               .finally(() => setBusyAction(null));
                           }}
@@ -331,7 +332,7 @@ export function ResourcePage<T extends { id: string; status?: string; staff_warn
                                 setOpen({ ...open, staff_warning: "" } as T);
                               })
                               .catch((err: unknown) => {
-                                admin.toast(err instanceof Error ? err.message : "Could not clear note.");
+                                toastAdminError(admin.toast, err, "Could not clear note.");
                               })
                               .finally(() => setBusyAction(null));
                           }}
@@ -388,7 +389,7 @@ export function ResourcePage<T extends { id: string; status?: string; staff_warn
                               if (s === "rejected" || s === "pending") setNote("");
                             })
                             .catch((err: unknown) => {
-                              admin.toast(err instanceof Error ? err.message : "Could not update.");
+                              toastAdminError(admin.toast, err, "Could not update.");
                             })
                             .finally(() => setBusyAction(null));
                         }}
@@ -413,7 +414,7 @@ export function ResourcePage<T extends { id: string; status?: string; staff_warn
                               closeDrawer();
                             })
                             .catch((err: unknown) => {
-                              admin.toast(err instanceof Error ? err.message : "Could not delete.");
+                              toastAdminError(admin.toast, err, "Could not delete.");
                             })
                             .finally(() => setBusyAction(null));
                         }}
@@ -441,7 +442,7 @@ export function ResourcePage<T extends { id: string; status?: string; staff_warn
                         closeDrawer();
                       })
                       .catch((err: unknown) => {
-                        admin.toast(err instanceof Error ? err.message : "Could not delete.");
+                        toastAdminError(admin.toast, err, "Could not delete.");
                       })
                       .finally(() => setBusyAction(null));
                   }}

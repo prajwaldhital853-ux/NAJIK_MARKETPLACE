@@ -6,6 +6,7 @@ import { UserListingsPanel } from "./user-listings-panel";
 import { Avatar, Btn, Field, StatusBadge, inputClass } from "./ui";
 import { Kv } from "./resource-page";
 import { useAdmin } from "@/lib/store";
+import { toastAdminError } from "@/lib/rbac";
 import type { User } from "@/lib/demo-data";
 
 export function userDocuments(u: User) {
@@ -45,6 +46,8 @@ export function UserDetailDrawer({
     setLoading(key);
     try {
       await fn();
+    } catch (err) {
+      toastAdminError(admin.toast, err);
     } finally {
       setLoading(null);
     }

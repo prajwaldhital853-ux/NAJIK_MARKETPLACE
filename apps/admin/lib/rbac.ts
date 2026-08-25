@@ -26,6 +26,20 @@ export const NAV_PERMISSION: Record<string, string> = {
 
 export type RbacAction = "view" | "create" | "update" | "delete";
 
+export type StaffAccess = {
+  isSuperAdmin?: boolean;
+  permissions?: string[];
+};
+
+export {
+  formatAdminError,
+  formatRbacDeniedMessage,
+  RbacAccessError,
+  RBAC_PAGE_LABELS,
+  toastAdminError,
+} from "./rbac-errors";
+import { RbacAccessError } from "./rbac-errors";
+
 export const LISTING_CATEGORY_PAGE: Record<string, string> = {
   property: "property_management",
   jobs: "job_management",
@@ -80,7 +94,7 @@ export function canListing(
 
 export function assertCan(staff: StaffAccess | null | undefined, page: string, action: RbacAction): void {
   if (!can(staff, page, action)) {
-    throw new Error(`You don't have permission to ${action} this section.`);
+    throw new RbacAccessError(action, page);
   }
 }
 
@@ -150,8 +164,3 @@ export function filterInboxForStaff<T extends { permission: string }>(
   if (staff.isSuperAdmin) return items;
   return items.filter((item) => hasPermission(staff, item.permission));
 }
-
-export type StaffAccess = {
-  isSuperAdmin?: boolean;
-  permissions?: string[];
-};

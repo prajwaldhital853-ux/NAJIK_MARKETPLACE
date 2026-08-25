@@ -11,7 +11,9 @@ import { formatNptDateTime, formatNptTime, relativeTime } from "@/lib/format";
 import { useSession } from "@/lib/session";
 import { ADMIN_POLL_FALLBACK_MS } from "@/lib/event-stream";
 import { deleteStaffListing, listStaffListingsPage, patchStaffListing, type StaffListing } from "@/lib/staff-api";
+import { formatAdminError, formatRbacDeniedMessage, LISTING_CATEGORY_PAGE } from "@/lib/rbac";
 import { usePageRbac } from "@/lib/use-page-rbac";
+import { useAdmin } from "@/lib/store";
 import { UrgentListingControls } from "./urgent-listing-controls";
 
 const TABS = ["Pending", "All", "Approved", "Rejected", "Deactivated", "Urgent"] as const;
@@ -36,7 +38,15 @@ export function ListingModeration({
   category?: string;
 }) {
   const { apiSession } = useSession();
+  const admin = useAdmin();
   const { canUpdate, canDelete, readOnly } = usePageRbac(undefined, category);
+  const listingPage = LISTING_CATEGORY_PAGE[category || ""] || "other_listings";
+
+  function showAccessError(action: "update" | "delete") {
+    const message = formatRbacDeniedMessage(action, listingPage);
+    setError(message);
+    admin.toast(message);
+  }
   const params = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
@@ -175,7 +185,7 @@ export function ListingModeration({
     actionKey?: string,
   ) {
     if (!canUpdate) {
-      setError("You only have view access for this section.");
+      showAccessError("update");
       return;
     }
     const key = actionKey || `${id}:${status === "approved" ? "approve" : status === "rejected" ? "reject" : "deactivate"}`;
@@ -185,7 +195,9 @@ export function ListingModeration({
       setReason("");
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not update listing.");
+      const message = formatAdminError(err, "Could not update listing.");
+      setError(message);
+      admin.toast(message);
     } finally {
       setBusyAction(null);
     }
@@ -206,7 +218,7 @@ export function ListingModeration({
 
   async function removeListing(id: string) {
     if (!canDelete) {
-      setError("You don't have delete permission for this section.");
+      showAccessError("delete");
       return;
     }
     if (!window.confirm("Delete this listing permanently? Buyers will no longer see it.")) return;
@@ -216,7 +228,9 @@ export function ListingModeration({
       if (open?.id === id) setOpen(null);
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not delete listing.");
+      const message = formatAdminError(err, "Could not delete listing.");
+      setError(message);
+      admin.toast(message);
     } finally {
       setBusyAction(null);
     }

@@ -1,4 +1,5 @@
 import { getApiBaseUrl } from "./api-config";
+import { formatAdminError } from "./rbac-errors";
 
 export { getApiBaseUrl } from "./api-config";
 
@@ -56,12 +57,18 @@ export async function api<T>(
     const fallback =
       response.status === 401
         ? "Session expired. Sign in again."
+        : response.status === 403
+          ? "Read-only access: you don't have permission for this action. Ask your Super Admin to update your role."
         : response.status === 404
           ? "API not found (404). Deploy the latest backend and run migrations."
           : response.status >= 500
             ? `Backend error (${response.status}). Try again shortly.`
             : `Request failed (${response.status}).`;
-    throw new ApiError(String(detail || fallback), response.status);
+    const message = String(detail || fallback);
+    throw new ApiError(
+      response.status === 403 ? formatAdminError(new ApiError(message, 403)) : message,
+      response.status,
+    );
   }
   return data as T;
 }

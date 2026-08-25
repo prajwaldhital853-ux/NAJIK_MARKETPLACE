@@ -23,6 +23,41 @@ METHOD_ACTION = {
     "DELETE": "delete",
 }
 
+PAGE_LABELS = {
+    "dashboard": "Dashboard",
+    "user_management": "User Management",
+    "property_management": "Property Management",
+    "job_management": "Job Management",
+    "service_management": "Service Management",
+    "electronics_management": "Electronics Management",
+    "other_listings": "Other Listings",
+    "orders_bookings": "Orders & Bookings",
+    "seller_payments": "Seller Payments",
+    "kyc_verification": "KYC / Verification",
+    "reports_complaints": "Reports & Complaints",
+    "reviews_ratings": "Reviews & Ratings",
+    "notifications": "Notifications",
+    "ads_promotions": "Ads & Promotions",
+    "analytics": "Analytics",
+    "app_control": "General App Control",
+    "staff_management": "Admin & Staff Management",
+    "settings": "Settings",
+}
+
+ACTION_VERB = {
+    "view": "view",
+    "create": "create",
+    "update": "edit or change",
+    "delete": "delete",
+}
+
+ACTION_PERMISSION_LABEL = {
+    "view": "View",
+    "create": "Create",
+    "update": "Update",
+    "delete": "Delete",
+}
+
 
 def listing_page(category: str) -> str:
     return LISTING_CATEGORY_PAGE.get(category, "other_listings")
@@ -30,6 +65,26 @@ def listing_page(category: str) -> str:
 
 def action_for_method(method: str) -> str:
     return METHOD_ACTION.get(method.upper(), "view")
+
+
+def _page_label(page: str) -> str:
+    return PAGE_LABELS.get(page, page.replace("_", " ").title())
+
+
+def _denied_message(page: str, action: str) -> str:
+    label = _page_label(page)
+    perm = ACTION_PERMISSION_LABEL.get(action, action.title())
+    if action == "view":
+        return (
+            f"You don't have access to {label}. "
+            f"Ask your Super Admin to add {perm} permission for this page on your role."
+        )
+    verb = ACTION_VERB.get(action, action)
+    return (
+        f"Read-only access: you cannot {verb} {label} data. "
+        f"Your role only has View permission here. "
+        f"Ask your Super Admin to add {perm} permission for {label} on your role."
+    )
 
 
 def user_has_rbac(user, page: str, action: str) -> bool:
@@ -42,9 +97,7 @@ def user_has_rbac(user, page: str, action: str) -> bool:
 
 def require_rbac(user, page: str, action: str):
     if not user_has_rbac(user, page, action):
-        raise PermissionDenied(
-            f"You don't have permission to perform this action. Required: {page}.{action}"
-        )
+        raise PermissionDenied(_denied_message(page, action))
 
 
 def require_rbac_method(user, page: str, method: str):
@@ -61,7 +114,10 @@ def require_any_listing_view(user):
         return
     if any(user_has_rbac(user, page, "view") for page in LISTING_PAGES):
         return
-    raise PermissionDenied("You don't have permission to view listings.")
+    raise PermissionDenied(
+        "You don't have access to any listing pages. "
+        "Ask your Super Admin to add View permission for the listing sections you need."
+    )
 
 
 def require_listing_list_view(user, category_param: str | None):

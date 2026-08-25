@@ -13,6 +13,7 @@ import { mapDirectoryUser } from "@/lib/live-users";
 import { useSession } from "@/lib/session";
 import { listAppUsersPage } from "@/lib/staff-api";
 import { AdminUsageGuideButton } from "@/components/admin/admin-usage-guide";
+import { formatRbacDeniedMessage, toastAdminError } from "@/lib/rbac";
 import { usePageRbac } from "@/lib/use-page-rbac";
 import { useAdmin } from "@/lib/store";
 import type { User } from "@/lib/demo-data";
@@ -214,7 +215,7 @@ export default function UsersPage() {
                   admin.toast("Deleted.");
                   if (open?.id === row.id) closeDrawer();
                 })
-                .catch((err: unknown) => admin.toast(err instanceof Error ? err.message : "Could not delete."));
+                .catch((err: unknown) => toastAdminError(admin.toast, err, "Could not delete."));
             },
           },
         ]
@@ -228,7 +229,7 @@ export default function UsersPage() {
               void admin
                 .patch("users", row.id, { status: "blocked" })
                 .then(() => admin.toast("Blocked."))
-                .catch((err: unknown) => admin.toast(err instanceof Error ? err.message : "Could not block."));
+                .catch((err: unknown) => toastAdminError(admin.toast, err, "Could not block."));
             },
           },
         ]
@@ -372,7 +373,7 @@ export default function UsersPage() {
                         void admin
                           .patch("users", open.id, { staff_warning: note.trim(), notes: note.trim() })
                           .then(() => admin.toast("Note sent to user."))
-                          .catch((err: unknown) => admin.toast(err instanceof Error ? err.message : "Could not send note."))
+                          .catch((err: unknown) => toastAdminError(admin.toast, err, "Could not send note."))
                           .finally(() => setBusyAction(null));
                       }}
                     >
@@ -393,7 +394,7 @@ export default function UsersPage() {
                           void admin
                             .patch("users", open.id, patchData)
                             .then(() => admin.toast(`${s.charAt(0).toUpperCase()}${s.slice(1)}.`))
-                            .catch((err: unknown) => admin.toast(err instanceof Error ? err.message : "Could not update."))
+                            .catch((err: unknown) => toastAdminError(admin.toast, err, "Could not update."))
                             .finally(() => setBusyAction(null));
                         }}
                       >

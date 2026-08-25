@@ -122,9 +122,11 @@ class StaffUser(models.Model):
         self.failed_login_attempts += 1
         self.last_failed_login = timezone.now()
         
-        if self.failed_login_attempts >= 3:
+        from apps.staff.lockout import LOCKOUT_AFTER, LOCKOUT_MINUTES
+
+        if self.failed_login_attempts >= LOCKOUT_AFTER:
             self.is_locked = True
-            self.locked_until = timezone.now() + timezone.timedelta(minutes=10)
+            self.locked_until = timezone.now() + timezone.timedelta(minutes=LOCKOUT_MINUTES)
         
         self.save(update_fields=["failed_login_attempts", "last_failed_login", "is_locked", "locked_until"])
 

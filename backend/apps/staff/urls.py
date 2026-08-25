@@ -2,9 +2,10 @@
 from django.urls import path
 
 from apps.staff.views.login import (
-    StaffLoginView,
     EmailVerificationView,
     ResendVerificationView,
+    StaffLockoutStatusView,
+    StaffLoginView,
 )
 from apps.staff.views.logout import StaffLogoutView
 from apps.staff.views.refresh import StaffRefreshView
@@ -29,6 +30,7 @@ app_name = "staff"
 urlpatterns = [
     # Authentication
     path("login/", StaffLoginView.as_view(), name="login"),
+    path("login/lockout/", StaffLockoutStatusView.as_view(), name="login-lockout"),
     path("verify-email/", EmailVerificationView.as_view(), name="verify-email"),
     path("resend-verification/", ResendVerificationView.as_view(), name="resend-verification"),
     path("logout/", StaffLogoutView.as_view(), name="logout"),

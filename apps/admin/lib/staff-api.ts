@@ -123,6 +123,31 @@ export async function staffApiLogin(email: string, password: string): Promise<St
   return { status: "authenticated", staff: mapApiStaff(authData.user) };
 }
 
+export type StaffLockoutStatus = {
+  locked: boolean;
+  lockedUntil?: string;
+  secondsRemaining?: number;
+  detail?: string;
+};
+
+export async function fetchStaffLockoutStatus(email: string): Promise<StaffLockoutStatus> {
+  const trimmed = email.trim();
+  if (!trimmed) return { locked: false };
+  const params = new URLSearchParams({ email: trimmed });
+  const data = await api<{
+    locked?: boolean;
+    locked_until?: string;
+    seconds_remaining?: number;
+    detail?: string;
+  }>(`/api/admin/auth/login/lockout/?${params.toString()}`);
+  return {
+    locked: Boolean(data.locked),
+    lockedUntil: data.locked_until,
+    secondsRemaining: data.seconds_remaining,
+    detail: data.detail,
+  };
+}
+
 export async function staffApiVerifyLogin(staffId: string, code: string) {
   const data = await api<{ access: string; refresh: string; user: StaffApiUser }>(
     "/api/admin/auth/verify-email/",

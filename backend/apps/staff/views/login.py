@@ -9,14 +9,15 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework import status
 
+from apps.staff.lockout import lockout_payload
+from apps.staff.models import EmailVerificationCode, StaffUser
 from apps.staff.serializers.auth import (
-    StaffLoginSerializer,
     EmailVerificationSerializer,
+    StaffLoginSerializer,
     StaffPublicSerializer,
     StaffTokenSerializer,
     generate_verification_code,
 )
-from apps.staff.models import EmailVerificationCode
 from apps.staff.throttles import StaffLoginRateThrottle
 
 
@@ -71,6 +72,25 @@ class StaffLoginView(APIView):
             "user": StaffPublicSerializer(user).data,
             **tokens
         })
+
+
+class StaffLockoutStatusView(APIView):
+    """Return lockout countdown for the login page without attempting a password."""
+
+    permission_classes = [AllowAny]
+    authentication_classes = []
+    throttle_classes = [StaffLoginRateThrottle]
+
+    def get(self, request):
+        email = (request.query_params.get("email") or "").strip().lower()
+        if not email:
+            return Response({"locked": False})
+
+        staff = StaffUser.objects.filter(email__iexact=email).first()
+        if not staff or not staff.is_account_locked():
+            return Response({"locked": False})
+
+        return Response({"locked": True, **lockout_payload(staff)})
 
 
 class EmailVerificationView(APIView):

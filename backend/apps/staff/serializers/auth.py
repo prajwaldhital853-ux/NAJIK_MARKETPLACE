@@ -7,6 +7,8 @@ from django.utils import timezone
 from rest_framework import serializers
 from rest_framework_simplejwt.tokens import RefreshToken
 
+from apps.staff.exceptions import StaffAccountLocked
+from apps.staff.lockout import LOCKOUT_AFTER
 from apps.staff.models import (
     StaffUser,
     LoginAttempt,
@@ -135,25 +137,21 @@ class StaffLoginSerializer(serializers.Serializer):
 
         # Check if account is locked
         if staff.is_account_locked():
-            minutes_left = int((staff.locked_until - timezone.now()).total_seconds() / 60)
-            attempt.failure_reason = f"Account locked ({minutes_left}m remaining)"
+            seconds_left = max(1, int((staff.locked_until - timezone.now()).total_seconds()))
+            attempt.failure_reason = f"Account locked ({seconds_left}s remaining)"
             attempt.save(update_fields=["failure_reason"])
-            raise serializers.ValidationError(
-                f"Account locked due to multiple failed attempts. "
-                f"Try again in {minutes_left} minutes."
-            )
+            raise StaffAccountLocked(staff)
 
         if not staff.check_password(password):
             staff.record_failed_login()
             attempt.failure_reason = "Invalid password"
             attempt.save(update_fields=["failure_reason"])
-            
-            if staff.failed_login_attempts >= 3:
-                raise serializers.ValidationError(
-                    "Too many failed attempts. Your account has been locked for 10 minutes."
-                )
-            
-            remaining = 3 - staff.failed_login_attempts
+
+            if staff.failed_login_attempts >= LOCKOUT_AFTER:
+                staff.refresh_from_db(fields=["is_locked", "locked_until", "failed_login_attempts"])
+                raise StaffAccountLocked(staff)
+
+            remaining = LOCKOUT_AFTER - staff.failed_login_attempts
             raise serializers.ValidationError(
                 f"{GENERIC_AUTH_ERROR} ({remaining} attempts remaining)"
             )

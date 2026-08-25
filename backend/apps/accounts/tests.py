@@ -539,6 +539,15 @@ class AuthFlowTests(TestCase):
             ).exists()
         )
         self.assertEqual(ref.reward_amount, cfg.reward_amount)
+        from apps.notifications.models.inbox import InboxNotice
+
+        referrer_note = InboxNotice.objects.filter(user=referrer, title="Refer & Earn reward").order_by("-created_at").first()
+        referred_note = InboxNotice.objects.filter(user__phone=referred_phone, title="You helped a friend earn").order_by("-created_at").first()
+        self.assertIsNotNone(referrer_note)
+        self.assertIsNotNone(referred_note)
+        self.assertNotIn("listing", (referrer_note.body or "").lower())
+        self.assertNotIn("listing", (referred_note.body or "").lower())
+        self.assertIn("invite code", (referrer_note.body or "").lower())
 
     @override_settings(GOOGLE_CLIENT_IDS=["test-client"])
     def test_google_provider_cannot_use_buyer_page(self):

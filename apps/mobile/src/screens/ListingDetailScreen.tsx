@@ -35,7 +35,7 @@ import { catalogMeta, listingById, type CatalogItem } from "../data/catalog";
 import { apiCategoryForKey, liveListingById, listingsToCatalog, listingToCatalog } from "../data/liveListings";
 import { rankSimilarListings, relatedKeywordsFor } from "../data/similarListings";
 import { fetchListing, fetchListingFeed, postListingComment, postListingReview, recordListingViewOnServer, toggleListingSave, type ApiListing } from "../listingsApi";
-import { peekListingDetail, rememberListingDetail } from "../listingCache";
+import { bumpListingDetailViewCount, peekListingDetail, rememberListingDetail } from "../listingCache";
 import { recordListingView } from "../listingViews";
 import { emitListingsChanged, subscribeListingsChanged } from "../listingsRefresh";
 import { openCategory, openChatThread, openMapSearch, openSellerProfile } from "../navigation/browse";
@@ -80,7 +80,8 @@ export function ListingDetailScreen() {
       void dismissTarget({ target: "listing", target_id: normTargetId(id) });
       if (!/^[0-9a-f-]{36}$/i.test(id)) return;
       void recordListingViewOnServer(id).then((result) => {
-        if (!result?.recorded) return;
+        if (!result?.recorded || result.view_count == null) return;
+        bumpListingDetailViewCount(id, result.view_count);
         setLive((prev) => (prev && prev.id === id ? { ...prev, view_count: result.view_count } : prev));
         setItem((prev) => (prev && prev.id === id ? { ...prev, viewCount: result.view_count } : prev));
       });
@@ -94,8 +95,12 @@ export function ListingDetailScreen() {
     const load = () => {
       void fetchListing(id)
         .then((row) => {
-          setLive(row);
-          setItem(listingToCatalog(row));
+          const cachedCount = peekListingDetail(id)?.view_count || 0;
+          const viewCount = Math.max(row.view_count || 0, cachedCount);
+          const merged = { ...row, view_count: viewCount };
+          rememberListingDetail(merged);
+          setLive(merged);
+          setItem(listingToCatalog(merged));
           void recordListingView(row.id);
         })
         .catch(() => {

@@ -280,11 +280,8 @@ class ListingViewRecordView(APIView):
     def post(self, request, pk):
         listing = get_object_or_404(Listing, pk=pk)
         user = request.user if getattr(request.user, "is_authenticated", False) else None
-        is_owner = bool(user and getattr(user, "id", None) == listing.owner_id)
         if listing.status != Listing.STATUS_APPROVED:
             return Response({"detail": "Listing not found."}, status=status.HTTP_404_NOT_FOUND)
-        if is_owner:
-            return Response({"view_count": listing.view_count, "recorded": False})
         view_count = record_listing_view_event(listing, viewer=user)
         return Response({"view_count": view_count, "recorded": True})
 

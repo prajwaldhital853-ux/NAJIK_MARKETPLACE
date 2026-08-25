@@ -2,43 +2,71 @@ import * as Device from "expo-device";
 import * as Notifications from "expo-notifications";
 import Constants from "expo-constants";
 import { useEffect, useRef } from "react";
-import { AppState, Platform } from "react-native";
+import { AppState, Platform, type AppStateStatus } from "react-native";
 import type { AppUser } from "../types";
 import { registerPushToken, unregisterPushToken } from "../pushApi";
 import { navigationRef } from "../navigation/navigationRef";
 import { openInboxNoticeTarget } from "../navigation/browse";
 
+let appState: AppStateStatus = AppState.currentState;
+
 Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: false,
-    shouldPlaySound: false,
-    shouldSetBadge: false,
-    shouldShowBanner: false,
-    shouldShowList: false,
-  }),
+  handleNotification: async () => {
+    const foreground = appState === "active";
+    return {
+      shouldShowAlert: !foreground,
+      shouldPlaySound: !foreground,
+      shouldSetBadge: false,
+      shouldShowBanner: !foreground,
+      shouldShowList: !foreground,
+    };
+  },
 });
 
 async function ensureAndroidChannels() {
   if (Platform.OS !== "android") return;
   await Notifications.setNotificationChannelAsync("default", {
     name: "General",
-    importance: Notifications.AndroidImportance.HIGH,
+    importance: Notifications.AndroidImportance.MAX,
     vibrationPattern: [0, 200, 120, 200],
   });
   await Notifications.setNotificationChannelAsync("messages", {
     name: "Messages",
-    importance: Notifications.AndroidImportance.HIGH,
+    importance: Notifications.AndroidImportance.MAX,
     vibrationPattern: [0, 200, 120, 200],
   });
   await Notifications.setNotificationChannelAsync("bookings", {
     name: "Bookings",
-    importance: Notifications.AndroidImportance.HIGH,
+    importance: Notifications.AndroidImportance.MAX,
     vibrationPattern: [0, 200, 120, 200],
   });
   await Notifications.setNotificationChannelAsync("listings", {
     name: "Listings",
-    importance: Notifications.AndroidImportance.DEFAULT,
+    importance: Notifications.AndroidImportance.HIGH,
   });
+}
+
+async function ensureNotificationPermission(): Promise<boolean> {
+  const { status: existing } = await Notifications.getPermissionsAsync();
+  if (existing === "granted") return true;
+  const { status } = await Notifications.requestPermissionsAsync();
+  return status === "granted";
+}
+
+function resolveProjectId(): string | null {
+  return (
+    Constants.expoConfig?.extra?.eas?.projectId ??
+    Constants.easConfig?.projectId ??
+    Constants.expoConfig?.extra?.easProjectId ??
+    null
+  );
+}
+
+/** Run once on app start — channels + permission before any auth/modals. */
+export async function bootstrapPushNotifications() {
+  if (!Device.isDevice) return;
+  await ensureAndroidChannels();
+  await ensureNotificationPermission();
 }
 
 async function resolveExpoPushToken(): Promise<string | null> {
@@ -46,23 +74,22 @@ async function resolveExpoPushToken(): Promise<string | null> {
 
   await ensureAndroidChannels();
 
-  const { status: existing } = await Notifications.getPermissionsAsync();
-  let finalStatus = existing;
-  if (existing !== "granted") {
-    const { status } = await Notifications.requestPermissionsAsync();
-    finalStatus = status;
+  const granted = await ensureNotificationPermission();
+  if (!granted) return null;
+
+  const projectId = resolveProjectId();
+  if (!projectId) {
+    console.warn("[push] Missing EAS projectId in app config.");
+    return null;
   }
-  if (finalStatus !== "granted") return null;
 
-  const projectId =
-    Constants.expoConfig?.extra?.eas?.projectId ??
-    Constants.easConfig?.projectId ??
-    Constants.expoConfig?.extra?.easProjectId;
-
-  if (!projectId) return null;
-
-  const token = await Notifications.getExpoPushTokenAsync({ projectId });
-  return token.data;
+  try {
+    const token = await Notifications.getExpoPushTokenAsync({ projectId });
+    return token.data;
+  } catch (err) {
+    console.warn("[push] getExpoPushTokenAsync failed:", err);
+    return null;
+  }
 }
 
 function readNoticePayload(data: Record<string, unknown> | undefined) {
@@ -79,10 +106,22 @@ function handleNoticeOpen(user: AppUser | null, payload: { kind: string; target:
   openInboxNoticeTarget(navigationRef, payload, user);
 }
 
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 export function usePushNotifications(user: AppUser | null) {
   const tokenRef = useRef<string | null>(null);
   const userRef = useRef(user);
   userRef.current = user;
+
+  useEffect(() => {
+    void bootstrapPushNotifications();
+    const sub = AppState.addEventListener("change", (state) => {
+      appState = state;
+    });
+    return () => sub.remove();
+  }, []);
 
   useEffect(() => {
     const sub = Notifications.addNotificationResponseReceivedListener((response) => {
@@ -106,8 +145,8 @@ export function usePushNotifications(user: AppUser | null) {
   useEffect(() => {
     let cancelled = false;
 
-    async function syncToken() {
-      if (!user) {
+    async function syncToken(attempt = 0) {
+      if (!userRef.current) {
         const old = tokenRef.current;
         tokenRef.current = null;
         if (old) {
@@ -122,11 +161,18 @@ export function usePushNotifications(user: AppUser | null) {
 
       const pushToken = await resolveExpoPushToken();
       if (!pushToken || cancelled) {
-        if (!cancelled && user) {
-          console.warn("[push] No Expo push token — check notification permission and google-services.json in the build.");
+        if (!cancelled && userRef.current && attempt < 4) {
+          await sleep(1500 * (attempt + 1));
+          if (!cancelled && userRef.current) void syncToken(attempt + 1);
+          return;
+        }
+        if (!cancelled && userRef.current) {
+          console.warn("[push] No Expo push token — allow notifications in Android settings, then reopen the app.");
         }
         return;
       }
+
+      if (tokenRef.current === pushToken) return;
 
       tokenRef.current = pushToken;
       try {
@@ -135,8 +181,14 @@ export function usePushNotifications(user: AppUser | null) {
           platform: Platform.OS === "ios" ? "ios" : "android",
           device_name: Device.modelName || undefined,
         });
+        console.info("[push] Registered with API:", pushToken.slice(0, 28) + "...");
       } catch (err) {
         console.warn("[push] Failed to register token with API:", err);
+        tokenRef.current = null;
+        if (!cancelled && attempt < 4) {
+          await sleep(2000 * (attempt + 1));
+          if (!cancelled && userRef.current) void syncToken(attempt + 1);
+        }
       }
     }
 

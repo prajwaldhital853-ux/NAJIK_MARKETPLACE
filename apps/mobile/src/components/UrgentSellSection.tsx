@@ -70,7 +70,7 @@ export function UrgentSellSection() {
       </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10, paddingRight: 4 }}>
         {items.map((item) => (
-          <UrgentListingCard key={item.id} item={item} />
+          <UrgentListingCard key={item.id} item={item} showPromoted />
         ))}
       </ScrollView>
     </View>

@@ -18,6 +18,12 @@ export function rememberListingDetail(row: ApiListing) {
   detail.set(row.id, { row, at: Date.now() });
 }
 
+export function bumpListingDetailViewCount(id: string, viewCount: number) {
+  const hit = detail.get(id);
+  if (!hit) return;
+  detail.set(id, { row: { ...hit.row, view_count: Math.max(hit.row.view_count || 0, viewCount) }, at: hit.at });
+}
+
 export function rememberListingFeed(rows: ApiListing[]) {
   rows.forEach(rememberListingDetail);
 }

@@ -5,7 +5,6 @@ import { catalogFromFeed } from "../data/feedOrdering";
 import type { ApiListing, FeedResponse } from "../listingsApi";
 import { colors, shadow } from "../theme";
 import { ClassifiedGridCard, LISTING_CARD_W } from "./ClassifiedCard";
-import { ProductSkeleton } from "./ProductSkeleton";
 
 const GAP = 11;
 const PAGE_SIZE = 10;
@@ -15,6 +14,7 @@ type PageResponse = FeedResponse | ApiListing[] | { results?: ApiListing[]; has_
 type InfiniteListingGridProps = {
   fetchData: (page: number, pageSize: number) => Promise<PageResponse>;
   emptyText?: string;
+  loadingText?: string;
   showPromoted?: boolean;
   pageSize?: number;
 };
@@ -28,6 +28,7 @@ function normalizePage(raw: PageResponse, pageSize: number) {
 export function InfiniteListingGrid({
   fetchData,
   emptyText = "No listings found.",
+  loadingText = "Loading listings…",
   showPromoted = false,
   pageSize = PAGE_SIZE,
 }: InfiniteListingGridProps) {
@@ -137,7 +138,11 @@ export function InfiniteListingGrid({
       }
       ListEmptyComponent={
         loading ? (
-          <ProductSkeleton count={6} />
+          <View style={{ alignItems: "center", paddingTop: 48, paddingHorizontal: 24 }}>
+            <ActivityIndicator color={colors.green} size="large" />
+            <Text style={{ fontWeight: "800", fontSize: 15, color: colors.navy, marginTop: 14 }}>{loadingText}</Text>
+            <Text style={{ color: colors.muted, fontSize: 13, textAlign: "center", marginTop: 6 }}>Fetching listings for you…</Text>
+          </View>
         ) : error ? (
           <View style={{ backgroundColor: "#fff", borderRadius: 16, padding: 18, ...shadow.card }}>
             <Text style={{ color: colors.red, textAlign: "center", fontWeight: "600" }}>{error}</Text>

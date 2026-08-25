@@ -52,13 +52,39 @@ export function postedLabel(time: string) {
 
 export function listingTags(item: CatalogItem, showPromoted = false) {
   const tags: string[] = [];
-  // Only show "Boosted" tag to sellers, not buyers
-  if (showPromoted && (item.badge === "BOOSTED" || item.badge === "FEATURED")) tags.push("Boosted");
+  if (item.urgent) tags.push("Urgent");
+  if (showPromoted && (item.promoted || item.badge === "BOOSTED" || item.badge === "FEATURED")) tags.push("Boosted");
   if (item.badge === "VERIFIED") tags.push("Verified");
   item.tags.forEach((tag) => {
     if (tag !== "All" && !tags.includes(tag)) tags.push(tag);
   });
   return tags.slice(0, 3);
+}
+
+export type ListingCardBadge = { label: string; bg: string; fg: string };
+
+export function listingCardBadges(item: CatalogItem, options?: { showPromoted?: boolean; showVerified?: boolean }) {
+  const badges: ListingCardBadge[] = [];
+  const showPromoted = options?.showPromoted !== false;
+  const showVerified = options?.showVerified !== false;
+  const promoted = Boolean(item.promoted || item.badge === "BOOSTED" || item.badge === "FEATURED");
+  if (item.urgent) badges.push({ label: "URGENT", bg: "#EAB308", fg: "#111827" });
+  if (promoted && showPromoted) badges.push({ label: "BOOSTED", bg: "#EA580C", fg: "#fff" });
+  else if (!item.urgent && item.badge === "VERIFIED" && showVerified) badges.push({ label: "VERIFIED", bg: GREEN, fg: "#fff" });
+  return badges;
+}
+
+export function ListingCardBadges({ badges, top = 8, left = 8 }: { badges: ListingCardBadge[]; top?: number; left?: number }) {
+  if (!badges.length) return null;
+  return (
+    <View style={{ position: "absolute", top, left, gap: 4, zIndex: 1 }}>
+      {badges.map((badge) => (
+        <View key={badge.label} style={{ backgroundColor: badge.bg, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, alignSelf: "flex-start" }}>
+          <Text style={{ color: badge.fg, fontSize: 9, fontWeight: "800", letterSpacing: 0.3 }}>{badge.label}</Text>
+        </View>
+      ))}
+    </View>
+  );
 }
 
 export function StarsCount({ rating, count, compact }: { rating: number; count: number; compact?: boolean }) {
@@ -193,11 +219,11 @@ export function UrgentListingCard({ item, showPromoted }: { item: CatalogItem; s
   );
 }
 
-export function ListingGrid({ items }: { items: CatalogItem[] }) {
+export function ListingGrid({ items, showPromoted = true }: { items: CatalogItem[]; showPromoted?: boolean }) {
   return (
     <View style={{ flexDirection: "row", flexWrap: "wrap", gap: GAP }}>
       {items.map((item) => (
-        <ClassifiedGridCard key={item.id} item={item} width={LISTING_CARD_W} />
+        <ClassifiedGridCard key={item.id} item={item} width={LISTING_CARD_W} showPromoted={showPromoted} />
       ))}
     </View>
   );
@@ -300,14 +326,7 @@ function ListingAdCard({
   const navigation = useNavigation<any>();
   const blurb = listingBlurb(item);
   const { amount, unit } = splitPrice(item.price);
-  const badge = item.urgent
-    ? "URGENT"
-    : showPromoted && (item.badge === "BOOSTED" || item.badge === "FEATURED")
-      ? "BOOSTED"
-      : item.badge === "VERIFIED"
-        ? "VERIFIED"
-        : null;
-  const badgeColor = item.urgent ? "#EAB308" : badge === "BOOSTED" ? "#EA580C" : GREEN;
+  const badges = listingCardBadges(item, { showPromoted });
 
   const compactBodyMin = 108;
   const cardMinHeight = compact ? photoH + compactBodyMin : undefined;
@@ -329,13 +348,9 @@ function ListingAdCard({
       {item.photo ? (
         <View>
           <AppImage source={item.photo} style={{ width: "100%", height: photoH, backgroundColor: "#E8EEF0" }} recyclingKey={item.id} priority="normal" />
-          {badge ? (
-            <View style={{ position: "absolute", top: 8, left: 8, backgroundColor: badgeColor, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, zIndex: 1 }}>
-              <Text style={{ color: item.urgent ? "#111827" : "#fff", fontSize: 9, fontWeight: "800", letterSpacing: 0.3 }}>{badge}</Text>
-            </View>
-          ) : null}
+          <ListingCardBadges badges={badges} />
           {item.sold ? (
-            <View style={{ position: "absolute", top: badge ? 26 : 8, left: 8, backgroundColor: "#DC2626", paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, zIndex: 1 }}>
+            <View style={{ position: "absolute", top: badges.length ? 8 + badges.length * 22 : 8, left: 8, backgroundColor: "#DC2626", paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, zIndex: 1 }}>
               <Text style={{ color: "#fff", fontSize: 9, fontWeight: "800", letterSpacing: 0.3 }}>SOLD</Text>
             </View>
           ) : null}

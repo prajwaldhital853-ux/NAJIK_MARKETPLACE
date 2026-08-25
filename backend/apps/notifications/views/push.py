@@ -6,6 +6,10 @@ from apps.accounts.authentication import AppJWTAuthentication
 from apps.accounts.permissions import IsAppUser
 from apps.notifications.models.push_device import PushDevice
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 class PushTokenRegisterView(APIView):
     authentication_classes = [AppJWTAuthentication]
@@ -22,7 +26,7 @@ class PushTokenRegisterView(APIView):
 
         device_name = (request.data.get("device_name") or "")[:120]
 
-        device, _ = PushDevice.objects.update_or_create(
+        device, created = PushDevice.objects.update_or_create(
             token=token,
             defaults={
                 "user": request.user,
@@ -30,6 +34,12 @@ class PushTokenRegisterView(APIView):
                 "device_name": device_name,
                 "is_active": True,
             },
+        )
+        logger.info(
+            "push token %s for user %s (%s)",
+            "registered" if created else "refreshed",
+            request.user.id,
+            platform,
         )
         return Response({"ok": True, "id": str(device.id)})
 

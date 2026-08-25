@@ -257,7 +257,7 @@ def reject_load_request(load_id, staff_user, admin_note: str):
 @transaction.atomic
 def credit_referral_reward(referral):
     """Credit referrer wallet when a referral is earned (idempotent)."""
-    from apps.accounts.models.referral import Referral
+    from apps.accounts.models.referral import ReferEarnConfig, Referral
 
     if referral.status != Referral.STATUS_EARNED:
         return None
@@ -290,24 +290,44 @@ def credit_referral_reward(referral):
     from apps.notifications.models.inbox import InboxNotice
     from apps.notifications.services import notify_user
 
-    notify_user(
-        referrer,
-        "Refer & Earn reward",
-        f"{amount_label} credited — {referred_name} published their first live listing.",
-        kind=InboxNotice.KIND_OTHER,
-        target="invite",
-        target_id=str(referral.pk),
-        sender_name="NAJIK",
-    )
-    notify_user(
-        referred,
-        "You helped a friend earn",
-        f"Your first live listing helped {referrer_name} earn {amount_label} in Refer & Earn. Thank you for joining with their code!",
-        kind=InboxNotice.KIND_OTHER,
-        target="invite",
-        target_id=str(referral.pk),
-        sender_name=referrer_name[:120],
-    )
+    if referral.audience == ReferEarnConfig.AUDIENCE_USER:
+        notify_user(
+            referrer,
+            "Refer & Earn reward",
+            f"{amount_label} credited — {referred_name} joined NAJIK with your invite code.",
+            kind=InboxNotice.KIND_OTHER,
+            target="invite",
+            target_id=str(referral.pk),
+            sender_name="NAJIK",
+        )
+        notify_user(
+            referred,
+            "You helped a friend earn",
+            f"Thank you for joining with their code — {referrer_name} earned {amount_label} in Refer & Earn.",
+            kind=InboxNotice.KIND_OTHER,
+            target="invite",
+            target_id=str(referral.pk),
+            sender_name=referrer_name[:120],
+        )
+    else:
+        notify_user(
+            referrer,
+            "Refer & Earn reward",
+            f"{amount_label} credited — {referred_name} published their first live listing.",
+            kind=InboxNotice.KIND_OTHER,
+            target="invite",
+            target_id=str(referral.pk),
+            sender_name="NAJIK",
+        )
+        notify_user(
+            referred,
+            "You helped a friend earn",
+            f"Your first live listing helped {referrer_name} earn {amount_label} in Refer & Earn. Thank you for joining with their code!",
+            kind=InboxNotice.KIND_OTHER,
+            target="invite",
+            target_id=str(referral.pk),
+            sender_name=referrer_name[:120],
+        )
     return tx
 
 

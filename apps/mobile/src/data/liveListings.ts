@@ -94,7 +94,7 @@ export function listingToCatalog(row: ApiListing): CatalogItem {
     discountPercent: percent || undefined,
     location: row.location,
     time: row.created_at ? new Date(row.created_at).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "Just now",
-    badge: row.is_promoted ? "BOOSTED" : row.status === "approved" ? "VERIFIED" : "PENDING",
+    badge: row.is_promoted || row.is_boosted ? "BOOSTED" : row.status === "approved" ? "VERIFIED" : "PENDING",
     extra: uniqueLabels([row.subcategory, condition, ...features]).slice(0, 3),
     tags: uniqueLabels([row.subcategory, condition, row.negotiable ? "Negotiable" : ""]),
     company: row.owner_name,
@@ -109,7 +109,7 @@ export function listingToCatalog(row: ApiListing): CatalogItem {
     urgent: Boolean(row.is_urgent),
     urgentEndsAt: row.urgent_ends_at || undefined,
     apiCategory: row.category,
-    promoted: Boolean(row.is_promoted),
+    promoted: Boolean(row.is_promoted || row.is_boosted),
   };
   if (row.photos[0]?.url) item.photo = { uri: row.photos[0].url };
   rememberLiveListing(item);

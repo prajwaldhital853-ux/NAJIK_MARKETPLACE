@@ -196,10 +196,29 @@ function RecentPostCard({ item }: { item: ApiListing }) {
       {photoUrl ? (
       <View>
         <AuthImage uri={photoUrl} style={{ width: 102, height: 108, borderRadius: 12 }} />
-        <View style={{ position: "absolute", top: 6, left: 6, backgroundColor: urgent ? "#EAB308" : boosted ? "#EA580C" : boostPaused ? "#9CA3AF" : pending ? "#F59E0B" : "#1B7D2C", paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6 }}>
-          <Text style={{ color: urgent ? "#111827" : "#fff", fontSize: 9, fontWeight: "800" }}>
-            {urgent ? "URGENT" : boosted ? "BOOSTED" : boostPaused ? "BOOST PAUSED" : pending ? "PENDING" : "LIVE"}
-          </Text>
+        <View style={{ position: "absolute", top: 6, left: 6, gap: 4, zIndex: 1 }}>
+          {urgent ? (
+            <View style={{ backgroundColor: "#EAB308", paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6, alignSelf: "flex-start" }}>
+              <Text style={{ color: "#111827", fontSize: 9, fontWeight: "800" }}>URGENT</Text>
+            </View>
+          ) : null}
+          {boosted ? (
+            <View style={{ backgroundColor: "#EA580C", paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6, alignSelf: "flex-start" }}>
+              <Text style={{ color: "#fff", fontSize: 9, fontWeight: "800" }}>BOOSTED</Text>
+            </View>
+          ) : boostPaused ? (
+            <View style={{ backgroundColor: "#9CA3AF", paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6, alignSelf: "flex-start" }}>
+              <Text style={{ color: "#fff", fontSize: 9, fontWeight: "800" }}>BOOST PAUSED</Text>
+            </View>
+          ) : pending ? (
+            <View style={{ backgroundColor: "#F59E0B", paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6, alignSelf: "flex-start" }}>
+              <Text style={{ color: "#fff", fontSize: 9, fontWeight: "800" }}>PENDING</Text>
+            </View>
+          ) : !urgent && !boosted ? (
+            <View style={{ backgroundColor: "#1B7D2C", paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6, alignSelf: "flex-start" }}>
+              <Text style={{ color: "#fff", fontSize: 9, fontWeight: "800" }}>LIVE</Text>
+            </View>
+          ) : null}
         </View>
         <View style={{ position: "absolute", left: 6, bottom: 6, backgroundColor: "rgba(0,0,0,0.55)", borderRadius: 10, paddingHorizontal: 6, paddingVertical: 2, flexDirection: "row", alignItems: "center", gap: 3 }}>
           <Ionicons name="eye" size={10} color="#fff" />

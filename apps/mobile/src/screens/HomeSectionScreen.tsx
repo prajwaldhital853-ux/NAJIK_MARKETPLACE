@@ -69,6 +69,8 @@ export function HomeSectionScreen() {
           key={`${section}-${catalog || "all"}-${feedParams.place || "np"}`}
           fetchData={fetchData}
           emptyText={`No ${heading.toLowerCase()} yet.`}
+          loadingText={`Loading ${heading.toLowerCase()}…`}
+          showPromoted
           pageSize={PAGE_SIZE}
         />
       </View>

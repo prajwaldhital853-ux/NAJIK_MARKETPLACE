@@ -558,31 +558,12 @@ function ListingManageCard({
   const statusColor = sold ? "#DC2626" : pending ? "#F59E0B" : rejected ? colors.red : GREEN;
   const deal = dealTypeOf(item);
   const sale = listingSale(item);
-  const badge = item.is_urgent
-    ? "URGENT"
-    : item.is_boosted
-      ? "BOOSTED"
-      : item.boost_paused
-        ? "BOOST PAUSED"
-        : item.is_promoted
-          ? "FEATURED"
-          : item.status === "approved"
-            ? "VERIFIED"
-            : pending
-              ? "PENDING"
-              : undefined;
-  const badgeColor =
-    badge === "URGENT"
-      ? "#EAB308"
-      : badge === "BOOSTED"
-        ? "#EA580C"
-        : badge === "BOOST PAUSED"
-          ? "#9CA3AF"
-          : badge === "FEATURED"
-            ? GREEN
-            : badge === "VERIFIED"
-              ? "#2563EB"
-              : "#F59E0B";
+  const statusBadges: { label: string; bg: string; fg: string }[] = [];
+  if (item.is_urgent) statusBadges.push({ label: "URGENT", bg: "#EAB308", fg: "#111827" });
+  if (item.is_boosted || item.is_promoted) statusBadges.push({ label: item.is_boosted ? "BOOSTED" : "FEATURED", bg: "#EA580C", fg: "#fff" });
+  else if (item.boost_paused) statusBadges.push({ label: "BOOST PAUSED", bg: "#9CA3AF", fg: "#fff" });
+  else if (item.status === "approved") statusBadges.push({ label: "VERIFIED", bg: "#2563EB", fg: "#fff" });
+  else if (pending) statusBadges.push({ label: "PENDING", bg: "#F59E0B", fg: "#fff" });
   const beds = extraText(item, "beds");
   const baths = extraText(item, "baths");
   const area = extraText(item, "area");
@@ -608,16 +589,20 @@ function ListingManageCard({
       {photoUrl ? (
       <View>
         <AuthImage uri={photoUrl} style={{ width: compact ? "100%" : 104, height: compact ? 96 : 112, borderRadius: 12 } as any} />
-        {badge ? (
-          <View style={{ position: "absolute", top: 7, left: 7, backgroundColor: badgeColor, paddingHorizontal: 7, paddingVertical: 3, borderRadius: 6, zIndex: 1 }}>
-            <Text style={{ color: badge === "URGENT" ? "#111827" : "#fff", fontSize: 8, fontWeight: "800", letterSpacing: 0.3 }}>{badge}</Text>
+        {statusBadges.length ? (
+          <View style={{ position: "absolute", top: 7, left: 7, gap: 4, zIndex: 1 }}>
+            {statusBadges.map((badge) => (
+              <View key={badge.label} style={{ backgroundColor: badge.bg, paddingHorizontal: 7, paddingVertical: 3, borderRadius: 6, alignSelf: "flex-start" }}>
+                <Text style={{ color: badge.fg, fontSize: 8, fontWeight: "800", letterSpacing: 0.3 }}>{badge.label}</Text>
+              </View>
+            ))}
           </View>
         ) : null}
         {sold ? (
           <View
             style={{
               position: "absolute",
-              top: badge ? 26 : 7,
+              top: statusBadges.length ? 7 + statusBadges.length * 18 : 7,
               left: 7,
               backgroundColor: "#DC2626",
               paddingHorizontal: 7,

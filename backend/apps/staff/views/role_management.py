@@ -84,7 +84,7 @@ class RoleCreateUpdateSerializer(serializers.ModelSerializer):
 
 
 class RoleDetailSerializer(serializers.ModelSerializer):
-    permissions = PermissionSerializer(source='role_permissions.permission', many=True, read_only=True)
+    permissions = serializers.SerializerMethodField()
     permission_ids = serializers.SerializerMethodField()
     staff_count = serializers.SerializerMethodField()
     
@@ -93,6 +93,10 @@ class RoleDetailSerializer(serializers.ModelSerializer):
         fields = ('id', 'name', 'description', 'is_active', 'is_system_role', 
                  'permissions', 'permission_ids', 'staff_count', 'created_at')
     
+    def get_permissions(self, obj):
+        perms = [rp.permission for rp in obj.role_permissions.select_related("permission").all()]
+        return PermissionSerializer(perms, many=True).data
+
     def get_permission_ids(self, obj):
         return [str(rp.permission_id) for rp in obj.role_permissions.all()]
     
@@ -130,6 +134,8 @@ class RoleListCreateView(APIView):
     
     @require_super_admin
     def get(self, request):
+        from apps.staff.rbac_seed import ensure_page_rbac
+        ensure_page_rbac()
         roles = Role.objects.filter(is_active=True).prefetch_related('role_permissions__permission')
         serializer = RoleDetailSerializer(roles, many=True)
         return Response(serializer.data)
@@ -177,6 +183,10 @@ class RoleDetailView(APIView):
         )
         serializer.is_valid(raise_exception=True)
         role = serializer.save()
+        
+        from apps.core.realtime import publish_event
+        publish_event("staff_changed")
+        
         return Response(RoleDetailSerializer(role).data)
     
     @require_super_admin

@@ -134,18 +134,21 @@ export function Modal({
   onClose,
   children,
   wide,
+  xl,
 }: {
   open: boolean;
   title: string;
   onClose: () => void;
   children: React.ReactNode;
   wide?: boolean;
+  xl?: boolean;
 }) {
   if (!open) return null;
+  const sizeClass = xl ? "max-w-5xl" : wide ? "max-w-3xl" : "max-w-lg";
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
       <div
-className={`rounded border border-line bg-card p-4 ${wide ? "w-full max-w-3xl" : "w-full max-w-lg"}`}
+        className={`rounded border border-line bg-card p-4 w-full ${sizeClass} max-h-[90vh] overflow-y-auto admin-scroll`}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-4 flex items-center justify-between">

@@ -1,9 +1,9 @@
 import * as Device from "expo-device";
 import * as Notifications from "expo-notifications";
-import Constants from "expo-constants";
 import { useEffect, useRef } from "react";
 import { AppState, Platform, type AppStateStatus } from "react-native";
 import type { AppUser } from "../types";
+import { EAS_PROJECT_ID } from "../config";
 import { registerPushToken, unregisterPushToken } from "../pushApi";
 import { navigationRef } from "../navigation/navigationRef";
 import { openInboxNoticeTarget } from "../navigation/browse";
@@ -53,15 +53,6 @@ async function ensureNotificationPermission(): Promise<boolean> {
   return status === "granted";
 }
 
-function resolveProjectId(): string | null {
-  return (
-    Constants.expoConfig?.extra?.eas?.projectId ??
-    Constants.easConfig?.projectId ??
-    Constants.expoConfig?.extra?.easProjectId ??
-    null
-  );
-}
-
 /** Run once on app start — channels + permission before any auth/modals. */
 export async function bootstrapPushNotifications() {
   if (!Device.isDevice) return;
@@ -77,14 +68,13 @@ async function resolveExpoPushToken(): Promise<string | null> {
   const granted = await ensureNotificationPermission();
   if (!granted) return null;
 
-  const projectId = resolveProjectId();
-  if (!projectId) {
+  if (!EAS_PROJECT_ID) {
     console.warn("[push] Missing EAS projectId in app config.");
     return null;
   }
 
   try {
-    const token = await Notifications.getExpoPushTokenAsync({ projectId });
+    const token = await Notifications.getExpoPushTokenAsync({ projectId: EAS_PROJECT_ID });
     return token.data;
   } catch (err) {
     console.warn("[push] getExpoPushTokenAsync failed:", err);
@@ -167,12 +157,12 @@ export function usePushNotifications(user: AppUser | null) {
           return;
         }
         if (!cancelled && userRef.current) {
-          console.warn("[push] No Expo push token — allow notifications in Android settings, then reopen the app.");
+          console.warn(
+            "[push] No Expo push token. Add EAS keystore SHA-1 to Firebase (com.najik.app), then reopen the app.",
+          );
         }
         return;
       }
-
-      if (tokenRef.current === pushToken) return;
 
       tokenRef.current = pushToken;
       try {
@@ -184,7 +174,6 @@ export function usePushNotifications(user: AppUser | null) {
         console.info("[push] Registered with API:", pushToken.slice(0, 28) + "...");
       } catch (err) {
         console.warn("[push] Failed to register token with API:", err);
-        tokenRef.current = null;
         if (!cancelled && attempt < 4) {
           await sleep(2000 * (attempt + 1));
           if (!cancelled && userRef.current) void syncToken(attempt + 1);

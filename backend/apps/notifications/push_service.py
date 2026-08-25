@@ -52,7 +52,7 @@ def send_push_to_user(
         PushDevice.objects.filter(user=user, is_active=True).values_list("token", flat=True)
     )
     if not tokens:
-        logger.info("push skipped for user %s — no registered device tokens", getattr(user, "id", ""))
+        logger.warning("push skipped for user %s — no registered device tokens", getattr(user, "id", ""))
         return
 
     payload = {
@@ -110,5 +110,9 @@ def send_push_to_user(
 
         if dead_tokens:
             PushDevice.objects.filter(token__in=dead_tokens).update(is_active=False)
+
+        ok = sum(1 for t in tickets if isinstance(t, dict) and t.get("status") == "ok")
+        if ok:
+            logger.info("expo push sent %s/%s to user %s", ok, len(tokens), getattr(user, "id", ""))
     except Exception:
         logger.exception("expo push send failed")

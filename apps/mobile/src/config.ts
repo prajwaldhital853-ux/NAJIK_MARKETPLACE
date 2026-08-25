@@ -47,5 +47,12 @@ function resolveGoogleRedirectUri() {
 
 export const GOOGLE_REDIRECT_URI = resolveGoogleRedirectUri();
 
+/** EAS project id — required for standalone APK push tokens (Expo Go uses its own). */
+export const EAS_PROJECT_ID =
+  process.env.EXPO_PUBLIC_EAS_PROJECT_ID ??
+  Constants.expoConfig?.extra?.eas?.projectId ??
+  Constants.easConfig?.projectId ??
+  "49a60495-121d-4c8d-92e7-a12340bcc4f6";
+
 /** Providers go straight to verified once documents are submitted; flip off to restore the admin review queue. */
 export const AUTO_VERIFY_PROVIDERS = false;

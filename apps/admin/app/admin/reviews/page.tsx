@@ -8,6 +8,8 @@ import { Btn, StatusBadge } from "@/components/admin/ui";
 import { formatNptDateTime } from "@/lib/format";
 import { ADMIN_POLL_FALLBACK_MS } from "@/lib/event-stream";
 import { useAdmin } from "@/lib/store";
+import { toastAdminError } from "@/lib/rbac";
+import { ReadOnlyBanner, useRbacGuard } from "@/lib/use-page-rbac";
 import { useSession } from "@/lib/session";
 import {
   getEngagementSummary,
@@ -30,6 +32,7 @@ function tabFromParams(kind: string | null): (typeof KIND_TABS)[number] {
 export default function ReviewsPage() {
   const { apiSession } = useSession();
   const { toast } = useAdmin();
+  const { readOnly, canUpdate, canDelete, guardUpdate, guardDelete } = useRbacGuard("reviews_ratings");
   const params = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
@@ -103,6 +106,9 @@ export default function ReviewsPage() {
 
   async function moderate(action: "hide" | "show" | "delete") {
     if (!open) return;
+    if (action === "delete") {
+      if (!guardDelete()) return;
+    } else if (!guardUpdate()) return;
     setBusyAction(action);
     try {
       if (open.kind === "comment") await patchEngagementComment(open.id, action);
@@ -111,7 +117,7 @@ export default function ReviewsPage() {
       if (action === "delete") closeDetail();
       await load();
     } catch (err) {
-      toast(err instanceof Error ? err.message : "Action failed");
+      toastAdminError(toast, err, "Action failed");
     } finally {
       setBusyAction(null);
     }
@@ -146,6 +152,7 @@ export default function ReviewsPage() {
         ]}
       />
       {error ? <p className="text-sm text-red-600">{error}</p> : null}
+      {readOnly ? <ReadOnlyBanner label="Reviews & Ratings" /> : null}
       <div className="flex flex-wrap gap-2">
         {KIND_TABS.map((label) => (
           <Btn key={label} kind={tab === label ? "primary" : "ghost"} onClick={() => writeTab(label)}>
@@ -240,12 +247,16 @@ export default function ReviewsPage() {
             <p className="mt-3 rounded-xl bg-elevated p-3 text-sm leading-relaxed text-ink">{open.text || "No text"}</p>
             <p className="mt-2 text-xs text-muted">{formatNptDateTime(open.created_at)}</p>
             <div className="mt-4 flex flex-wrap gap-2">
-              {!open.is_hidden ? (
+              {canUpdate && !open.is_hidden ? (
                 <Btn kind="ghost" loading={busyAction === "hide"} loadingLabel="Hiding…" disabled={!!busyAction} onClick={() => void moderate("hide")}>Hide</Btn>
-              ) : (
+              ) : null}
+              {canUpdate && open.is_hidden ? (
                 <Btn kind="ghost" loading={busyAction === "show"} loadingLabel="Restoring…" disabled={!!busyAction} onClick={() => void moderate("show")}>Show again</Btn>
-              )}
-              <Btn kind="danger" loading={busyAction === "delete"} loadingLabel="Deleting…" disabled={!!busyAction} onClick={() => void moderate("delete")}>Delete</Btn>
+              ) : null}
+              {canDelete ? (
+                <Btn kind="danger" loading={busyAction === "delete"} loadingLabel="Deleting…" disabled={!!busyAction} onClick={() => void moderate("delete")}>Delete</Btn>
+              ) : null}
+              {readOnly ? <p className="text-xs text-muted">View-only — moderation actions are disabled.</p> : null}
             </div>
           </div>
         </div>

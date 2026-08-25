@@ -11,6 +11,7 @@ import {
 } from "@/components/admin/seller-payments-admin-panel";
 import { getStaffPaymentsSummary } from "@/lib/staff-api";
 import { ADMIN_POLL_MS } from "@/lib/live-inbox";
+import { ReadOnlyBanner, usePageRbac } from "@/lib/use-page-rbac";
 
 const TABS = [
   { id: "requests", label: "Add-fund requests", hint: "Approve offline bank payments" },
@@ -33,6 +34,7 @@ function parseAudience(raw: string | null): Audience {
 
 export function PaymentsHub() {
   const searchParams = useSearchParams();
+  const { readOnly } = usePageRbac("seller_payments");
   const tabParam = searchParams.get("tab");
   const audience = parseAudience(searchParams.get("audience"));
   const active: TabId = isTab(tabParam) ? tabParam : "requests";
@@ -84,6 +86,8 @@ export function PaymentsHub() {
         crumb="Dashboard / Payments"
         summary="Manage buyer and seller wallet balances, approve bank top-ups, set fees, and run Refer & Earn. All money moves offline — this panel is for records and approval only."
       />
+
+      {readOnly ? <div className="mb-4"><ReadOnlyBanner label="Seller Payments" /></div> : null}
 
       <div className="mb-4 flex flex-wrap gap-3">
         <a

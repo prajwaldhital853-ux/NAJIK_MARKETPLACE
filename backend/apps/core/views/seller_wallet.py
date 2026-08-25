@@ -30,6 +30,7 @@ from apps.core.seller_wallet_service import (
 from apps.listings.models import Listing
 from apps.staff.authentication import StaffJWTAuthentication
 from apps.staff.permissions import IsStaffUser
+from apps.staff.rbac import require_listing_rbac, require_rbac_method
 
 
 def _staff_account_type(request) -> str:
@@ -232,6 +233,7 @@ class StaffSellerPaymentConfigView(APIView):
         return Response(payment_config_payload(request, cfg))
 
     def patch(self, request):
+        require_rbac_method(request.user, "seller_payments", "PATCH")
         cfg = SellerPaymentConfig.get_for_audience(
             SellerPaymentConfig.AUDIENCE_USER
             if _staff_account_type(request) == AppUser.ACCOUNT_USER
@@ -308,6 +310,7 @@ class StaffLoadRequestApproveView(APIView):
     permission_classes = [IsStaffUser]
 
     def post(self, request, pk):
+        require_rbac_method(request.user, "seller_payments", "PATCH")
         try:
             load = approve_load_request(pk, request.user)
         except SellerLoadRequest.DoesNotExist:
@@ -322,6 +325,7 @@ class StaffLoadRequestRejectView(APIView):
     permission_classes = [IsStaffUser]
 
     def post(self, request, pk):
+        require_rbac_method(request.user, "seller_payments", "PATCH")
         note = str(request.data.get("admin_note") or request.data.get("note") or "")
         try:
             load = reject_load_request(pk, request.user, note)
@@ -579,6 +583,7 @@ class StaffSellerWalletAdjustView(APIView):
     permission_classes = [IsStaffUser]
 
     def post(self, request, provider_id):
+        require_rbac_method(request.user, "seller_payments", "PATCH")
         account_type = _staff_account_type(request)
         try:
             provider = AppUser.objects.get(pk=provider_id, account_type=account_type)
@@ -604,6 +609,7 @@ class StaffListingFeeRefundView(APIView):
         listing = Listing.objects.filter(pk=listing_id).first()
         if not listing:
             return Response({"detail": "Listing not found."}, status=status.HTTP_404_NOT_FOUND)
+        require_listing_rbac(request.user, listing, "PATCH")
         note = str(request.data.get("note") or "")
         try:
             tx = refund_listing_fee(listing, request.user, note)

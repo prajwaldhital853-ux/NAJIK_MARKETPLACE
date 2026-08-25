@@ -289,6 +289,9 @@ class StaffChatReportDetailView(APIView):
         return Response(serialize_staff_report(row, request, messages=True))
 
     def patch(self, request, pk):
+        from apps.staff.rbac import require_rbac_method
+
+        require_rbac_method(request.user, "reports_complaints", "PATCH")
         row = get_object_or_404(ChatReport.objects.select_related("reporter", "accused", "thread"), pk=pk)
         status_value = (request.data.get("status") or "").strip()
         if status_value in {ChatReport.STATUS_OPEN, ChatReport.STATUS_REVIEW, ChatReport.STATUS_RESOLVED}:

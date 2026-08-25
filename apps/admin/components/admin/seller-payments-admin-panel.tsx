@@ -22,6 +22,8 @@ import {
 } from "@/lib/staff-api";
 import { formatNptDateTime } from "@/lib/format";
 import { useAdmin } from "@/lib/store";
+import { toastAdminError } from "@/lib/rbac";
+import { ReadOnlyBanner, useRbacGuard } from "@/lib/use-page-rbac";
 
 async function fileToDataUri(file: File) {
   const buffer = await file.arrayBuffer();
@@ -71,6 +73,7 @@ export function SellerPaymentsConfigPanel({
   audience?: "provider" | "user";
 }) {
   const { toast } = useAdmin();
+  const { readOnly, guardUpdate } = useRbacGuard("seller_payments");
   const [cfg, setCfg] = useState<SellerPaymentConfig | null>(null);
   const [fee, setFee] = useState("10");
   const [feeLabel, setFeeLabel] = useState("Rs. 10");
@@ -103,6 +106,7 @@ export function SellerPaymentsConfigPanel({
   }, [toast, audience]);
 
   async function save(qrFile?: File | null) {
+    if (!guardUpdate()) return;
     setBusy(true);
     try {
       const payload: Record<string, unknown> = {
@@ -123,7 +127,7 @@ export function SellerPaymentsConfigPanel({
       toast("Seller payment settings saved.");
       onChanged?.();
     } catch (err) {
-      toast(err instanceof Error ? err.message : "Could not save settings.");
+      toastAdminError(toast, err, "Could not save settings.");
     } finally {
       setBusy(false);
     }
@@ -135,34 +139,35 @@ export function SellerPaymentsConfigPanel({
       <p className="mt-1 text-[12px] text-muted">
         Per-listing fee deducted when a seller publishes live. Offline bank top-ups — approve load requests below.
       </p>
+      {readOnly ? <div className="mt-3"><ReadOnlyBanner label="Seller Payments" /></div> : null}
       <div className="mt-3 grid gap-3 md:grid-cols-2">
         <Field label="Listing fee (Rs.)">
-          <input className={inputClass} value={fee} onChange={(e) => setFee(e.target.value)} />
+          <input className={inputClass} value={fee} onChange={(e) => setFee(e.target.value)} disabled={readOnly} />
         </Field>
         <Field label="Fee label">
-          <input className={inputClass} value={feeLabel} onChange={(e) => setFeeLabel(e.target.value)} />
+          <input className={inputClass} value={feeLabel} onChange={(e) => setFeeLabel(e.target.value)} disabled={readOnly} />
         </Field>
         <Field label="Min load (Rs.)">
-          <input className={inputClass} value={minLoad} onChange={(e) => setMinLoad(e.target.value)} />
+          <input className={inputClass} value={minLoad} onChange={(e) => setMinLoad(e.target.value)} disabled={readOnly} />
         </Field>
         <Field label="Max load (Rs.)">
-          <input className={inputClass} value={maxLoad} onChange={(e) => setMaxLoad(e.target.value)} />
+          <input className={inputClass} value={maxLoad} onChange={(e) => setMaxLoad(e.target.value)} disabled={readOnly} />
         </Field>
         <Field label="Bank name">
-          <input className={inputClass} value={bankName} onChange={(e) => setBankName(e.target.value)} />
+          <input className={inputClass} value={bankName} onChange={(e) => setBankName(e.target.value)} disabled={readOnly} />
         </Field>
         <Field label="Account name">
-          <input className={inputClass} value={accountName} onChange={(e) => setAccountName(e.target.value)} />
+          <input className={inputClass} value={accountName} onChange={(e) => setAccountName(e.target.value)} disabled={readOnly} />
         </Field>
         <Field label="Account number">
-          <input className={inputClass} value={accountNumber} onChange={(e) => setAccountNumber(e.target.value)} />
+          <input className={inputClass} value={accountNumber} onChange={(e) => setAccountNumber(e.target.value)} disabled={readOnly} />
         </Field>
         <Field label="Branch">
-          <input className={inputClass} value={branch} onChange={(e) => setBranch(e.target.value)} />
+          <input className={inputClass} value={branch} onChange={(e) => setBranch(e.target.value)} disabled={readOnly} />
         </Field>
         <div className="md:col-span-2">
           <Field label="Payment instructions">
-            <textarea className={inputClass} rows={3} value={instructions} onChange={(e) => setInstructions(e.target.value)} />
+            <textarea className={inputClass} rows={3} value={instructions} onChange={(e) => setInstructions(e.target.value)} disabled={readOnly} />
           </Field>
         </div>
         <Field label="Payment QR image">
@@ -170,11 +175,15 @@ export function SellerPaymentsConfigPanel({
             type="file"
             accept="image/jpeg,image/png,image/webp"
             className={inputClass}
-            onChange={(e) => void save(e.target.files?.[0] || null)}
+            disabled={readOnly}
+            onChange={(e) => {
+              if (readOnly) return;
+              void save(e.target.files?.[0] || null);
+            }}
           />
         </Field>
         <label className="flex items-center gap-2 text-[12px] font-semibold text-ink md:col-span-2">
-          <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} />
+          <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} disabled={readOnly} />
           Payments active
         </label>
       </div>
@@ -183,7 +192,11 @@ export function SellerPaymentsConfigPanel({
         <img src={cfg.qr_code_url} alt="Payment QR" className="mt-3 h-32 w-32 rounded-lg border border-line object-contain" />
       ) : null}
       <div className="mt-3">
-        <Btn onClick={() => void save()} loading={busy} loadingLabel="Saving…">Save payment settings</Btn>
+        {!readOnly ? (
+          <Btn onClick={() => void save()} loading={busy} loadingLabel="Saving…">
+            Save payment settings
+          </Btn>
+        ) : null}
       </div>
     </section>
   );
@@ -199,6 +212,7 @@ export function SellerLoadRequestsPanel({
   audience?: "provider" | "user";
 }) {
   const { toast } = useAdmin();
+  const { readOnly, guardUpdate } = useRbacGuard("seller_payments");
   const [rows, setRows] = useState<SellerLoadRequestRow[]>([]);
   const [feeRupees, setFeeRupees] = useState(10);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -241,6 +255,7 @@ export function SellerLoadRequestsPanel({
   }
 
   async function approve(id: string) {
+    if (!guardUpdate()) return;
     setBusyId(id);
     try {
       await approveStaffLoadRequest(id);
@@ -255,6 +270,7 @@ export function SellerLoadRequestsPanel({
   }
 
   async function reject(id: string) {
+    if (!guardUpdate()) return;
     setBusyId(id);
     try {
       await rejectStaffLoadRequest(id, rejectNote[id] || "");
@@ -324,22 +340,28 @@ export function SellerLoadRequestsPanel({
                 )}
               </div>
 
-              <Field label="Rejection note (if rejecting)">
-                <input
-                  className={inputClass}
-                  value={rejectNote[row.id] || ""}
-                  onChange={(e) => setRejectNote((prev) => ({ ...prev, [row.id]: e.target.value }))}
-                  placeholder="e.g. Amount not received"
-                />
-              </Field>
-              <div className="mt-3 flex flex-wrap gap-2">
-                <Btn onClick={() => void approve(row.id)} loading={busyId === row.id} loadingLabel="Approving…">
-                  Approve & credit
-                </Btn>
-                <Btn kind="danger" onClick={() => void reject(row.id)} loading={busyId === row.id} loadingLabel="Rejecting…">
-                  Reject
-                </Btn>
-              </div>
+              {!readOnly ? (
+                <>
+                  <Field label="Rejection note (if rejecting)">
+                    <input
+                      className={inputClass}
+                      value={rejectNote[row.id] || ""}
+                      onChange={(e) => setRejectNote((prev) => ({ ...prev, [row.id]: e.target.value }))}
+                      placeholder="e.g. Amount not received"
+                    />
+                  </Field>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <Btn onClick={() => void approve(row.id)} loading={busyId === row.id} loadingLabel="Approving…">
+                      Approve & credit
+                    </Btn>
+                    <Btn kind="danger" onClick={() => void reject(row.id)} loading={busyId === row.id} loadingLabel="Rejecting…">
+                      Reject
+                    </Btn>
+                  </div>
+                </>
+              ) : (
+                <p className="mt-2 text-[11px] text-muted">View-only — you cannot approve or reject load requests.</p>
+              )}
             </div>
           );
         })
@@ -361,6 +383,7 @@ export function SellerWalletsPanel({
   audience?: "provider" | "user";
 }) {
   const { toast } = useAdmin();
+  const { readOnly, guardUpdate } = useRbacGuard("seller_payments");
   const [rows, setRows] = useState<SellerWalletRow[]>([]);
   const [providers, setProviders] = useState<AppDirectoryUser[]>([]);
   const [sellerSearch, setSellerSearch] = useState("");
@@ -431,6 +454,7 @@ export function SellerWalletsPanel({
   }
 
   async function adjust() {
+    if (!guardUpdate()) return;
     if (!providerId.trim()) {
       toast("Choose a seller first.");
       return;
@@ -512,6 +536,7 @@ export function SellerWalletsPanel({
         </div>
       ) : null}
 
+      {!readOnly ? (
       <div className="mt-4 grid gap-3 md:grid-cols-2">
         <Field label="Adjust (+/- Rs.)">
           <input className={inputClass} value={adjustAmount} onChange={(e) => setAdjustAmount(e.target.value)} placeholder="500 or -100" />
@@ -520,8 +545,15 @@ export function SellerWalletsPanel({
           <input className={inputClass} value={adjustNote} onChange={(e) => setAdjustNote(e.target.value)} placeholder="Reason" />
         </Field>
       </div>
+      ) : null}
       <div className="mt-3">
-        <Btn onClick={() => void adjust()} loading={busy} loadingLabel="Saving…">Apply adjustment</Btn>
+        {!readOnly ? (
+          <Btn onClick={() => void adjust()} loading={busy} loadingLabel="Saving…">
+            Apply adjustment
+          </Btn>
+        ) : (
+          <ReadOnlyBanner label="Seller Payments" />
+        )}
       </div>
       <div className="mt-4 max-h-64 space-y-2 overflow-y-auto">
         {rows.map((row) => (

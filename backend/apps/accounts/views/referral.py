@@ -16,6 +16,7 @@ from apps.accounts.models.referral import (
 from apps.accounts.permissions import IsAppUser
 from apps.staff.authentication import StaffJWTAuthentication
 from apps.staff.permissions import IsStaffUser
+from apps.staff.rbac import require_rbac_method
 
 
 def _audience_param(raw: str | None) -> str:
@@ -189,6 +190,7 @@ class StaffReferEarnConfigView(APIView):
         return Response(public_refer_config_payload(audience))
 
     def patch(self, request):
+        require_rbac_method(request.user, "seller_payments", "PATCH")
         audience = _audience_param(request.query_params.get("audience"))
         cfg = ReferEarnConfig.get_for_audience(audience)
         if "reward_amount" in request.data:

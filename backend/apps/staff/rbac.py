@@ -104,6 +104,23 @@ def require_rbac_method(user, page: str, method: str):
     require_rbac(user, page, action_for_method(method))
 
 
+def require_any_rbac(user, *page_action_pairs: tuple[str, str]):
+    if getattr(user, "is_super_admin", False):
+        return
+    for page, action in page_action_pairs:
+        if user_has_rbac(user, page, action):
+            return
+    raise PermissionDenied(
+        "Read-only access: you don't have permission for this action. "
+        "Ask your Super Admin to update your role permissions."
+    )
+
+
+def require_any_rbac_method(user, *page_method_pairs: tuple[str, str]):
+    pairs = [(page, action_for_method(method)) for page, method in page_method_pairs]
+    require_any_rbac(user, *pairs)
+
+
 def require_listing_rbac(user, listing_or_category, method: str):
     category = listing_or_category if isinstance(listing_or_category, str) else listing_or_category.category
     require_rbac_method(user, listing_page(category), method)

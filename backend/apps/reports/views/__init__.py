@@ -19,6 +19,7 @@ from apps.reports.serializers import (
 )
 from apps.staff.authentication import StaffJWTAuthentication
 from apps.staff.permissions import IsStaffUser
+from apps.staff.rbac import require_rbac_method
 
 
 def set_user_status(user: AppUser, status_value: str):
@@ -149,6 +150,7 @@ class StaffComplaintDetailView(APIView):
         return Response(ComplaintSerializer(complaint).data)
 
     def patch(self, request, pk):
+        require_rbac_method(request.user, "reports_complaints", "PATCH")
         complaint = get_object_or_404(
             Complaint.objects.select_related("reporter", "accused", "listing"),
             pk=pk,

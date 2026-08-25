@@ -7,6 +7,7 @@ import { Avatar, Btn, Field, StatusBadge, inputClass } from "./ui";
 import { Kv } from "./resource-page";
 import { useAdmin } from "@/lib/store";
 import { toastAdminError } from "@/lib/rbac";
+import { usePageRbac } from "@/lib/use-page-rbac";
 import type { User } from "@/lib/demo-data";
 
 export function userDocuments(u: User) {
@@ -27,6 +28,7 @@ export function UserDetailDrawer({
   onClose: () => void;
 }) {
   const admin = useAdmin();
+  const { canUpdate, canDelete, readOnly } = usePageRbac("user_management");
   const [note, setNote] = useState("");
   const [listingsOpen, setListingsOpen] = useState(false);
   const [loading, setLoading] = useState<string | null>(null);
@@ -86,96 +88,105 @@ export function UserDetailDrawer({
         footer={
           user ? (
             <div className="space-y-3 text-sm">
+              {readOnly ? (
+                <p className="rounded-xl border border-line bg-elevated px-3 py-2 text-xs text-muted">
+                  View-only access — you cannot edit, block, or deactivate users.
+                </p>
+              ) : null}
               {isProvider ? (
                 <Btn kind="primary" onClick={() => setListingsOpen(true)}>
                   See all listings of this user
                 </Btn>
               ) : null}
-              <div className="space-y-2">
-                <p className="text-xs font-semibold uppercase tracking-wide text-muted">Moderation</p>
-                <Field label="Note for user (shown in app)">
-                  <textarea
-                    className={inputClass}
-                    rows={2}
-                    value={note}
-                    onChange={(e) => setNote(e.target.value)}
-                    placeholder="Write a note the user will see on Home and Profile"
-                  />
-                </Field>
-                <div className="flex flex-wrap items-center gap-2">
-                  <Btn
-                    kind="primary"
-                    loading={loading === "note"}
-                    loadingLabel="Sending…"
-                    onClick={() =>
-                      void runAction("note", async () => {
-                        if (!note.trim()) {
-                          admin.toast("Write a note before sending.");
-                          return;
-                        }
-                        await admin.patch("users", user.id, { staff_warning: note.trim(), notes: note.trim() });
-                        admin.toast("Note sent to user.");
-                      })
-                    }
-                  >
-                    Send note
-                  </Btn>
-                  <Btn
-                    kind="ghost"
-                    loading={loading === "clear"}
-                    loadingLabel="Clearing…"
-                    onClick={() =>
-                      void runAction("clear", async () => {
-                        await admin.patch("users", user.id, { staff_warning: "", notes: "" });
-                        admin.toast("Note cleared.");
-                        setNote("");
-                      })
-                    }
-                  >
-                    Clear note
-                  </Btn>
-                  {(["active", "deactivated", "blocked"] as const).map((s) => (
+              {canUpdate ? (
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted">Moderation</p>
+                  <Field label="Note for user (shown in app)">
+                    <textarea
+                      className={inputClass}
+                      rows={2}
+                      value={note}
+                      onChange={(e) => setNote(e.target.value)}
+                      placeholder="Write a note the user will see on Home and Profile"
+                    />
+                  </Field>
+                  <div className="flex flex-wrap items-center gap-2">
                     <Btn
-                      key={s}
-                      kind={s === "blocked" || s === "deactivated" ? "danger" : "ghost"}
-                      loading={loading === s}
-                      loadingLabel={`${s === "active" ? "Activating" : s === "blocked" ? "Blocking" : "Deactivating"}…`}
+                      kind="primary"
+                      loading={loading === "note"}
+                      loadingLabel="Sending…"
                       onClick={() =>
-                        void runAction(s, async () => {
-                          const patchData = note.trim()
-                            ? { status: s, staff_warning: note.trim(), notes: note.trim() }
-                            : { status: s };
-                          await admin.patch("users", user.id, patchData);
-                          admin.toast(
-                            s === "active"
-                              ? "Account is active."
-                              : s === "blocked"
-                                ? "Account blocked."
-                                : "Account deactivated.",
-                          );
+                        void runAction("note", async () => {
+                          if (!note.trim()) {
+                            admin.toast("Write a note before sending.");
+                            return;
+                          }
+                          await admin.patch("users", user.id, { staff_warning: note.trim(), notes: note.trim() });
+                          admin.toast("Note sent to user.");
                         })
                       }
                     >
-                      {s}
+                      Send note
                     </Btn>
-                  ))}
-                  <Btn
-                    kind="danger"
-                    loading={loading === "delete"}
-                    loadingLabel="Deleting…"
-                    onClick={() => {
-                      if (!window.confirm("Delete this account and all of their listings? This cannot be undone.")) return;
-                      void runAction("delete", async () => {
-                        await admin.remove("users", user.id);
-                        admin.toast("Deleted.");
-                        onClose();
-                      });
-                    }}
-                  >
-                    Delete
-                  </Btn>
+                    <Btn
+                      kind="ghost"
+                      loading={loading === "clear"}
+                      loadingLabel="Clearing…"
+                      onClick={() =>
+                        void runAction("clear", async () => {
+                          await admin.patch("users", user.id, { staff_warning: "", notes: "" });
+                          admin.toast("Note cleared.");
+                          setNote("");
+                        })
+                      }
+                    >
+                      Clear note
+                    </Btn>
+                    {(["active", "deactivated", "blocked"] as const).map((s) => (
+                      <Btn
+                        key={s}
+                        kind={s === "blocked" || s === "deactivated" ? "danger" : "ghost"}
+                        loading={loading === s}
+                        loadingLabel={`${s === "active" ? "Activating" : s === "blocked" ? "Blocking" : "Deactivating"}…`}
+                        onClick={() =>
+                          void runAction(s, async () => {
+                            const patchData = note.trim()
+                              ? { status: s, staff_warning: note.trim(), notes: note.trim() }
+                              : { status: s };
+                            await admin.patch("users", user.id, patchData);
+                            admin.toast(
+                              s === "active"
+                                ? "Account is active."
+                                : s === "blocked"
+                                  ? "Account blocked."
+                                  : "Account deactivated.",
+                            );
+                          })
+                        }
+                      >
+                        {s}
+                      </Btn>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              ) : null}
+              {canDelete ? (
+                <Btn
+                  kind="danger"
+                  loading={loading === "delete"}
+                  loadingLabel="Deleting…"
+                  onClick={() => {
+                    if (!window.confirm("Delete this account and all of their listings? This cannot be undone.")) return;
+                    void runAction("delete", async () => {
+                      await admin.remove("users", user.id);
+                      admin.toast("Deleted.");
+                      onClose();
+                    });
+                  }}
+                >
+                  Delete
+                </Btn>
+              ) : null}
             </div>
           ) : null
         }

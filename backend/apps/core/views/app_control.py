@@ -10,6 +10,7 @@ from rest_framework.views import APIView
 from apps.core.models import HomeBannerSlide, ProviderLedgerEntry, ProviderPlan
 from apps.staff.authentication import StaffJWTAuthentication
 from apps.staff.permissions import IsStaffUser
+from apps.staff.rbac import require_rbac_method
 from apps.verification.serializers import file_from_data_uri
 
 MAX_HOME_BANNERS = 3
@@ -79,6 +80,7 @@ class StaffHomeBannerListCreateView(APIView):
         return Response([slide_payload(request, slide) for slide in slides])
 
     def post(self, request):
+        require_rbac_method(request.user, "app_control", "POST")
         active_count = HomeBannerSlide.objects.filter(is_active=True).count()
         if active_count >= MAX_HOME_BANNERS:
             return Response(
@@ -115,6 +117,7 @@ class StaffHomeBannerDetailView(APIView):
     permission_classes = [IsStaffUser]
 
     def patch(self, request, pk):
+        require_rbac_method(request.user, "app_control", "PATCH")
         slide = HomeBannerSlide.objects.filter(pk=pk).first()
         if not slide:
             return Response({"detail": "Banner not found."}, status=status.HTTP_404_NOT_FOUND)
@@ -151,6 +154,7 @@ class StaffHomeBannerDetailView(APIView):
         return Response(slide_payload(request, slide))
 
     def delete(self, request, pk):
+        require_rbac_method(request.user, "app_control", "DELETE")
         slide = HomeBannerSlide.objects.filter(pk=pk).first()
         if not slide:
             return Response(status=status.HTTP_404_NOT_FOUND)
@@ -191,6 +195,7 @@ class StaffProviderPlanListCreateView(APIView):
         return Response([plan_payload(plan) for plan in plans])
 
     def post(self, request):
+        require_rbac_method(request.user, "app_control", "POST")
         name = (request.data.get("name") or "").strip()
         price_label = (request.data.get("price_label") or "").strip()
         if not name or not price_label:
@@ -216,6 +221,7 @@ class StaffProviderPlanDetailView(APIView):
     permission_classes = [IsStaffUser]
 
     def patch(self, request, pk):
+        require_rbac_method(request.user, "app_control", "PATCH")
         plan = ProviderPlan.objects.filter(pk=pk).first()
         if not plan:
             return Response({"detail": "Plan not found."}, status=status.HTTP_404_NOT_FOUND)
@@ -236,6 +242,7 @@ class StaffProviderPlanDetailView(APIView):
         return Response(plan_payload(plan))
 
     def delete(self, request, pk):
+        require_rbac_method(request.user, "app_control", "DELETE")
         plan = ProviderPlan.objects.filter(pk=pk).first()
         if not plan:
             return Response(status=status.HTTP_404_NOT_FOUND)
@@ -272,6 +279,7 @@ class StaffProviderLedgerListCreateView(APIView):
         return Response([ledger_payload(row) for row in items[:200]])
 
     def post(self, request):
+        require_rbac_method(request.user, "app_control", "POST")
         provider_id = (request.data.get("provider_id") or "").strip()
         title = (request.data.get("title") or "").strip()
         if not provider_id or not title:

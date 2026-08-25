@@ -478,7 +478,7 @@ export function ListingModeration({
                 </p>
               ) : null}
               {open.status === "approved" && canUpdate ? (
-                <UrgentListingControls listing={open} onUpdated={() => void load()} />
+                <UrgentListingControls listing={open} rbacSource="listing" onUpdated={() => void load()} />
               ) : null}
               {canUpdate && (open.status === "pending" || open.has_pending_edit) ? (
                 <>

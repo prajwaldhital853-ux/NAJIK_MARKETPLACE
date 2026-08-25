@@ -5,6 +5,7 @@ import { PageHeader } from "@/components/admin/page-frame";
 import { Btn, Field, inputClass } from "@/components/admin/ui";
 import { useTheme } from "@/lib/theme";
 import { useAdmin } from "@/lib/store";
+import { ReadOnlyBanner, usePageRbac } from "@/lib/use-page-rbac";
 import { useSession } from "@/lib/session";
 import { fetchBranding, fetchStaffImage, uploadSignatory } from "@/lib/staff-api";
 
@@ -22,6 +23,10 @@ export default function SettingsPage() {
   const { theme, setTheme } = useTheme();
   const { toast } = useAdmin();
   const { apiSession } = useSession();
+  const settingsRbac = usePageRbac("settings");
+  const kycRbac = usePageRbac("kyc_verification");
+  const canEditSignatory = settingsRbac.canUpdate || kycRbac.canUpdate;
+  const workspaceReadOnly = !settingsRbac.canUpdate;
   const [name, setName] = useState("NAJIK");
   const [support, setSupport] = useState("ops@najik.com");
   const [payout, setPayout] = useState("Friday 10:00–16:00 NPT");
@@ -47,7 +52,7 @@ export default function SettingsPage() {
   }, [apiSession]);
 
   async function onSignatoryFile(file?: File | null) {
-    if (!file) return;
+    if (!file || !canEditSignatory) return;
     setSignBusy(true);
     try {
       const dataUri = await fileToDataUri(file);
@@ -70,24 +75,26 @@ export default function SettingsPage() {
         title="Settings"
         summary="Workspace, theme, KYC SLA, ID card signatory and payout window for the NAJIK operations desk."
       />
+      {settingsRbac.readOnly ? <div className="mb-4"><ReadOnlyBanner label="Settings" /></div> : null}
       <div className="grid gap-4 lg:grid-cols-2">
         <section className="card-glow space-y-3 rounded-2xl border border-line bg-card p-5">
           <h2 className="text-sm font-semibold text-ink">Workspace</h2>
           <Field label="Brand name">
-            <input className={inputClass} value={name} onChange={(e) => setName(e.target.value)} />
+            <input className={inputClass} value={name} onChange={(e) => setName(e.target.value)} disabled={workspaceReadOnly} />
           </Field>
           <Field label="Ops email">
-            <input className={inputClass} value={support} onChange={(e) => setSupport(e.target.value)} />
+            <input className={inputClass} value={support} onChange={(e) => setSupport(e.target.value)} disabled={workspaceReadOnly} />
           </Field>
           <Field label="Payout window">
-            <input className={inputClass} value={payout} onChange={(e) => setPayout(e.target.value)} />
+            <input className={inputClass} value={payout} onChange={(e) => setPayout(e.target.value)} disabled={workspaceReadOnly} />
           </Field>
           <Field label="KYC SLA (hours)">
-            <input className={inputClass} value={kycSla} onChange={(e) => setKycSla(e.target.value)} />
+            <input className={inputClass} value={kycSla} onChange={(e) => setKycSla(e.target.value)} disabled={workspaceReadOnly} />
           </Field>
           <Field label="Dashain featured cap">
-            <input className={inputClass} value={featCap} onChange={(e) => setFeatCap(e.target.value)} />
+            <input className={inputClass} value={featCap} onChange={(e) => setFeatCap(e.target.value)} disabled={workspaceReadOnly} />
           </Field>
+          {!workspaceReadOnly ? (
           <Btn
             loading={saveBusy}
             loadingLabel="Saving…"
@@ -102,6 +109,7 @@ export default function SettingsPage() {
           >
             Save workspace
           </Btn>
+          ) : null}
         </section>
 
         <section className="card-glow space-y-4 rounded-2xl border border-line bg-card p-5">
@@ -127,13 +135,14 @@ export default function SettingsPage() {
           </div>
           <label className="flex items-center justify-between gap-3 text-sm text-ink">
             Auto-verify providers on submit
-            <input type="checkbox" checked={autoVerify} onChange={(e) => setAutoVerify(e.target.checked)} />
+            <input type="checkbox" checked={autoVerify} disabled={workspaceReadOnly} onChange={(e) => setAutoVerify(e.target.checked)} />
           </label>
           <label className="flex items-center justify-between gap-3 text-sm text-ink">
             Maintenance mode
-            <input type="checkbox" checked={maintenance} onChange={(e) => setMaintenance(e.target.checked)} />
+            <input type="checkbox" checked={maintenance} disabled={workspaceReadOnly} onChange={(e) => setMaintenance(e.target.checked)} />
           </label>
           <p className="text-xs leading-relaxed text-muted">Version 2.5.0 · Provider queue remains at /admin/providers.</p>
+          {!workspaceReadOnly ? (
           <Btn
             kind="ghost"
             loading={flagsBusy}
@@ -151,6 +160,7 @@ export default function SettingsPage() {
           >
             Apply flags
           </Btn>
+          ) : null}
         </section>
 
         <section className="card-glow space-y-3 rounded-2xl border border-line bg-card p-5 lg:col-span-2">
@@ -172,11 +182,13 @@ export default function SettingsPage() {
               <input
                 type="file"
                 accept="image/png,image/jpeg,image/webp"
-                disabled={signBusy || !apiSession}
+                disabled={signBusy || !apiSession || !canEditSignatory}
                 onChange={(event) => void onSignatoryFile(event.target.files?.[0])}
                 className="block text-sm text-ink"
               />
-              <p className="text-[11px] text-muted">{signBusy ? "Uploading…" : "Recommended: black ink on white background."}</p>
+              <p className="text-[11px] text-muted">
+                {signBusy ? "Uploading…" : canEditSignatory ? "Recommended: black ink on white background." : "View-only — signatory upload is disabled."}
+              </p>
             </div>
           </div>
         </section>

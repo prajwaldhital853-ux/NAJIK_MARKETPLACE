@@ -24,6 +24,7 @@ from apps.promotions.boost_service import (
 from apps.promotions.models import BoostCampaign, BoostPricing
 from apps.staff.authentication import StaffJWTAuthentication
 from apps.staff.permissions import IsStaffUser
+from apps.staff.rbac import require_rbac_method
 
 
 class BoostPricingSerializer(serializers.ModelSerializer):
@@ -232,6 +233,7 @@ class StaffBoostPricingView(APIView):
         return Response(BoostPricingSerializer(pricing).data)
     
     def patch(self, request):
+        require_rbac_method(request.user, "ads_promotions", "PATCH")
         pricing = BoostPricing.get_solo()
         
         for field in [
@@ -295,6 +297,7 @@ class StaffBoostCampaignControlView(APIView):
     permission_classes = [IsStaffUser]
     
     def post(self, request, pk):
+        require_rbac_method(request.user, "ads_promotions", "PATCH")
         campaign = get_object_or_404(BoostCampaign, pk=pk)
         
         action = request.data.get("action")

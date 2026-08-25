@@ -7,6 +7,8 @@ import { Btn, StatusBadge, inputClass } from "@/components/admin/ui";
 import { formatNptDateTime, formatNptTime } from "@/lib/format";
 import { ADMIN_POLL_FALLBACK_MS } from "@/lib/event-stream";
 import { useAdmin } from "@/lib/store";
+import { toastAdminError } from "@/lib/rbac";
+import { ReadOnlyBanner, useRbacGuard } from "@/lib/use-page-rbac";
 import { useSession } from "@/lib/session";
 import { listComplaints, patchComplaint, type ComplaintTicket } from "@/lib/staff-api";
 
@@ -45,6 +47,7 @@ function parseSectionParam(value: string | null): "all" | ComplaintSection {
 export default function ReportsPage() {
   const { apiSession } = useSession();
   const { markInboxSeen, toast } = useAdmin();
+  const { readOnly, guardUpdate } = useRbacGuard("reports_complaints");
   const params = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
@@ -223,13 +226,14 @@ export default function ReportsPage() {
     },
   ) {
     if (!selected) return;
+    if (!guardUpdate()) return;
     setBusyAction(actionKey);
     try {
       await patchComplaint(selected.id, body);
       toast("Complaint updated.");
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not update complaint.");
+      toastAdminError(toast, err, "Could not update complaint.");
     } finally {
       setBusyAction(null);
     }
@@ -356,6 +360,7 @@ export default function ReportsPage() {
         </div>
       </div>
       {error ? <p className="mb-4 text-sm text-red">{error}</p> : null}
+      {readOnly ? <div className="mb-4"><ReadOnlyBanner label="Reports & Complaints" /></div> : null}
       {loading ? (
         <AdminLoadingState label="Loading complaints…" />
       ) : visible.length === 0 && !error ? (
@@ -453,12 +458,15 @@ export default function ReportsPage() {
                 value={adminNote}
                 onChange={(e) => setAdminNote(e.target.value)}
                 placeholder="Internal note for staff…"
+                disabled={readOnly}
               />
+              {!readOnly ? (
               <div className="mt-2">
                 <ComplaintBtn actionKey="save_note" body={{ admin_note: adminNote }}>
                   Save note
                 </ComplaintBtn>
               </div>
+              ) : null}
 
               <label className="mt-4 block text-xs font-semibold uppercase tracking-wide text-muted">Warning note to user</label>
               <textarea
@@ -466,6 +474,7 @@ export default function ReportsPage() {
                 value={warningNote}
                 onChange={(e) => setWarningNote(e.target.value)}
                 placeholder="This message is shown in the user’s app…"
+                disabled={readOnly}
               />
               {selected.warning_sent_to ? (
                 <p className="mt-1 text-xs text-muted">
@@ -474,6 +483,8 @@ export default function ReportsPage() {
                 </p>
               ) : null}
 
+              {!readOnly ? (
+              <>
               <div className="mt-3 flex flex-wrap gap-2">
                 <ComplaintBtn actionKey="under_review" body={{ status: "under_review" }}>
                   Under review
@@ -538,6 +549,10 @@ export default function ReportsPage() {
                   Unblock / reactivate both
                 </ComplaintBtn>
               </div>
+              </>
+              ) : (
+                <p className="mt-4 text-xs text-muted">View-only — complaint actions are disabled.</p>
+              )}
             </section>
           ) : null}
         </div>

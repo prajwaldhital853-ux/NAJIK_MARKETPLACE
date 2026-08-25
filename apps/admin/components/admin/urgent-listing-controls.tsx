@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Btn, Field, inputClass } from "./ui";
 import { removeStaffListingUrgent, setStaffListingUrgent, type StaffListing } from "@/lib/staff-api";
+import { ReadOnlyBanner, useRbacGuard } from "@/lib/use-page-rbac";
 
 const PRESETS = [
   { label: "5 hours", hours: 5, days: 0 },
@@ -15,16 +16,23 @@ export function UrgentListingControls({
   listing,
   onUpdated,
   compact,
+  rbacSource = "app_control",
 }: {
   listing: StaffListing;
   onUpdated?: () => void;
   compact?: boolean;
+  /** Listing moderation uses category permissions; app control page uses app_control. */
+  rbacSource?: "listing" | "app_control";
 }) {
+  const listingGuard = useRbacGuard(undefined, listing.category);
+  const appGuard = useRbacGuard("app_control");
+  const { readOnly, guardUpdate } = rbacSource === "listing" ? listingGuard : appGuard;
   const [hours, setHours] = useState("5");
   const [days, setDays] = useState("0");
   const [loading, setLoading] = useState<string | null>(null);
 
   async function run(action: string, fn: () => Promise<void>) {
+    if (!guardUpdate()) return;
     setLoading(action);
     try {
       await fn();
@@ -35,6 +43,20 @@ export function UrgentListingControls({
   }
 
   const active = Boolean(listing.is_urgent);
+
+  if (readOnly) {
+    return (
+      <div className={`rounded-xl border border-line bg-elevated ${compact ? "p-2" : "p-3"}`}>
+        <p className="text-xs font-semibold text-ink">Urgent Sell</p>
+        <p className="mt-1 text-[11px] text-muted">
+          {active
+            ? `Live until ${listing.urgent_ends_at ? new Date(listing.urgent_ends_at).toLocaleString() : "—"}`
+            : "Not in Urgent Sell queue."}
+        </p>
+        {!compact ? <ReadOnlyBanner label="Urgent Sell" /> : null}
+      </div>
+    );
+  }
 
   return (
     <div className={`rounded-xl border border-line bg-elevated ${compact ? "p-2" : "p-3"}`}>

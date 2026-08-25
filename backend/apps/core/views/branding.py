@@ -14,6 +14,7 @@ from rest_framework import serializers
 from apps.core.models import BrandingConfig
 from apps.staff.authentication import StaffJWTAuthentication
 from apps.staff.permissions import IsStaffUser
+from apps.staff.rbac import require_any_rbac_method
 from apps.verification.serializers import file_from_data_uri
 
 
@@ -99,6 +100,11 @@ class StaffBrandingView(APIView):
         return Response(branding_payload(request))
 
     def post(self, request):
+        require_any_rbac_method(
+            request.user,
+            ("kyc_verification", "PATCH"),
+            ("settings", "PATCH"),
+        )
         config = BrandingConfig.get_solo()
         changed = False
 

@@ -7,6 +7,7 @@ from rest_framework.views import APIView
 from apps.listings.models import ListingComment, SellerReview
 from apps.staff.authentication import StaffJWTAuthentication
 from apps.staff.permissions import IsStaffUser
+from apps.staff.rbac import require_rbac
 
 
 class StaffEngagementSummaryView(APIView):
@@ -113,6 +114,7 @@ class StaffCommentModerationView(APIView):
         serializer = StaffEngagementActionSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         action = serializer.validated_data["action"]
+        require_rbac(request.user, "reviews_ratings", "delete" if action == "delete" else "update")
         if action == "delete":
             row.delete()
             return Response(status=status.HTTP_204_NO_CONTENT)
@@ -130,6 +132,7 @@ class StaffSellerReviewModerationView(APIView):
         serializer = StaffEngagementActionSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         action = serializer.validated_data["action"]
+        require_rbac(request.user, "reviews_ratings", "delete" if action == "delete" else "update")
         if action == "delete":
             row.delete()
             return Response(status=status.HTTP_204_NO_CONTENT)

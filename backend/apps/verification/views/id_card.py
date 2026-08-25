@@ -12,6 +12,7 @@ from apps.accounts.authentication import AppJWTAuthentication
 from apps.accounts.permissions import IsAppUser
 from apps.staff.authentication import StaffJWTAuthentication
 from apps.staff.permissions import IsStaffUser
+from apps.staff.rbac import require_rbac_method
 from apps.verification.models import ProviderIdCard, ensure_provider_id_card
 from apps.verification.serializers import provider_id_card_payload, staff_id_card_payload
 
@@ -173,6 +174,7 @@ class StaffIdCardDetailView(APIView):
     permission_classes = [IsStaffUser]
 
     def patch(self, request, pk):
+        require_rbac_method(request.user, "kyc_verification", "PATCH")
         card = get_object_or_404(
             ProviderIdCard.objects.select_related("owner", "owner__provider_application"),
             pk=pk,

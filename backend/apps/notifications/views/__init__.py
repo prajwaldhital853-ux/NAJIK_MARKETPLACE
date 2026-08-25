@@ -12,6 +12,7 @@ from apps.notifications.models import AppNotice
 from apps.notifications.serializers import AppNoticeCreateSerializer, AppNoticeSerializer
 from apps.staff.authentication import StaffJWTAuthentication
 from apps.staff.permissions import IsStaffUser
+from apps.staff.rbac import require_rbac_method
 
 
 class StaffNoticeListCreateView(APIView):
@@ -23,6 +24,7 @@ class StaffNoticeListCreateView(APIView):
         return Response(AppNoticeSerializer(items, many=True, context={"request": request}).data)
 
     def post(self, request):
+        require_rbac_method(request.user, "notifications", "POST")
         serializer = AppNoticeCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         notice = serializer.save()
@@ -37,6 +39,7 @@ class StaffNoticeDetailView(APIView):
     permission_classes = [IsStaffUser]
 
     def patch(self, request, pk):
+        require_rbac_method(request.user, "notifications", "PATCH")
         notice = get_object_or_404(AppNotice, pk=pk)
         if "is_active" in request.data:
             notice.is_active = bool(request.data.get("is_active"))
@@ -44,6 +47,7 @@ class StaffNoticeDetailView(APIView):
         return Response(AppNoticeSerializer(notice, context={"request": request}).data)
 
     def delete(self, request, pk):
+        require_rbac_method(request.user, "notifications", "DELETE")
         notice = get_object_or_404(AppNotice, pk=pk)
         notice.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)

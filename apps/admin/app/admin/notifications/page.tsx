@@ -8,6 +8,8 @@ import { formatNptDateTime } from "@/lib/format";
 import { ADMIN_POLL_FALLBACK_MS } from "@/lib/event-stream";
 import { useSession } from "@/lib/session";
 import { useAdmin } from "@/lib/store";
+import { toastAdminError } from "@/lib/rbac";
+import { ReadOnlyBanner, useRbacGuard } from "@/lib/use-page-rbac";
 import {
   createAppNotice,
   deleteAppNotice,
@@ -36,6 +38,7 @@ async function fileToDataUri(file: File) {
 export default function NotificationsPage() {
   const { apiSession } = useSession();
   const { toast, inbox, inboxCount, markInboxSeen } = useAdmin();
+  const { readOnly, canCreate, canUpdate, canDelete, guardCreate, guardUpdate, guardDelete } = useRbacGuard("notifications");
   const [notices, setNotices] = useState<AppNotice[]>([]);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -75,6 +78,7 @@ export default function NotificationsPage() {
   }, [apiSession, load]);
 
   async function send() {
+    if (!guardCreate()) return;
     if (!title.trim()) {
       toast("Add a title.");
       return;
@@ -94,7 +98,7 @@ export default function NotificationsPage() {
       setImageName("");
       await load();
     } catch (err) {
-      toast(err instanceof Error ? err.message : "Could not send notice.");
+      toastAdminError(toast, err, "Could not send notice.");
     } finally {
       setBusy(false);
     }
@@ -160,6 +164,7 @@ export default function NotificationsPage() {
       </section>
 
       {error ? <p className="mb-4 text-sm text-red">{error}</p> : null}
+      {readOnly ? <div className="mb-4"><ReadOnlyBanner label="Notifications" /></div> : null}
 
       {loading ? <AdminLoadingState label="Loading notifications…" /> : null}
 
@@ -175,22 +180,26 @@ export default function NotificationsPage() {
             <NoticeCard
               key={n.id}
               notice={n}
+              canUpdate={canUpdate}
+              canDelete={canDelete}
               onRemove={async () => {
+                if (!guardDelete()) return;
                 try {
                   await deleteAppNotice(n.id);
                   toast("Notice removed. It will no longer show in the app.");
                   await load();
                 } catch (err) {
-                  toast(err instanceof Error ? err.message : "Could not remove.");
+                  toastAdminError(toast, err, "Could not remove.");
                 }
               }}
               onToggle={async () => {
+                if (!guardUpdate()) return;
                 try {
                   await setAppNoticeActive(n.id, !n.is_active);
                   toast(n.is_active ? "Notice paused." : "Notice active again.");
                   await load();
                 } catch (err) {
-                  toast(err instanceof Error ? err.message : "Could not update.");
+                  toastAdminError(toast, err, "Could not update.");
                 }
               }}
             />
@@ -202,6 +211,9 @@ export default function NotificationsPage() {
           <p className="mt-1 text-xs text-muted">
             Text only, or add an image. Shows centered when matching users open the app.
           </p>
+          {!canCreate ? (
+            <p className="mt-3 text-xs text-muted">View-only — you cannot send new notices.</p>
+          ) : (
           <div className="mt-3 space-y-3">
             <Field label="Title">
               <input className={inputClass} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Announcement title" />
@@ -248,6 +260,7 @@ export default function NotificationsPage() {
               Send to app
             </Btn>
           </div>
+          )}
         </aside>
       </div>
       ) : null}
@@ -259,10 +272,14 @@ function NoticeCard({
   notice,
   onRemove,
   onToggle,
+  canUpdate,
+  canDelete,
 }: {
   notice: AppNotice;
   onRemove: () => Promise<void>;
   onToggle: () => Promise<void>;
+  canUpdate: boolean;
+  canDelete: boolean;
 }) {
   const [preview, setPreview] = useState("");
   const [busyAction, setBusyAction] = useState<"pause" | "remove" | null>(null);
@@ -304,6 +321,7 @@ function NoticeCard({
         <span>{formatNptDateTime(notice.created_at)}</span>
       </div>
       <div className="mt-3 flex flex-wrap gap-2">
+        {canUpdate ? (
         <Btn
           kind="ghost"
           loading={busyAction === "pause"}
@@ -316,6 +334,8 @@ function NoticeCard({
         >
           {notice.is_active ? "Pause" : "Activate"}
         </Btn>
+        ) : null}
+        {canDelete ? (
         <Btn
           kind="danger"
           loading={busyAction === "remove"}
@@ -328,6 +348,10 @@ function NoticeCard({
         >
           Remove from app
         </Btn>
+        ) : null}
+        {!canUpdate && !canDelete ? (
+          <p className="text-xs text-muted">View-only — notice controls are disabled.</p>
+        ) : null}
       </div>
     </article>
   );

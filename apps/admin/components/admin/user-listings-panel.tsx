@@ -82,7 +82,7 @@ export function UserListingsPanel({
               </button>
               {expanded === row.id ? (
                 <div className="border-t border-line px-3 pb-3">
-                  <UrgentListingControls listing={row} compact onUpdated={() => void load()} />
+                  <UrgentListingControls listing={row} rbacSource="listing" compact onUpdated={() => void load()} />
                   <div className="mt-2 flex gap-2">
                     <Btn
                       kind="ghost"

@@ -6,9 +6,12 @@ import { AdminLoadingState } from "./page-frame";
 import { listPromoteStaffListings, removeStaffListingPromote, setStaffListingPromote, type StaffListing } from "@/lib/staff-api";
 import { relativeTime } from "@/lib/format";
 import { useAdmin } from "@/lib/store";
+import { toastAdminError } from "@/lib/rbac";
+import { ReadOnlyBanner, useRbacGuard } from "@/lib/use-page-rbac";
 
 export function PromotionRequestsPanel() {
   const { toast } = useAdmin();
+  const { readOnly, guardUpdate } = useRbacGuard("ads_promotions");
   const [rows, setRows] = useState<StaffListing[]>([]);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -30,6 +33,7 @@ export function PromotionRequestsPanel() {
   }, [load]);
 
   async function approve(id: string) {
+    if (!guardUpdate()) return;
     setBusyId(id);
     try {
       await setStaffListingPromote(id);
@@ -43,6 +47,7 @@ export function PromotionRequestsPanel() {
   }
 
   async function remove(id: string) {
+    if (!guardUpdate()) return;
     setBusyId(id);
     try {
       await removeStaffListingPromote(id);
@@ -68,6 +73,7 @@ export function PromotionRequestsPanel() {
           Refresh
         </Btn>
       </div>
+      {readOnly ? <ReadOnlyBanner label="Ads & Promotions" /> : null}
       {loading ? <AdminLoadingState label="Loading promotion requests…" /> : null}
       {!loading && rows.length === 0 ? (
         <p className="mt-3 text-sm text-muted">No pending promotion requests.</p>
@@ -79,6 +85,7 @@ export function PromotionRequestsPanel() {
             <p className="text-[11px] text-muted">
               {row.owner_name} · {row.category} · updated {relativeTime(row.updated_at ?? row.created_at)}
             </p>
+            {!readOnly ? (
             <div className="mt-2 flex flex-wrap gap-2">
               <Btn
                 onClick={() => void approve(row.id)}
@@ -96,6 +103,9 @@ export function PromotionRequestsPanel() {
                 Dismiss request
               </Btn>
             </div>
+            ) : (
+              <p className="mt-2 text-[11px] text-muted">View-only — promotion actions are disabled.</p>
+            )}
           </div>
         ))}
       </div>

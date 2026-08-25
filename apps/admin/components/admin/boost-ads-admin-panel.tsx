@@ -13,11 +13,14 @@ import {
 } from "@/lib/staff-api";
 import { formatNptDateTime } from "@/lib/format";
 import { useAdmin } from "@/lib/store";
+import { toastAdminError } from "@/lib/rbac";
+import { ReadOnlyBanner, useRbacGuard } from "@/lib/use-page-rbac";
 
 type Tab = "pricing" | "active" | "all";
 
 export function BoostAdsAdminPanel({ initialTab }: { initialTab?: Tab }) {
   const { toast } = useAdmin();
+  const { readOnly, guardUpdate } = useRbacGuard("ads_promotions");
   const [tab, setTab] = useState<Tab>(initialTab ?? "pricing");
   const [pricing, setPricing] = useState<BoostPricing | null>(null);
   const [campaigns, setCampaigns] = useState<BoostCampaignRow[]>([]);
@@ -43,7 +46,7 @@ export function BoostAdsAdminPanel({ initialTab }: { initialTab?: Tab }) {
   }, [loadPricing, loadCampaigns, tab, toast]);
 
   const savePricing = async () => {
-    if (!pricing) return;
+    if (!pricing || !guardUpdate()) return;
     setSaving(true);
     try {
       const updated = await patchBoostPricing(pricing);
@@ -57,6 +60,7 @@ export function BoostAdsAdminPanel({ initialTab }: { initialTab?: Tab }) {
   };
 
   const controlCampaign = async (campaignId: string, action: string, hours?: number) => {
+    if (!guardUpdate()) return;
     const key = `${campaignId}:${action}`;
     setBusyCampaign(key);
     try {
@@ -109,16 +113,16 @@ export function BoostAdsAdminPanel({ initialTab }: { initialTab?: Tab }) {
             <h2 className="mb-4 text-lg font-semibold text-ink">Package pricing (Rs)</h2>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <Field label="3 days">
-                <input type="number" className={inputClass} value={pricing.boost_3d_rupees} onChange={(e) => setPricing({ ...pricing, boost_3d_rupees: Number(e.target.value) })} />
+                <input type="number" className={inputClass} value={pricing.boost_3d_rupees} disabled={readOnly} onChange={(e) => setPricing({ ...pricing, boost_3d_rupees: Number(e.target.value) })} />
               </Field>
               <Field label="7 days">
-                <input type="number" className={inputClass} value={pricing.boost_7d_rupees} onChange={(e) => setPricing({ ...pricing, boost_7d_rupees: Number(e.target.value) })} />
+                <input type="number" className={inputClass} value={pricing.boost_7d_rupees} disabled={readOnly} onChange={(e) => setPricing({ ...pricing, boost_7d_rupees: Number(e.target.value) })} />
               </Field>
               <Field label="14 days">
-                <input type="number" className={inputClass} value={pricing.boost_14d_rupees} onChange={(e) => setPricing({ ...pricing, boost_14d_rupees: Number(e.target.value) })} />
+                <input type="number" className={inputClass} value={pricing.boost_14d_rupees} disabled={readOnly} onChange={(e) => setPricing({ ...pricing, boost_14d_rupees: Number(e.target.value) })} />
               </Field>
               <Field label="30 days">
-                <input type="number" className={inputClass} value={pricing.boost_30d_rupees} onChange={(e) => setPricing({ ...pricing, boost_30d_rupees: Number(e.target.value) })} />
+                <input type="number" className={inputClass} value={pricing.boost_30d_rupees} disabled={readOnly} onChange={(e) => setPricing({ ...pricing, boost_30d_rupees: Number(e.target.value) })} />
               </Field>
             </div>
           </section>
@@ -127,32 +131,36 @@ export function BoostAdsAdminPanel({ initialTab }: { initialTab?: Tab }) {
             <h2 className="mb-4 text-lg font-semibold text-ink">Limits & rotation</h2>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               <Field label="Max active per seller">
-                <input type="number" className={inputClass} value={pricing.max_active_boosts_per_seller} onChange={(e) => setPricing({ ...pricing, max_active_boosts_per_seller: Number(e.target.value) })} />
+                <input type="number" className={inputClass} value={pricing.max_active_boosts_per_seller} disabled={readOnly} onChange={(e) => setPricing({ ...pricing, max_active_boosts_per_seller: Number(e.target.value) })} />
               </Field>
               <Field label="Max active per category">
-                <input type="number" className={inputClass} value={pricing.max_active_boosts_per_category} onChange={(e) => setPricing({ ...pricing, max_active_boosts_per_category: Number(e.target.value) })} />
+                <input type="number" className={inputClass} value={pricing.max_active_boosts_per_category} disabled={readOnly} onChange={(e) => setPricing({ ...pricing, max_active_boosts_per_category: Number(e.target.value) })} />
               </Field>
               <Field label="Max active platform-wide">
-                <input type="number" className={inputClass} value={pricing.max_active_boosts_platform} onChange={(e) => setPricing({ ...pricing, max_active_boosts_platform: Number(e.target.value) })} />
+                <input type="number" className={inputClass} value={pricing.max_active_boosts_platform} disabled={readOnly} onChange={(e) => setPricing({ ...pricing, max_active_boosts_platform: Number(e.target.value) })} />
               </Field>
               <Field label="Rotation interval (minutes)">
-                <input type="number" className={inputClass} value={pricing.rotation_interval_minutes} onChange={(e) => setPricing({ ...pricing, rotation_interval_minutes: Number(e.target.value) })} />
+                <input type="number" className={inputClass} value={pricing.rotation_interval_minutes} disabled={readOnly} onChange={(e) => setPricing({ ...pricing, rotation_interval_minutes: Number(e.target.value) })} />
               </Field>
               <Field label="Top slots per category feed">
-                <input type="number" className={inputClass} value={pricing.max_slots_per_category_feed} onChange={(e) => setPricing({ ...pricing, max_slots_per_category_feed: Number(e.target.value) })} />
+                <input type="number" className={inputClass} value={pricing.max_slots_per_category_feed} disabled={readOnly} onChange={(e) => setPricing({ ...pricing, max_slots_per_category_feed: Number(e.target.value) })} />
               </Field>
             </div>
           </section>
 
           <label className="flex items-center gap-2 text-sm text-ink">
-            <input type="checkbox" checked={pricing.is_active} onChange={(e) => setPricing({ ...pricing, is_active: e.target.checked })} className="h-4 w-4" />
+            <input type="checkbox" checked={pricing.is_active} disabled={readOnly} onChange={(e) => setPricing({ ...pricing, is_active: e.target.checked })} className="h-4 w-4" />
             Boost promotions enabled for sellers
           </label>
 
+          {readOnly ? <ReadOnlyBanner label="Ads & Promotions" /> : null}
+
           <div className="flex justify-end">
-            <Btn kind="primary" onClick={() => void savePricing()} loading={saving} loadingLabel="Saving…">
-              Save pricing & settings
-            </Btn>
+            {!readOnly ? (
+              <Btn kind="primary" onClick={() => void savePricing()} loading={saving} loadingLabel="Saving…">
+                Save pricing & settings
+              </Btn>
+            ) : null}
           </div>
         </div>
       ) : null}
@@ -213,6 +221,7 @@ export function BoostAdsAdminPanel({ initialTab }: { initialTab?: Tab }) {
                   </div>
                 </div>
 
+                {!readOnly ? (
                 <div className="flex flex-wrap gap-2">
                   {campaign.status === "active" ? (
                     <>
@@ -259,6 +268,9 @@ export function BoostAdsAdminPanel({ initialTab }: { initialTab?: Tab }) {
                     Cancel
                   </Btn>
                 </div>
+                ) : (
+                  <p className="text-[11px] text-muted">View-only — campaign controls are disabled.</p>
+                )}
               </div>
             ))
           )}

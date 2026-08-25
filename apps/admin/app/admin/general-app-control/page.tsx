@@ -5,6 +5,8 @@ import { PageHeader, AdminLoadingState } from "@/components/admin/page-frame";
 import { Btn, Field, StatusBadge, inputClass } from "@/components/admin/ui";
 import { useSession } from "@/lib/session";
 import { useAdmin } from "@/lib/store";
+import { toastAdminError } from "@/lib/rbac";
+import { ReadOnlyBanner, useRbacGuard } from "@/lib/use-page-rbac";
 import { UrgentSellAdminPanel } from "@/components/admin/urgent-sell-admin-panel";
 import {
   createHomeBannerSlide,
@@ -34,6 +36,7 @@ async function fileToDataUri(file: File) {
 export default function GeneralAppControlPage() {
   const { apiSession, ready } = useSession();
   const { toast } = useAdmin();
+  const { readOnly, canCreate, canUpdate, canDelete, guardCreate, guardUpdate, guardDelete } = useRbacGuard("app_control");
   const [slides, setSlides] = useState<HomeBannerSlide[]>([]);
   const [previews, setPreviews] = useState<Record<string, string>>({});
   const [audience, setAudience] = useState<(typeof AUDIENCES)[number]["value"]>("all");
@@ -80,6 +83,7 @@ export default function GeneralAppControlPage() {
 
   async function onPick(file: File | null) {
     if (!file) return;
+    if (!guardCreate()) return;
     if (activeCount >= 3) {
       toast("Maximum 3 active banners. Delete or deactivate one first.");
       return;
@@ -99,13 +103,14 @@ export default function GeneralAppControlPage() {
       toast("Banner added. It appears on Home without users refreshing.");
       await load();
     } catch (err) {
-      toast(err instanceof Error ? err.message : "Could not upload banner.");
+      toastAdminError(toast, err, "Could not upload banner.");
     } finally {
       setBusy(false);
     }
   }
 
   async function removeSlide(id: string) {
+    if (!guardDelete()) return;
     if (!window.confirm("Delete this banner?")) return;
     setBusyAction(`delete:${id}`);
     try {
@@ -120,6 +125,7 @@ export default function GeneralAppControlPage() {
   }
 
   async function setAudienceFor(id: string, next: "all" | "buyer" | "provider") {
+    if (!guardUpdate()) return;
     setBusyAction(`audience:${id}`);
     try {
       await patchHomeBannerSlide(id, { audience: next });
@@ -139,6 +145,7 @@ export default function GeneralAppControlPage() {
         summary="Up to 3 home banners auto-scroll on buyer or seller Home. Pick who sees each banner. Changes appear in the app within about a minute without refresh."
       />
       {error ? <p className="mb-4 text-sm text-red">{error}</p> : null}
+      {readOnly ? <div className="mb-4"><ReadOnlyBanner label="General App Control" /></div> : null}
       {loading && !error ? <AdminLoadingState label="Loading app controls…" /> : null}
 
       {!loading ? (
@@ -167,7 +174,7 @@ export default function GeneralAppControlPage() {
                   <select
                     className={inputClass}
                     value={slide.audience}
-                    disabled={!!busyAction}
+                    disabled={!!busyAction || !canUpdate}
                     onChange={(e) => void setAudienceFor(slide.id, e.target.value as "all" | "buyer" | "provider")}
                   >
                     {AUDIENCES.map((a) => (
@@ -176,6 +183,7 @@ export default function GeneralAppControlPage() {
                   </select>
                 </Field>
                 <div className="flex gap-2">
+                  {canDelete ? (
                   <Btn
                     kind="danger"
                     loading={busyAction === `delete:${slide.id}`}
@@ -185,6 +193,7 @@ export default function GeneralAppControlPage() {
                   >
                     Delete
                   </Btn>
+                  ) : null}
                 </div>
               </div>
             </div>
@@ -197,7 +206,7 @@ export default function GeneralAppControlPage() {
 
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
           <Field label="Audience for new banner">
-            <select className={inputClass} value={audience} onChange={(e) => setAudience(e.target.value as typeof audience)}>
+            <select className={inputClass} value={audience} disabled={!canCreate} onChange={(e) => setAudience(e.target.value as typeof audience)}>
               {AUDIENCES.map((a) => (
                 <option key={a.value} value={a.value}>{a.label}</option>
               ))}
@@ -208,7 +217,7 @@ export default function GeneralAppControlPage() {
               type="file"
               accept="image/jpeg,image/png,image/webp"
               className={inputClass}
-              disabled={busy || activeCount >= 3}
+              disabled={busy || activeCount >= 3 || !canCreate}
               onChange={(e) => void onPick(e.target.files?.[0] || null)}
             />
           </Field>

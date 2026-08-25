@@ -6,9 +6,11 @@ import { UrgentListingControls } from "./urgent-listing-controls";
 import { listUrgentStaffListings, type StaffListing } from "@/lib/staff-api";
 import { relativeTime } from "@/lib/format";
 import { useAdmin } from "@/lib/store";
+import { ReadOnlyBanner, useRbacGuard } from "@/lib/use-page-rbac";
 
 export function UrgentSellAdminPanel() {
   const { toast } = useAdmin();
+  const { readOnly } = useRbacGuard("app_control");
   const [rows, setRows] = useState<StaffListing[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -41,6 +43,7 @@ export function UrgentSellAdminPanel() {
           Refresh
         </Btn>
       </div>
+      {readOnly ? <ReadOnlyBanner label="Urgent Sell" /> : null}
       {loading ? <p className="mt-3 text-sm text-muted">Loading…</p> : null}
       {!loading && rows.length === 0 ? (
         <p className="mt-3 text-sm text-muted">No urgent listings — buyer home shows no gap.</p>

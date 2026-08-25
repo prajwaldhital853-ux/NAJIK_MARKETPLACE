@@ -11,6 +11,8 @@ import {
 } from "@/lib/staff-api";
 import { formatNptDateTime } from "@/lib/format";
 import { useAdmin } from "@/lib/store";
+import { toastAdminError } from "@/lib/rbac";
+import { ReadOnlyBanner, useRbacGuard } from "@/lib/use-page-rbac";
 
 export function ReferEarnAdminPanel({
   embedded,
@@ -22,6 +24,7 @@ export function ReferEarnAdminPanel({
   audience?: "provider" | "user";
 }) {
   const { toast } = useAdmin();
+  const { readOnly, guardUpdate } = useRbacGuard("seller_payments");
   const [cfg, setCfg] = useState<ReferEarnConfig | null>(null);
   const [rows, setRows] = useState<StaffReferralRow[]>([]);
   const [rewardAmount, setRewardAmount] = useState("200");
@@ -47,6 +50,7 @@ export function ReferEarnAdminPanel({
   }, [toast, audience]);
 
   async function save() {
+    if (!guardUpdate()) return;
     setBusy(true);
     try {
       const next = await patchReferEarnConfig({
@@ -59,7 +63,7 @@ export function ReferEarnAdminPanel({
       toast("Refer & Earn settings saved.");
       onChanged?.();
     } catch (err) {
-      toast(err instanceof Error ? err.message : "Could not save settings.");
+      toastAdminError(toast, err, "Could not save settings.");
     } finally {
       setBusy(false);
     }
@@ -73,12 +77,13 @@ export function ReferEarnAdminPanel({
           ? "Buyers share a code; you earn on-system when friends join and verify their phone. No in-app payment."
           : "Service providers share a code; you earn on-system when friends join and post their first live listing. No in-app payment."}
       </p>
+      {readOnly ? <div className="mt-3"><ReadOnlyBanner label="Refer & Earn" /></div> : null}
       <div className="mt-3 grid gap-3 md:grid-cols-2">
         <Field label="Reward amount (Rs.)">
-          <input className={inputClass} value={rewardAmount} onChange={(e) => setRewardAmount(e.target.value)} />
+          <input className={inputClass} value={rewardAmount} onChange={(e) => setRewardAmount(e.target.value)} disabled={readOnly} />
         </Field>
         <Field label="Reward label">
-          <input className={inputClass} value={rewardLabel} onChange={(e) => setRewardLabel(e.target.value)} />
+          <input className={inputClass} value={rewardLabel} onChange={(e) => setRewardLabel(e.target.value)} disabled={readOnly} />
         </Field>
         <div className="md:col-span-2">
           <Field label="Description">
@@ -87,18 +92,21 @@ export function ReferEarnAdminPanel({
               rows={3}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
+              disabled={readOnly}
             />
           </Field>
         </div>
         <label className="flex items-center gap-2 text-[12px] font-semibold text-ink md:col-span-2">
-          <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} />
+          <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} disabled={readOnly} />
           Program active
         </label>
       </div>
       <div className="mt-3">
-        <Btn onClick={() => void save()} loading={busy} loadingLabel="Saving…">
-          Save Refer & Earn
-        </Btn>
+        {!readOnly ? (
+          <Btn onClick={() => void save()} loading={busy} loadingLabel="Saving…">
+            Save Refer & Earn
+          </Btn>
+        ) : null}
       </div>
       {cfg ? (
         <p className="mt-2 text-[11px] text-muted">

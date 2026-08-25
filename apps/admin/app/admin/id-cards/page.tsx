@@ -9,6 +9,8 @@ import { formatNptDateTime, formatNptTime } from "@/lib/format";
 import { ADMIN_POLL_FALLBACK_MS } from "@/lib/event-stream";
 import { useSession } from "@/lib/session";
 import { useAdmin } from "@/lib/store";
+import { toastAdminError } from "@/lib/rbac";
+import { ReadOnlyBanner, usePageRbac, useRbacGuard } from "@/lib/use-page-rbac";
 import {
   fetchBranding,
   fetchStaffImage,
@@ -52,6 +54,9 @@ function Info({ label, value }: { label: string; value: string }) {
 export default function IdCardsPage() {
   const { apiSession } = useSession();
   const { toast } = useAdmin();
+  const { readOnly, canUpdate, guardUpdate } = useRbacGuard("kyc_verification");
+  const settingsRbac = usePageRbac("settings");
+  const canEditBranding = canUpdate || settingsRbac.canUpdate;
   const params = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
@@ -129,7 +134,7 @@ export default function IdCardsPage() {
   }, [apiSession]);
 
   async function onSignatoryFile(file?: File | null) {
-    if (!file) return;
+    if (!file || !canEditBranding) return;
     setBrandBusy(true);
     try {
       const saved = await updateBranding({ signatory_uri: await fileToDataUri(file) });
@@ -147,6 +152,7 @@ export default function IdCardsPage() {
   }
 
   async function saveEmergencyContact() {
+    if (!canEditBranding) return;
     setBrandBusy(true);
     try {
       await updateBranding({
@@ -205,6 +211,7 @@ export default function IdCardsPage() {
   }
 
   async function act(id: string, action: "approve" | "revoke" | "block" | "unblock") {
+    if (!guardUpdate()) return;
     const key = `${id}:${action}`;
     setBusyAction(key);
     try {
@@ -271,6 +278,8 @@ export default function IdCardsPage() {
         ]}
       />
 
+      {readOnly ? <div className="mb-4"><ReadOnlyBanner label="Seller ID cards" /></div> : null}
+
       <section className="card-glow mb-4 grid gap-4 rounded-2xl border border-line bg-card p-5 lg:grid-cols-[220px_1fr]">
         <div>
           <h2 className="text-sm font-semibold text-ink">Authorized signatory</h2>
@@ -282,29 +291,32 @@ export default function IdCardsPage() {
           <input
             type="file"
             accept="image/png,image/jpeg,image/webp"
-            disabled={brandBusy || !apiSession}
+            disabled={brandBusy || !apiSession || !canEditBranding}
             onChange={(event) => void onSignatoryFile(event.target.files?.[0])}
             className="mt-3 block w-full text-xs text-ink"
           />
+          {!canEditBranding ? <p className="mt-2 text-xs text-muted">View-only — branding changes are disabled.</p> : null}
         </div>
         <div>
           <h2 className="text-sm font-semibold text-ink">Emergency contact (card back)</h2>
           <p className="mt-1 text-xs text-muted">Updates phone, email, and website on all seller ID card backs.</p>
           <div className="mt-3 grid gap-3 sm:grid-cols-3">
             <Field label="Phone">
-              <input className={inputClass} value={emergencyPhone} onChange={(e) => setEmergencyPhone(e.target.value)} />
+              <input className={inputClass} value={emergencyPhone} onChange={(e) => setEmergencyPhone(e.target.value)} disabled={!canEditBranding} />
             </Field>
             <Field label="Email">
-              <input className={inputClass} value={emergencyEmail} onChange={(e) => setEmergencyEmail(e.target.value)} />
+              <input className={inputClass} value={emergencyEmail} onChange={(e) => setEmergencyEmail(e.target.value)} disabled={!canEditBranding} />
             </Field>
             <Field label="Website">
-              <input className={inputClass} value={website} onChange={(e) => setWebsite(e.target.value)} />
+              <input className={inputClass} value={website} onChange={(e) => setWebsite(e.target.value)} disabled={!canEditBranding} />
             </Field>
           </div>
           <div className="mt-3">
+            {canEditBranding ? (
             <Btn loading={brandBusy} loadingLabel="Saving…" disabled={brandBusy || !apiSession} onClick={() => void saveEmergencyContact()}>
               Save contact for all cards
             </Btn>
+            ) : null}
           </div>
         </div>
       </section>
@@ -358,7 +370,7 @@ export default function IdCardsPage() {
               <Btn kind="ghost" onClick={() => openCard(card.id)}>
                 See user ID card
               </Btn>
-              {card.access_status !== "approved" ? (
+              {!readOnly && card.access_status !== "approved" ? (
                 <Btn
                   loading={busyAction === `${card.id}:${card.access_status === "blocked" ? "unblock" : "approve"}`}
                   loadingLabel={actionLabel(card.access_status === "blocked" ? "unblock" : "approve")}
@@ -368,12 +380,12 @@ export default function IdCardsPage() {
                   {card.access_status === "blocked" ? "Unblock ID card" : "Approve download / print"}
                 </Btn>
               ) : null}
-              {card.access_status === "approved" ? (
+              {!readOnly && card.access_status === "approved" ? (
                 <Btn kind="ghost" loading={busyAction === `${card.id}:revoke`} loadingLabel="Revoking…" disabled={!!busyAction} onClick={() => void act(card.id, "revoke")}>
                   Revoke access
                 </Btn>
               ) : null}
-              {card.access_status !== "blocked" ? (
+              {!readOnly && card.access_status !== "blocked" ? (
                 <Btn kind="danger" loading={busyAction === `${card.id}:block`} loadingLabel="Blocking…" disabled={!!busyAction} onClick={() => void act(card.id, "block")}>
                   Block
                 </Btn>
@@ -465,7 +477,7 @@ export default function IdCardsPage() {
             </div>
 
             <div className="mt-4 flex flex-wrap gap-2">
-              {selected.access_status !== "approved" ? (
+              {!readOnly && selected.access_status !== "approved" ? (
                 <Btn
                   loading={busyAction === `${selected.id}:${selected.access_status === "blocked" ? "unblock" : "approve"}`}
                   loadingLabel={actionLabel(selected.access_status === "blocked" ? "unblock" : "approve")}
@@ -475,16 +487,17 @@ export default function IdCardsPage() {
                   {selected.access_status === "blocked" ? "Unblock ID card" : "Approve download / print"}
                 </Btn>
               ) : null}
-              {selected.access_status === "approved" ? (
+              {!readOnly && selected.access_status === "approved" ? (
                 <Btn kind="ghost" loading={busyAction === `${selected.id}:revoke`} loadingLabel="Revoking…" disabled={!!busyAction} onClick={() => void act(selected.id, "revoke")}>
                   Revoke access
                 </Btn>
               ) : null}
-              {selected.access_status !== "blocked" ? (
+              {!readOnly && selected.access_status !== "blocked" ? (
                 <Btn kind="danger" loading={busyAction === `${selected.id}:block`} loadingLabel="Blocking…" disabled={!!busyAction} onClick={() => void act(selected.id, "block")}>
                   Block card
                 </Btn>
               ) : null}
+              {readOnly ? <p className="text-xs text-muted">View-only — card moderation is disabled.</p> : null}
               <Btn kind="ghost" onClick={closeCard}>
                 Close
               </Btn>

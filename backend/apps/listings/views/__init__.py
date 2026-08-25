@@ -767,8 +767,14 @@ class StaffListingUrgentView(APIView):
     permission_classes = [IsStaffUser]
 
     def post(self, request, pk):
+        from apps.staff.rbac import listing_page, require_any_rbac
+
         listing = get_object_or_404(Listing, pk=pk)
-        require_listing_rbac(request.user, listing, "PATCH")
+        require_any_rbac(
+            request.user,
+            (listing_page(listing.category), "update"),
+            ("app_control", "update"),
+        )
         if request.data.get("remove"):
             listing.is_urgent = False
             listing.urgent_ends_at = None
@@ -831,8 +837,10 @@ class StaffListingPromoteView(APIView):
     permission_classes = [IsStaffUser]
 
     def post(self, request, pk):
+        from apps.staff.rbac import require_rbac_method
+
+        require_rbac_method(request.user, "ads_promotions", "PATCH")
         listing = get_object_or_404(Listing, pk=pk)
-        require_listing_rbac(request.user, listing, "PATCH")
         if request.data.get("remove"):
             listing.is_promoted = False
             listing.promote_requested = False

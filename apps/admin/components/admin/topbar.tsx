@@ -19,12 +19,12 @@ import { OPEN_INBOX_KEY } from "@/lib/live-inbox";
 import { Avatar } from "./ui";
 import { CommandPalette } from "./command-palette";
 import { AddModal } from "./add-modal";
-import { InboxList } from "./inbox-list";
+import { InboxList, InboxMarkAllButton } from "./inbox-list";
 
 export function Topbar({ onMenu }: { onMenu?: () => void }) {
   const { theme, toggle } = useTheme();
   const { staff, logout } = useSession();
-  const { inbox, inboxCount, inboxReady } = useAdmin();
+  const { inbox, inboxCount, inboxReady, markInboxSeen, toast } = useAdmin();
   const [cmd, setCmd] = useState(false);
   const [add, setAdd] = useState(false);
   const [bell, setBell] = useState(false);
@@ -112,7 +112,26 @@ export function Topbar({ onMenu }: { onMenu?: () => void }) {
 
       {bell ? (
         <Panel title={`Notifications${inboxCount ? ` (${inboxCount})` : ""}`} onClose={() => setBell(false)}>
-          <InboxList items={inbox} onOpen={() => setBell(false)} />
+          <div className="flex justify-end border-b border-line px-3 py-2">
+            <InboxMarkAllButton
+              count={inboxCount}
+              compact
+              onMarkAll={() => {
+                if (!inbox.length) {
+                  toast("No unread notifications.");
+                  return;
+                }
+                markInboxSeen(inbox.map((item) => item.id));
+                toast(`${inbox.length} marked as read.`);
+              }}
+            />
+          </div>
+          <InboxList
+            items={inbox}
+            showMarkActions
+            onOpen={() => setBell(false)}
+            onMarked={() => toast("Marked as read.")}
+          />
           <Link href="/admin/notifications" onClick={() => setBell(false)} className="block border-t border-line px-4 py-2.5 text-center text-[12px] font-semibold text-brand">
             Open notifications
           </Link>

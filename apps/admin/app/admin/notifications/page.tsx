@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { PageHeader, SummaryStrip, AdminLoadingState } from "@/components/admin/page-frame";
 import { Btn, Field, StatusBadge, inputClass } from "@/components/admin/ui";
-import { InboxList } from "@/components/admin/inbox-list";
+import { InboxList, InboxMarkAllButton } from "@/components/admin/inbox-list";
 import { formatNptDateTime } from "@/lib/format";
 import { ADMIN_POLL_FALLBACK_MS } from "@/lib/event-stream";
 import { useSession } from "@/lib/session";
@@ -35,7 +35,7 @@ async function fileToDataUri(file: File) {
 
 export default function NotificationsPage() {
   const { apiSession } = useSession();
-  const { toast, inbox, inboxCount } = useAdmin();
+  const { toast, inbox, inboxCount, markInboxSeen } = useAdmin();
   const [notices, setNotices] = useState<AppNotice[]>([]);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -120,6 +120,15 @@ export default function NotificationsPage() {
 
   const active = notices.filter((n) => n.is_active);
 
+  function markAllInboxRead() {
+    if (!inbox.length) {
+      toast("No unread notifications.");
+      return;
+    }
+    markInboxSeen(inbox.map((item) => item.id));
+    toast(`${inbox.length} notification${inbox.length === 1 ? "" : "s"} marked as read.`);
+  }
+
   return (
     <div>
       <PageHeader
@@ -137,10 +146,17 @@ export default function NotificationsPage() {
       />
 
       <section className="mb-4 overflow-hidden rounded-2xl border border-line bg-card">
-        <div className="border-b border-line px-4 py-3 text-sm font-semibold text-ink">
-          Live queue {inboxCount ? `(${inboxCount})` : ""}
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line px-4 py-3">
+          <div className="text-sm font-semibold text-ink">
+            Live queue {inboxCount ? `(${inboxCount} unread)` : ""}
+          </div>
+          <InboxMarkAllButton count={inboxCount} onMarkAll={markAllInboxRead} />
         </div>
-        <InboxList items={inbox} />
+        <InboxList
+          items={inbox}
+          showMarkActions
+          onMarked={() => toast("Marked as read.")}
+        />
       </section>
 
       {error ? <p className="mb-4 text-sm text-red">{error}</p> : null}

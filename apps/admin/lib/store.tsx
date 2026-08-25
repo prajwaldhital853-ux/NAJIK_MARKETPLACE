@@ -54,7 +54,7 @@ import {
   type StaffPaymentsSummary,
 } from "./staff-api";
 import { buildInbox, navBadges, readSeenInbox, writeSeenInbox, type InboxItem } from "./live-inbox";
-import { hasPermission } from "./rbac";
+import { assertCan, filterBadgesForStaff, filterInboxForStaff, hasPermission, STORE_KEY_PAGE } from "./rbac";
 import { ADMIN_POLL_FALLBACK_MS, connectAdminEventStream } from "./event-stream";
 import { useSession } from "./session";
 
@@ -313,6 +313,8 @@ export function AdminStoreProvider({ children }: { children: React.ReactNode }) 
   }, []);
 
   const patch = useCallback(async (key: StoreKey, id: string, data: Record<string, unknown>) => {
+    const page = STORE_KEY_PAGE[key];
+    if (page) assertCan(sessionStaff, page, "update");
     const apply = <T extends { id: string }>(set: Dispatch<SetStateAction<T[]>>) => {
       set((prev) => prev.map((row) => (row.id === id ? { ...row, ...data } : row)));
     };
@@ -363,7 +365,7 @@ export function AdminStoreProvider({ children }: { children: React.ReactNode }) 
       staff: () => apply(setStaff),
     };
     map[key]();
-  }, [markInboxSeen]);
+  }, [markInboxSeen, sessionStaff]);
 
   const add = useCallback((key: StoreKey, row: unknown) => {
     const apply = <T,>(set: Dispatch<SetStateAction<T[]>>) => {
@@ -395,6 +397,8 @@ export function AdminStoreProvider({ children }: { children: React.ReactNode }) 
   }, []);
 
   const remove = useCallback(async (key: StoreKey, id: string) => {
+    const page = STORE_KEY_PAGE[key];
+    if (page) assertCan(sessionStaff, page, "delete");
     const drop = <T extends { id: string }>(set: Dispatch<SetStateAction<T[]>>) => {
       set((prev) => prev.filter((row) => row.id !== id));
     };
@@ -438,7 +442,7 @@ export function AdminStoreProvider({ children }: { children: React.ReactNode }) 
       staff: () => drop(setStaff),
     };
     map[key]();
-  }, [markInboxSeen]);
+  }, [markInboxSeen, sessionStaff]);
 
   const mergedUsers = useMemo(() => {
     const counts = new Map<string, number>();
@@ -527,14 +531,19 @@ export function AdminStoreProvider({ children }: { children: React.ReactNode }) 
     [liveListings],
   );
 
-  const inbox = useMemo(
-    () => buildInbox(mergedUsers, liveListings, liveApplications, seenInbox, liveReports, liveLoadRequests),
-    [mergedUsers, liveListings, liveApplications, seenInbox, liveReports, liveLoadRequests],
-  );
-  const badges = useMemo(
-    () => navBadges(mergedUsers, liveListings, liveApplications, seenInbox, liveReports, liveLoadRequests),
-    [mergedUsers, liveListings, liveApplications, seenInbox, liveReports, liveLoadRequests],
-  );
+  const inbox = useMemo(() => {
+    const raw = buildInbox(mergedUsers, liveListings, liveApplications, seenInbox, liveReports, liveLoadRequests);
+    const filtered = filterInboxForStaff(raw, sessionStaff);
+    return filtered;
+  }, [mergedUsers, liveListings, liveApplications, seenInbox, liveReports, liveLoadRequests, sessionStaff]);
+  const badges = useMemo(() => {
+    const raw = navBadges(mergedUsers, liveListings, liveApplications, seenInbox, liveReports, liveLoadRequests);
+    const filtered = filterBadgesForStaff(raw, sessionStaff);
+    if (sessionStaff && !sessionStaff.isSuperAdmin) {
+      filtered["/admin/notifications"] = inbox.length;
+    }
+    return filtered;
+  }, [mergedUsers, liveListings, liveApplications, seenInbox, liveReports, liveLoadRequests, sessionStaff, inbox.length]);
 
   const value = useMemo(
     () => ({

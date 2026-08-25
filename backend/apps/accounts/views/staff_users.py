@@ -8,6 +8,7 @@ from apps.accounts.models import AppUser
 from apps.accounts.serializers.auth import AppUserPublicSerializer
 from apps.staff.authentication import StaffJWTAuthentication
 from apps.staff.permissions import IsStaffUser
+from apps.staff.rbac import require_rbac_method
 from rest_framework import serializers
 
 
@@ -125,6 +126,7 @@ class StaffAppUserListView(APIView):
     permission_classes = [IsStaffUser]
 
     def get(self, request):
+        require_rbac_method(request.user, "user_management", "GET")
         items = (
             AppUser.objects.select_related("provider_application")
             .annotate(listing_count=Count("listings", distinct=True))
@@ -148,6 +150,7 @@ class StaffAppUserDetailView(APIView):
     permission_classes = [IsStaffUser]
 
     def patch(self, request, pk):
+        require_rbac_method(request.user, "user_management", "PATCH")
         from django.utils import timezone
 
         user = get_object_or_404(AppUser, pk=pk)
@@ -189,6 +192,7 @@ class StaffAppUserDetailView(APIView):
         return Response(StaffAppUserSerializer(user, context={"request": request}).data)
 
     def delete(self, request, pk):
+        require_rbac_method(request.user, "user_management", "DELETE")
         user = get_object_or_404(AppUser, pk=pk)
         revoke_app_tokens(user)
         user.delete()

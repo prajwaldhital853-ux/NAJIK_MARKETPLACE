@@ -12,6 +12,7 @@ from apps.accounts.permissions import IsAppUser
 from apps.accounts.throttles import SellerApplyRateThrottle
 from apps.staff.authentication import StaffJWTAuthentication
 from apps.staff.permissions import IsStaffUser
+from apps.staff.rbac import require_rbac_method
 from apps.verification.models import ProviderApplication, ensure_provider_id_card
 from apps.verification.serializers import (
     ProviderApplicationCreateSerializer,
@@ -182,6 +183,7 @@ class StaffApplicationListView(APIView):
     permission_classes = [IsStaffUser]
 
     def get(self, request):
+        require_rbac_method(request.user, "kyc_verification", "GET")
         items = ProviderApplication.objects.select_related("owner", "membership_plan").order_by("-created_at")
         status_filter = (request.query_params.get("status") or "").strip()
         if status_filter:
@@ -202,6 +204,7 @@ class StaffApplicationDetailView(APIView):
     permission_classes = [IsStaffUser]
 
     def patch(self, request, pk):
+        require_rbac_method(request.user, "kyc_verification", "PATCH")
         app = get_object_or_404(ProviderApplication.objects.select_related("membership_plan"), pk=pk)
         serializer = ProviderApplicationStatusSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -285,6 +288,7 @@ class StaffApplicationFileView(APIView):
     permission_classes = [IsStaffUser]
 
     def get(self, request, pk, kind):
+        require_rbac_method(request.user, "kyc_verification", "GET")
         app = get_object_or_404(ProviderApplication, pk=pk)
         field = kyc_file_field(app, kind)
         if not field:

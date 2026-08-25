@@ -14,6 +14,7 @@ import {
   patchProviderApplication,
   type ProviderApplication,
 } from "@/lib/staff-api";
+import { usePageRbac } from "@/lib/use-page-rbac";
 
 const TABS = [
   { value: "pending", label: "Pending" },
@@ -36,6 +37,7 @@ function statusFromParams(raw: string | null): StatusFilter {
 
 export default function ProviderVerificationPage() {
   const { apiSession } = useSession();
+  const { canUpdate, readOnly } = usePageRbac("kyc_verification");
   const params = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
@@ -128,6 +130,10 @@ export default function ProviderVerificationPage() {
     rejection_note?: string,
     actionKey?: string,
   ) {
+    if (!canUpdate) {
+      setError("You only have view access for KYC verification.");
+      return;
+    }
     const key = actionKey || `${status}:${id}`;
     setBusyAction(key);
     try {
@@ -219,30 +225,32 @@ export default function ProviderVerificationPage() {
     },
   ];
 
-  const rowActions: RowMenuAction<ProviderApplication>[] = [
-    {
-      label: "Delete",
-      danger: true,
-      onClick: () => {
-        window.alert("KYC applications cannot be hard-deleted. Reject or revoke instead.");
-      },
-    },
-    {
-      label: "Block",
-      danger: true,
-      onClick: (row) => {
-        const note = window.prompt("Rejection / block note for the provider:", rejectNote || "Blocked by admin.");
-        if (note == null) return;
-        if (!note.trim()) {
-          window.alert("A note is required.");
-          return;
-        }
-        void setStatus(row.id, "rejected", note.trim());
-      },
-    },
-    { label: "Move up", onClick: (row) => moveRow(row, -1) },
-    { label: "Move down", onClick: (row) => moveRow(row, 1) },
-  ];
+  const rowActions: RowMenuAction<ProviderApplication>[] = canUpdate
+    ? [
+        {
+          label: "Delete",
+          danger: true,
+          onClick: () => {
+            window.alert("KYC applications cannot be hard-deleted. Reject or revoke instead.");
+          },
+        },
+        {
+          label: "Block",
+          danger: true,
+          onClick: (row) => {
+            const note = window.prompt("Rejection / block note for the provider:", rejectNote || "Blocked by admin.");
+            if (note == null) return;
+            if (!note.trim()) {
+              window.alert("A note is required.");
+              return;
+            }
+            void setStatus(row.id, "rejected", note.trim());
+          },
+        },
+        { label: "Move up", onClick: (row) => moveRow(row, -1) },
+        { label: "Move down", onClick: (row) => moveRow(row, 1) },
+      ]
+    : [];
 
   const profileRows = Object.entries(open?.profile_data || {}).filter(([, value]) => String(value || "").trim());
 
@@ -398,12 +406,17 @@ export default function ProviderVerificationPage() {
         footer={
           open ? (
             <div className="space-y-2">
+              {readOnly ? (
+                <p className="rounded-xl border border-line bg-elevated px-3 py-2 text-xs text-muted">
+                  View-only access — you cannot verify, reject, or change KYC status.
+                </p>
+              ) : null}
               {open.owner_id ? (
                 <a href={`/admin/id-cards?owner=${open.owner_id}`} className="inline-block text-xs font-semibold text-brand">
                   See user ID card →
                 </a>
               ) : null}
-              {open.has_pending_edit ? (
+              {canUpdate && open.has_pending_edit ? (
                 <div className="flex flex-wrap gap-2">
                   <Btn loading={busyAction === `approve-edit:${open.id}`} loadingLabel="Approving…" disabled={!!busyAction} onClick={() => void setStatus(open.id, "verified", undefined, `approve-edit:${open.id}`)}>Approve edit</Btn>
                   <Btn kind="danger" loading={busyAction === `reject-edit:${open.id}`} loadingLabel="Rejecting…" disabled={!!busyAction} onClick={() => void setStatus(open.id, "rejected", undefined, `reject-edit:${open.id}`)}>
@@ -411,7 +424,7 @@ export default function ProviderVerificationPage() {
                   </Btn>
                 </div>
               ) : null}
-              {open.status === "pending" ? (
+              {canUpdate && open.status === "pending" ? (
                 <>
                   <textarea
                     value={rejectNote}
@@ -428,7 +441,7 @@ export default function ProviderVerificationPage() {
                   </div>
                 </>
               ) : null}
-              {open.status === "verified" && !open.has_pending_edit ? (
+              {canUpdate && open.status === "verified" && !open.has_pending_edit ? (
                 <>
                   <textarea
                     value={rejectNote}
@@ -442,7 +455,7 @@ export default function ProviderVerificationPage() {
                   </Btn>
                 </>
               ) : null}
-              {open.status === "rejected" ? (
+              {canUpdate && open.status === "rejected" ? (
                 <div className="flex flex-wrap gap-2">
                   <Btn loading={busyAction === `pending:${open.id}`} loadingLabel="Updating…" disabled={!!busyAction} onClick={() => void setStatus(open.id, "pending", undefined, `pending:${open.id}`)}>Reactivate to pending</Btn>
                   <Btn loading={busyAction === `activate:${open.id}`} loadingLabel="Activating…" disabled={!!busyAction} onClick={() => void setStatus(open.id, "verified", undefined, `activate:${open.id}`)}>Set Active</Btn>

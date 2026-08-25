@@ -12,6 +12,8 @@ import { Avatar, Btn, Field, StatusBadge, inputClass } from "@/components/admin/
 import { mapDirectoryUser } from "@/lib/live-users";
 import { useSession } from "@/lib/session";
 import { listAppUsersPage } from "@/lib/staff-api";
+import { AdminUsageGuideButton } from "@/components/admin/admin-usage-guide";
+import { usePageRbac } from "@/lib/use-page-rbac";
 import { useAdmin } from "@/lib/store";
 import type { User } from "@/lib/demo-data";
 
@@ -22,7 +24,8 @@ function roleFromParams(raw: string | null): "buyer" | "provider" | undefined {
 }
 
 export default function UsersPage() {
-  const { apiSession } = useSession();
+  const { apiSession, staff } = useSession();
+  const { canUpdate, canDelete, readOnly } = usePageRbac("user_management");
   const admin = useAdmin();
   const { inboxReady } = admin;
   const params = useSearchParams();
@@ -198,30 +201,38 @@ export default function UsersPage() {
   ];
 
   const rowActions: RowMenuAction<User>[] = [
-    {
-      label: "Delete",
-      danger: true,
-      onClick: (row) => {
-        if (!window.confirm("Delete this account and all of their listings? This cannot be undone.")) return;
-        void admin
-          .remove("users", row.id)
-          .then(() => {
-            admin.toast("Deleted.");
-            if (open?.id === row.id) closeDrawer();
-          })
-          .catch((err: unknown) => admin.toast(err instanceof Error ? err.message : "Could not delete."));
-      },
-    },
-    {
-      label: "Block",
-      danger: true,
-      onClick: (row) => {
-        void admin
-          .patch("users", row.id, { status: "blocked" })
-          .then(() => admin.toast("Blocked."))
-          .catch((err: unknown) => admin.toast(err instanceof Error ? err.message : "Could not block."));
-      },
-    },
+    ...(canDelete
+      ? [
+          {
+            label: "Delete",
+            danger: true,
+            onClick: (row: User) => {
+              if (!window.confirm("Delete this account and all of their listings? This cannot be undone.")) return;
+              void admin
+                .remove("users", row.id)
+                .then(() => {
+                  admin.toast("Deleted.");
+                  if (open?.id === row.id) closeDrawer();
+                })
+                .catch((err: unknown) => admin.toast(err instanceof Error ? err.message : "Could not delete."));
+            },
+          },
+        ]
+      : []),
+    ...(canUpdate
+      ? [
+          {
+            label: "Block",
+            danger: true,
+            onClick: (row: User) => {
+              void admin
+                .patch("users", row.id, { status: "blocked" })
+                .then(() => admin.toast("Blocked."))
+                .catch((err: unknown) => admin.toast(err instanceof Error ? err.message : "Could not block."));
+            },
+          },
+        ]
+      : []),
   ];
 
   return (
@@ -230,6 +241,7 @@ export default function UsersPage() {
         title="User Management"
         crumb="Dashboard / Users"
         summary={`${storeUsers.length} live accounts. Search works across 10k+ users. Data refreshes automatically.`}
+        extra={<AdminUsageGuideButton staff={staff} />}
       />
       <SummaryStrip items={kpis} />
       <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
@@ -324,64 +336,73 @@ export default function UsersPage() {
         footer={
           open ? (
             <div className="space-y-3 text-sm">
+              {readOnly ? (
+                <p className="rounded-xl border border-line bg-elevated px-3 py-2 text-xs text-muted">
+                  View-only access — you cannot edit, block, or deactivate users.
+                </p>
+              ) : null}
               {open.role === "provider" ? (
                 <Btn kind="primary" onClick={() => setListingsUser(open)}>
                   See all listings of this user
                 </Btn>
               ) : null}
-              <Field label="Note for user (shown in app)">
-                <textarea
-                  className={inputClass}
-                  rows={2}
-                  value={note}
-                  onChange={(e) => setNote(e.target.value)}
-                  placeholder="Write a note the user will see on Home and Profile"
-                />
-              </Field>
-              <div className="flex flex-wrap gap-2">
-                <Btn
-                  kind="primary"
-                  loading={busyAction === "note"}
-                  loadingLabel={STATUS_LABELS.note}
-                  disabled={!!busyAction}
-                  onClick={() => {
-                    if (!note.trim()) {
-                      admin.toast("Write a note before sending.");
-                      return;
-                    }
-                    setBusyAction("note");
-                    void admin
-                      .patch("users", open.id, { staff_warning: note.trim(), notes: note.trim() })
-                      .then(() => admin.toast("Note sent to user."))
-                      .catch((err: unknown) => admin.toast(err instanceof Error ? err.message : "Could not send note."))
-                      .finally(() => setBusyAction(null));
-                  }}
-                >
-                  Send note
-                </Btn>
-                {(["active", "deactivated", "blocked"] as const).map((s) => (
-                  <Btn
-                    key={s}
-                    kind={s === "blocked" || s === "deactivated" ? "danger" : "ghost"}
-                    loading={busyAction === s}
-                    loadingLabel={STATUS_LABELS[s]}
-                    disabled={!!busyAction}
-                    onClick={() => {
-                      const patchData = note.trim()
-                        ? { status: s, staff_warning: note.trim(), notes: note.trim() }
-                        : { status: s };
-                      setBusyAction(s);
-                      void admin
-                        .patch("users", open.id, patchData)
-                        .then(() => admin.toast(`${s.charAt(0).toUpperCase()}${s.slice(1)}.`))
-                        .catch((err: unknown) => admin.toast(err instanceof Error ? err.message : "Could not update."))
-                        .finally(() => setBusyAction(null));
-                    }}
-                  >
-                    {s.charAt(0).toUpperCase() + s.slice(1)}
-                  </Btn>
-                ))}
-              </div>
+              {canUpdate ? (
+                <>
+                  <Field label="Note for user (shown in app)">
+                    <textarea
+                      className={inputClass}
+                      rows={2}
+                      value={note}
+                      onChange={(e) => setNote(e.target.value)}
+                      placeholder="Write a note the user will see on Home and Profile"
+                    />
+                  </Field>
+                  <div className="flex flex-wrap gap-2">
+                    <Btn
+                      kind="primary"
+                      loading={busyAction === "note"}
+                      loadingLabel={STATUS_LABELS.note}
+                      disabled={!!busyAction}
+                      onClick={() => {
+                        if (!note.trim()) {
+                          admin.toast("Write a note before sending.");
+                          return;
+                        }
+                        setBusyAction("note");
+                        void admin
+                          .patch("users", open.id, { staff_warning: note.trim(), notes: note.trim() })
+                          .then(() => admin.toast("Note sent to user."))
+                          .catch((err: unknown) => admin.toast(err instanceof Error ? err.message : "Could not send note."))
+                          .finally(() => setBusyAction(null));
+                      }}
+                    >
+                      Send note
+                    </Btn>
+                    {(["active", "deactivated", "blocked"] as const).map((s) => (
+                      <Btn
+                        key={s}
+                        kind={s === "blocked" || s === "deactivated" ? "danger" : "ghost"}
+                        loading={busyAction === s}
+                        loadingLabel={STATUS_LABELS[s]}
+                        disabled={!!busyAction}
+                        onClick={() => {
+                          const patchData = note.trim()
+                            ? { status: s, staff_warning: note.trim(), notes: note.trim() }
+                            : { status: s };
+                          setBusyAction(s);
+                          void admin
+                            .patch("users", open.id, patchData)
+                            .then(() => admin.toast(`${s.charAt(0).toUpperCase()}${s.slice(1)}.`))
+                            .catch((err: unknown) => admin.toast(err instanceof Error ? err.message : "Could not update."))
+                            .finally(() => setBusyAction(null));
+                        }}
+                      >
+                        {s.charAt(0).toUpperCase() + s.slice(1)}
+                      </Btn>
+                    ))}
+                  </div>
+                </>
+              ) : null}
             </div>
           ) : null
         }

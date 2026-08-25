@@ -24,10 +24,65 @@ export const NAV_PERMISSION: Record<string, string> = {
   "/admin/settings": "settings.view",
 };
 
-export type StaffAccess = {
-  isSuperAdmin?: boolean;
-  permissions?: string[];
+export type RbacAction = "view" | "create" | "update" | "delete";
+
+export const LISTING_CATEGORY_PAGE: Record<string, string> = {
+  property: "property_management",
+  jobs: "job_management",
+  services: "service_management",
+  nearby: "electronics_management",
+  vehicles: "other_listings",
+  marketplace: "other_listings",
+  business: "other_listings",
 };
+
+export const STORE_KEY_PAGE: Record<string, string> = {
+  users: "user_management",
+  properties: "property_management",
+  jobs: "job_management",
+  services: "service_management",
+  gadgets: "electronics_management",
+  others: "other_listings",
+  kyc: "kyc_verification",
+  reports: "reports_complaints",
+  reviews: "reviews_ratings",
+  notices: "notifications",
+  ads: "ads_promotions",
+  payments: "seller_payments",
+  staff: "staff_management",
+};
+
+export function pageFromPath(pathname: string): string | null {
+  const perm = permissionForPath(pathname);
+  if (!perm) return null;
+  return perm.replace(/\.view$/, "");
+}
+
+export function can(staff: StaffAccess | null | undefined, page: string, action: RbacAction): boolean {
+  if (!page) return false;
+  return hasPermission(staff, `${page}.${action}`);
+}
+
+export function canForPath(staff: StaffAccess | null | undefined, pathname: string, action: RbacAction): boolean {
+  const page = pageFromPath(pathname);
+  if (!page) return Boolean(staff?.isSuperAdmin);
+  return can(staff, page, action);
+}
+
+export function canListing(
+  staff: StaffAccess | null | undefined,
+  category: string | undefined,
+  action: RbacAction,
+): boolean {
+  const page = LISTING_CATEGORY_PAGE[category || ""] || "other_listings";
+  return can(staff, page, action);
+}
+
+export function assertCan(staff: StaffAccess | null | undefined, page: string, action: RbacAction): void {
+  if (!can(staff, page, action)) {
+    throw new Error(`You don't have permission to ${action} this section.`);
+  }
+}
 
 export function hasPermission(staff: StaffAccess | null | undefined, code: string): boolean {
   if (!staff) return false;
@@ -63,5 +118,40 @@ export function filterNavForStaff(nav: NavItem[], staff: StaffAccess | null | un
 export function firstAllowedPath(staff: StaffAccess | null | undefined): string {
   if (!staff) return "/admin/login";
   const allowed = filterNavForStaff(NAV, staff);
-  return allowed[0]?.href || "/admin";
+  // Never send staff to dashboard unless they have dashboard.view (it's in NAV order).
+  return allowed[0]?.href || "/admin/login";
 }
+
+export function badgePermission(href: string): string | null {
+  if (NAV_PERMISSION[href]) return NAV_PERMISSION[href];
+  const base = href.split("?")[0];
+  return NAV_PERMISSION[base] || null;
+}
+
+export function filterBadgesForStaff(
+  badges: Record<string, number>,
+  staff: StaffAccess | null | undefined,
+): Record<string, number> {
+  if (!staff) return {};
+  if (staff.isSuperAdmin) return badges;
+  const out: Record<string, number> = {};
+  for (const [href, count] of Object.entries(badges)) {
+    const perm = badgePermission(href);
+    if (!perm || hasPermission(staff, perm)) out[href] = count;
+  }
+  return out;
+}
+
+export function filterInboxForStaff<T extends { permission: string }>(
+  items: T[],
+  staff: StaffAccess | null | undefined,
+): T[] {
+  if (!staff) return [];
+  if (staff.isSuperAdmin) return items;
+  return items.filter((item) => hasPermission(staff, item.permission));
+}
+
+export type StaffAccess = {
+  isSuperAdmin?: boolean;
+  permissions?: string[];
+};

@@ -6,6 +6,7 @@ import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Eye, EyeOff, Lock, LogIn, Mail, User } from "lucide-react";
 import { ApiError } from "@/lib/api";
+import { firstAllowedPath } from "@/lib/rbac";
 import { useSession } from "@/lib/session";
 
 const HERO =
@@ -53,7 +54,7 @@ export default function StaffLoginPage() {
     try {
       if (verifyStep) {
         const live = await verifyLogin(verifyStep.staffId, verificationCode.trim());
-        router.replace(live.mustChangePassword ? "/admin/change-password" : "/admin");
+        router.replace(live.mustChangePassword ? "/admin/change-password" : firstAllowedPath(live));
         return;
       }
 
@@ -69,7 +70,7 @@ export default function StaffLoginPage() {
         setVerificationCode(result.verify.debugCode || "1234");
         return;
       }
-      router.replace(result.staff?.mustChangePassword ? "/admin/change-password" : "/admin");
+      router.replace(result.staff?.mustChangePassword ? "/admin/change-password" : firstAllowedPath(result.staff));
     } catch (err) {
       setError(formatLoginError(err));
     } finally {

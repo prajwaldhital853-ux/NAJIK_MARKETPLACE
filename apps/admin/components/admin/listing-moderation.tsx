@@ -11,6 +11,7 @@ import { formatNptDateTime, formatNptTime, relativeTime } from "@/lib/format";
 import { useSession } from "@/lib/session";
 import { ADMIN_POLL_FALLBACK_MS } from "@/lib/event-stream";
 import { deleteStaffListing, listStaffListingsPage, patchStaffListing, type StaffListing } from "@/lib/staff-api";
+import { usePageRbac } from "@/lib/use-page-rbac";
 import { UrgentListingControls } from "./urgent-listing-controls";
 
 const TABS = ["Pending", "All", "Approved", "Rejected", "Deactivated", "Urgent"] as const;
@@ -35,6 +36,7 @@ export function ListingModeration({
   category?: string;
 }) {
   const { apiSession } = useSession();
+  const { canUpdate, canDelete, readOnly } = usePageRbac(undefined, category);
   const params = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
@@ -172,6 +174,10 @@ export function ListingModeration({
     note?: string,
     actionKey?: string,
   ) {
+    if (!canUpdate) {
+      setError("You only have view access for this section.");
+      return;
+    }
     const key = actionKey || `${id}:${status === "approved" ? "approve" : status === "rejected" ? "reject" : "deactivate"}`;
     setBusyAction(key);
     try {
@@ -199,6 +205,10 @@ export function ListingModeration({
   }
 
   async function removeListing(id: string) {
+    if (!canDelete) {
+      setError("You don't have delete permission for this section.");
+      return;
+    }
     if (!window.confirm("Delete this listing permanently? Buyers will no longer see it.")) return;
     setBusyAction(`${id}:delete`);
     try {
@@ -296,28 +306,36 @@ export function ListingModeration({
   ];
 
   const rowActions: RowMenuAction<StaffListing>[] = [
-    {
-      label: "Deactivate",
-      danger: true,
-      onClick: (row) => void deactivateListing(row),
-    },
-    {
-      label: "Delete",
-      danger: true,
-      onClick: (row) => void removeListing(row.id),
-    },
-    {
-      label: "Reactivate",
-      onClick: (row) => {
-        if (row.status !== "deactivated" && row.status !== "rejected") {
-          window.alert("Only deactivated or rejected listings need reactivation.");
-          return;
-        }
-        void setStatus(row.id, "approved", "");
-      },
-    },
-    { label: "Move up", onClick: (row) => moveRow(row, -1) },
-    { label: "Move down", onClick: (row) => moveRow(row, 1) },
+    ...(canUpdate
+      ? [
+          {
+            label: "Deactivate",
+            danger: true,
+            onClick: (row: StaffListing) => void deactivateListing(row),
+          },
+          {
+            label: "Reactivate",
+            onClick: (row: StaffListing) => {
+              if (row.status !== "deactivated" && row.status !== "rejected") {
+                window.alert("Only deactivated or rejected listings need reactivation.");
+                return;
+              }
+              void setStatus(row.id, "approved", "");
+            },
+          },
+          { label: "Move up", onClick: (row: StaffListing) => moveRow(row, -1) },
+          { label: "Move down", onClick: (row: StaffListing) => moveRow(row, 1) },
+        ]
+      : []),
+    ...(canDelete
+      ? [
+          {
+            label: "Delete",
+            danger: true,
+            onClick: (row: StaffListing) => void removeListing(row.id),
+          },
+        ]
+      : []),
   ];
 
   const extras = open?.extras || {};
@@ -440,10 +458,15 @@ export function ListingModeration({
         footer={
           open ? (
             <div className="space-y-3">
-              {open.status === "approved" ? (
+              {readOnly ? (
+                <p className="rounded-xl border border-line bg-elevated px-3 py-2 text-xs text-muted">
+                  View-only access — you cannot approve, reject, deactivate, or delete listings.
+                </p>
+              ) : null}
+              {open.status === "approved" && canUpdate ? (
                 <UrgentListingControls listing={open} onUpdated={() => void load()} />
               ) : null}
-              {open.status === "pending" || open.has_pending_edit ? (
+              {canUpdate && (open.status === "pending" || open.has_pending_edit) ? (
                 <>
                   <textarea
                     value={reason}
@@ -479,18 +502,20 @@ export function ListingModeration({
                     >
                       Deactivate
                     </Btn>
-                    <Btn
-                      kind="danger"
-                      loading={busyAction === `${open.id}:delete`}
-                      loadingLabel={ACTION_LABELS.delete}
-                      disabled={!!busyAction}
-                      onClick={() => void removeListing(open.id)}
-                    >
-                      Delete
-                    </Btn>
+                    {canDelete ? (
+                      <Btn
+                        kind="danger"
+                        loading={busyAction === `${open.id}:delete`}
+                        loadingLabel={ACTION_LABELS.delete}
+                        disabled={!!busyAction}
+                        onClick={() => void removeListing(open.id)}
+                      >
+                        Delete
+                      </Btn>
+                    ) : null}
                   </div>
                 </>
-              ) : (
+              ) : canUpdate ? (
                 <div className="flex flex-wrap gap-2">
                   {open.status === "deactivated" || open.status === "rejected" ? (
                     <Btn
@@ -513,17 +538,19 @@ export function ListingModeration({
                       Deactivate
                     </Btn>
                   ) : null}
-                  <Btn
-                    kind="danger"
-                    loading={busyAction === `${open.id}:delete`}
-                    loadingLabel={ACTION_LABELS.delete}
-                    disabled={!!busyAction}
-                    onClick={() => void removeListing(open.id)}
-                  >
-                    Delete listing
-                  </Btn>
+                  {canDelete ? (
+                    <Btn
+                      kind="danger"
+                      loading={busyAction === `${open.id}:delete`}
+                      loadingLabel={ACTION_LABELS.delete}
+                      disabled={!!busyAction}
+                      onClick={() => void removeListing(open.id)}
+                    >
+                      Delete listing
+                    </Btn>
+                  ) : null}
                 </div>
-              )}
+              ) : null}
             </div>
           ) : null
         }

@@ -28,6 +28,7 @@ from apps.listings.serializers import (
 )
 from apps.staff.authentication import StaffJWTAuthentication
 from apps.staff.permissions import IsStaffUser
+from apps.staff.rbac import require_listing_list_view, require_listing_rbac
 from apps.verification.models import ProviderApplication
 
 
@@ -676,8 +677,9 @@ class StaffListingListView(APIView):
     permission_classes = [IsStaffUser]
 
     def get(self, request):
-        items = listing_card_queryset().order_by("-created_at").exclude(status=Listing.STATUS_DRAFT)
         category = request.query_params.get("category")
+        require_listing_list_view(request.user, category)
+        items = listing_card_queryset().order_by("-created_at").exclude(status=Listing.STATUS_DRAFT)
         if category:
             cats = [item.strip() for item in category.split(",") if item.strip()]
             items = items.filter(category__in=cats)
@@ -706,6 +708,7 @@ class StaffListingDetailView(APIView):
 
     def patch(self, request, pk):
         listing = get_object_or_404(Listing, pk=pk)
+        require_listing_rbac(request.user, listing, "PATCH")
         serializer = ListingStatusSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         next_status = serializer.validated_data["status"]
@@ -741,6 +744,7 @@ class StaffListingDetailView(APIView):
 
     def delete(self, request, pk):
         listing = get_object_or_404(Listing, pk=pk)
+        require_listing_rbac(request.user, listing, "DELETE")
         listing.delete()
         bump_listing_feed_cache()
         return Response(status=status.HTTP_204_NO_CONTENT)
@@ -751,6 +755,8 @@ class StaffListingPhotoView(APIView):
     permission_classes = [IsStaffUser]
 
     def get(self, request, pk, photo_id):
+        listing = get_object_or_404(Listing, pk=pk)
+        require_listing_rbac(request.user, listing, "GET")
         photo = get_object_or_404(ListingPhoto, pk=photo_id, listing_id=pk)
         content_type, _ = mimetypes.guess_type(photo.image.name)
         return FileResponse(photo.image.open("rb"), content_type=content_type or "application/octet-stream")
@@ -762,6 +768,7 @@ class StaffListingUrgentView(APIView):
 
     def post(self, request, pk):
         listing = get_object_or_404(Listing, pk=pk)
+        require_listing_rbac(request.user, listing, "PATCH")
         if request.data.get("remove"):
             listing.is_urgent = False
             listing.urgent_ends_at = None
@@ -825,6 +832,7 @@ class StaffListingPromoteView(APIView):
 
     def post(self, request, pk):
         listing = get_object_or_404(Listing, pk=pk)
+        require_listing_rbac(request.user, listing, "PATCH")
         if request.data.get("remove"):
             listing.is_promoted = False
             listing.promote_requested = False

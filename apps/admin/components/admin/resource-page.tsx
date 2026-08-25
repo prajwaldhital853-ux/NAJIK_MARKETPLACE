@@ -7,6 +7,8 @@ import { DataTable, type Column, type RowMenuAction } from "./table";
 import { DetailKv, DetailOverlay } from "./detail-overlay";
 import { Avatar, Btn, Field, StatusBadge, inputClass } from "./ui";
 import { useAdmin } from "@/lib/store";
+import { STORE_KEY_PAGE } from "@/lib/rbac";
+import { usePageRbac } from "@/lib/use-page-rbac";
 
 function rowTimestamp(row: Record<string, unknown>): number {
   for (const key of ["joinedAt", "created_at", "posted", "date_joined", "at"]) {
@@ -70,6 +72,8 @@ export function ResourcePage<T extends { id: string; status?: string; staff_warn
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const admin = useAdmin();
   const { inboxReady } = admin;
+  const rbacPage = storeKey ? STORE_KEY_PAGE[storeKey] : undefined;
+  const { canUpdate, canDelete, readOnly } = usePageRbac(rbacPage);
   const openId = params.get("id");
   const autoOpenedId = useRef<string | null>(null);
 
@@ -172,39 +176,47 @@ export function ResourcePage<T extends { id: string; status?: string; staff_warn
   };
 
   const rowActions: RowMenuAction<T>[] = [
-    {
-      label: "Delete",
-      danger: true,
-      onClick: (row) => {
-        if (!storeKey || !allowDelete) {
-          admin.toast("Delete is not available here.");
-          return;
-        }
-        const message = deleteConfirm || "Delete this record permanently? This cannot be undone.";
-        if (!window.confirm(message)) return;
-        void admin
-          .remove(storeKey, row.id)
-          .then(() => {
-            admin.toast("Deleted.");
-            if (open?.id === row.id) closeDrawer();
-          })
-          .catch((err: unknown) => admin.toast(err instanceof Error ? err.message : "Could not delete."));
-      },
-    },
-    {
-      label: "Block",
-      danger: true,
-      onClick: (row) => {
-        if (!storeKey) {
-          admin.toast("Block is not available here.");
-          return;
-        }
-        void admin
-          .patch(storeKey, row.id, { status: "blocked" })
-          .then(() => admin.toast("Blocked."))
-          .catch((err: unknown) => admin.toast(err instanceof Error ? err.message : "Could not block."));
-      },
-    },
+    ...(canDelete && allowDelete
+      ? [
+          {
+            label: "Delete",
+            danger: true,
+            onClick: (row: T) => {
+              if (!storeKey || !allowDelete) {
+                admin.toast("Delete is not available here.");
+                return;
+              }
+              const message = deleteConfirm || "Delete this record permanently? This cannot be undone.";
+              if (!window.confirm(message)) return;
+              void admin
+                .remove(storeKey, row.id)
+                .then(() => {
+                  admin.toast("Deleted.");
+                  if (open?.id === row.id) closeDrawer();
+                })
+                .catch((err: unknown) => admin.toast(err instanceof Error ? err.message : "Could not delete."));
+            },
+          },
+        ]
+      : []),
+    ...(canUpdate
+      ? [
+          {
+            label: "Block",
+            danger: true,
+            onClick: (row: T) => {
+              if (!storeKey) {
+                admin.toast("Block is not available here.");
+                return;
+              }
+              void admin
+                .patch(storeKey, row.id, { status: "blocked" })
+                .then(() => admin.toast("Blocked."))
+                .catch((err: unknown) => admin.toast(err instanceof Error ? err.message : "Could not block."));
+            },
+          },
+        ]
+      : []),
   ];
 
   return (
@@ -253,7 +265,12 @@ export function ResourcePage<T extends { id: string; status?: string; staff_warn
           open ? (
             <div className="space-y-3 text-sm">
               {detailFooterExtra ? detailFooterExtra(open) : null}
-              {storeKey && statusActions?.length ? (
+              {readOnly ? (
+                <p className="rounded-xl border border-line bg-elevated px-3 py-2 text-xs text-muted">
+                  View-only access — moderation actions are hidden.
+                </p>
+              ) : null}
+              {storeKey && statusActions?.length && canUpdate ? (
                 <div className="space-y-2">
                   <p className="text-xs font-semibold text-muted">Moderation</p>
                   <Field label={storeKey === "kyc" ? "Rejection note for user" : allowSendNote ? "Note for user (shown in app)" : "Internal note"}>
@@ -379,7 +396,7 @@ export function ResourcePage<T extends { id: string; status?: string; staff_warn
                         {s === "pending" ? "Reactivate" : s === "rejected" ? "Reject with note" : s}
                       </Btn>
                     ))}
-                    {allowDelete ? (
+                    {allowDelete && canDelete ? (
                       <Btn
                         kind="danger"
                         loading={busyAction === "delete"}
@@ -407,7 +424,7 @@ export function ResourcePage<T extends { id: string; status?: string; staff_warn
                   </div>
                 </div>
               ) : null}
-              {storeKey && allowDelete && !statusActions?.length ? (
+              {storeKey && allowDelete && canDelete && !statusActions?.length ? (
                 <Btn
                   kind="danger"
                   loading={busyAction === "delete"}

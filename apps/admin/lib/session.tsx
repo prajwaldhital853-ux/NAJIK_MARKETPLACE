@@ -17,7 +17,7 @@ const SessionCtx = createContext<{
   login: (email: string, password: string) => Promise<{ staff?: Staff; verify?: { staffId: string; email: string; message: string; debugCode?: string } }>;
   verifyLogin: (staffId: string, code: string) => Promise<Staff>;
   logout: () => void;
-  refreshStaff: () => Promise<void>;
+  refreshStaff: () => Promise<Staff | null>;
 } | null>(null);
 
 export function SessionProvider({ children }: { children: React.ReactNode }) {
@@ -135,10 +135,12 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       if (live) {
         setStaff(live);
         setApiSession(true);
+        return live;
       }
     } catch {
       logout();
     }
+    return null;
   }, [logout]);
 
   const value = useMemo(

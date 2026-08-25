@@ -17,7 +17,17 @@ export type InboxItem = {
   href: string;
   time: string;
   at: number;
+  /** RBAC view permission required to see this notification */
+  permission: string;
 };
+
+function listingPermission(category: string) {
+  if (category === "property") return "property_management.view";
+  if (category === "jobs") return "job_management.view";
+  if (category === "services") return "service_management.view";
+  if (category === "nearby") return "electronics_management.view";
+  return "other_listings.view";
+}
 
 export function listingQueueHref(category: string) {
   if (category === "property") return "/admin/properties?status=pending";
@@ -112,6 +122,7 @@ export function buildInbox(
       href: "/admin/providers",
       time: relativeTime(row.created_at),
       at: Date.parse(row.created_at) || 0,
+      permission: "kyc_verification.view",
     });
   });
 
@@ -126,6 +137,7 @@ export function buildInbox(
       href: seller ? `/admin/users?role=provider&id=${user.id}` : `/admin/users?role=buyer&id=${user.id}`,
       time: user.lastActive,
       at: Date.parse(user.joinedAt || "") || 0,
+      permission: seller ? "kyc_verification.view" : "user_management.view",
     });
   });
 
@@ -138,6 +150,7 @@ export function buildInbox(
       href: listingQueueHref(row.category),
       time: relativeTime(row.created_at),
       at: Date.parse(row.created_at) || 0,
+      permission: listingPermission(row.category),
     });
   });
 
@@ -153,6 +166,7 @@ export function buildInbox(
       href: `/admin/reports?id=${row.id}`,
       time: relativeTime(row.created_at),
       at: Date.parse(row.created_at) || 0,
+      permission: "reports_complaints.view",
     });
   });
 
@@ -167,6 +181,7 @@ export function buildInbox(
         href: "/admin/payments?tab=requests",
         time: relativeTime(row.created_at),
         at: Date.parse(row.created_at) || 0,
+        permission: "seller_payments.view",
       });
     });
 

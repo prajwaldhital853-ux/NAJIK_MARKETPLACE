@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Eye, EyeOff, KeyRound } from "lucide-react";
 import { Btn, Field, inputClass } from "@/components/admin/ui";
 import { changeOwnPassword, checkPasswordStrength, type PasswordStrength } from "@/lib/staff-api";
+import { firstAllowedPath } from "@/lib/rbac";
 import { useSession } from "@/lib/session";
 
 function StrengthList({ strength }: { strength: PasswordStrength | null }) {
@@ -44,7 +45,7 @@ export default function ChangePasswordPage() {
       return;
     }
     if (!staff.mustChangePassword) {
-      router.replace("/admin");
+      router.replace(firstAllowedPath(staff));
     }
   }, [ready, staff, router]);
 
@@ -70,8 +71,8 @@ export default function ChangePasswordPage() {
         new_password: newPassword,
         confirm_password: confirmPassword,
       });
-      await refreshStaff();
-      router.replace("/admin");
+      const updated = await refreshStaff();
+      router.replace(firstAllowedPath(updated));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not update password");
     } finally {

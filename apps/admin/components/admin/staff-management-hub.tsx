@@ -21,6 +21,7 @@ import { Avatar, Btn, Drawer, Field, Modal, StatusBadge, inputClass } from "@/co
 import { useAdmin } from "@/lib/store";
 import { useSession } from "@/lib/session";
 import { DEFAULT_STAFF_LOGINS } from "@/lib/default-staff-accounts";
+import { AdminUsageGuideButton } from "@/components/admin/admin-usage-guide";
 import {
   checkPasswordStrength,
   createRole,
@@ -446,15 +447,18 @@ export function StaffManagementHub() {
         crumb="Dashboard / Staff"
         summary="Manage staff accounts, default system roles, and custom roles. Super Admin can edit permissions on any role and add new roles like Account Manager."
         extra={
-          tab === "staff" ? (
-            <Btn onClick={() => { setStaffStep(0); setStaffDrawer("create"); }}>
-              <UserPlus size={14} /> Add staff
-            </Btn>
-          ) : (
-            <Btn onClick={() => setRoleEditor("new")}>
-              <Plus size={14} /> Custom role
-            </Btn>
-          )
+          <div className="flex flex-wrap items-center gap-2">
+            <AdminUsageGuideButton staff={sessionStaff} />
+            {tab === "staff" ? (
+              <Btn onClick={() => { setStaffStep(0); setStaffDrawer("create"); }}>
+                <UserPlus size={14} /> Add staff
+              </Btn>
+            ) : (
+              <Btn onClick={() => setRoleEditor("new")}>
+                <Plus size={14} /> Custom role
+              </Btn>
+            )}
+          </div>
         }
       />
 

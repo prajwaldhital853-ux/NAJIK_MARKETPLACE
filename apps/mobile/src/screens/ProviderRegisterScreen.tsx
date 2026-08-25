@@ -23,6 +23,7 @@ import { DatePickerModal } from "../components/DatePickerModal";
 import { KeyboardScreen, useKeyboardScroll } from "../components/KeyboardScreen";
 import { NajikWordmark } from "../components/NajikWordmark";
 import { PressScale } from "../components/PressScale";
+import { LegalAcceptanceRow } from "../components/LegalAcceptanceRow";
 import { friendlyError } from "../api";
 import { requestGuestOtp } from "../authApi";
 import { ageFromAd, formatBsOnly, formatDateLabel, parseStoredAd, toStoredAd, type Ymd } from "../nepaliDate";
@@ -105,6 +106,7 @@ export function ProviderRegisterScreen() {
   const [errorField, setErrorField] = useState<FieldKey | null>(null);
   const [errorTick, setErrorTick] = useState(0);
   const [toast, setToast] = useState("");
+  const [legalAccepted, setLegalAccepted] = useState(false);
   const fieldRefs = useRef<Partial<Record<FieldKey, View | null>>>({});
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -244,6 +246,7 @@ export function ProviderRegisterScreen() {
       if (!/\d/.test(password)) return { field: "password", message: "Include at least one number." };
       if (!/[^A-Za-z0-9]/.test(password)) return { field: "password", message: "Include at least one special character." };
       if (password !== confirmPassword) return { field: "confirmPassword", message: "Passwords do not match." };
+      if (!legalAccepted) return { field: "password", message: "Please agree to the Terms & Conditions and Privacy Policy." };
     }
     return null;
   }
@@ -495,7 +498,7 @@ export function ProviderRegisterScreen() {
                 if (step < STEPS.length - 1) next();
                 else void finish();
               }}
-              style={{ borderRadius: 12, overflow: "hidden", opacity: busy || stepBusy ? 0.85 : 1 }}
+              style={{ borderRadius: 12, overflow: "hidden", opacity: busy || stepBusy || (step === STEPS.length - 1 && !legalAccepted) ? 0.65 : 1 }}
             >
               <LinearGradient
                 colors={[GREEN, "#2FA24A"]}
@@ -976,6 +979,7 @@ export function ProviderRegisterScreen() {
               onChangeText={setReferralCode}
               autoCapitalize="characters"
             />
+            <LegalAcceptanceRow role="seller" checked={legalAccepted} onChange={setLegalAccepted} disabled={busy || stepBusy} />
           </>
         ) : null}
       </KeyboardScreen>

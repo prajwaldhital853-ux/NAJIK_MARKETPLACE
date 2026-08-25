@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { KeyboardScreen, useKeyboardScroll } from "../components/KeyboardScreen";
 import { NajikWordmark } from "../components/NajikWordmark";
 import { PressScale } from "../components/PressScale";
+import { LegalAcceptanceRow } from "../components/LegalAcceptanceRow";
 import { friendlyError } from "../api";
 import { useAuth } from "../context/AuthContext";
 import { NEPAL_CITIES } from "../data/listingCategories";
@@ -23,6 +24,7 @@ export function BuyerProfileSetupScreen() {
   const [picker, setPicker] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [legalAccepted, setLegalAccepted] = useState(false);
   const { onInputFocus } = useKeyboardScroll();
 
   async function useLocation() {
@@ -47,6 +49,10 @@ export function BuyerProfileSetupScreen() {
     }
     if (!phone.replace(/\s/g, "")) {
       setError("Phone number is required.");
+      return;
+    }
+    if (!legalAccepted) {
+      setError("Please agree to the Terms & Conditions and Privacy Policy.");
       return;
     }
     setBusy(true);
@@ -107,9 +113,10 @@ export function BuyerProfileSetupScreen() {
           </PressScale>
         </View>
         {error ? <Text style={{ marginTop: 10, color: colors.red }}>{error}</Text> : null}
+        <LegalAcceptanceRow role="buyer" checked={legalAccepted} onChange={setLegalAccepted} disabled={busy} />
         <PressScale
           onPress={() => void submit()}
-          style={{ marginTop: 16, backgroundColor: GREEN, borderRadius: 28, height: 52, alignItems: "center", justifyContent: "center", opacity: busy ? 0.7 : 1 }}
+          style={{ marginTop: 16, backgroundColor: GREEN, borderRadius: 28, height: 52, alignItems: "center", justifyContent: "center", opacity: busy || !legalAccepted ? 0.65 : 1 }}
         >
           <Text style={{ color: "#fff", fontWeight: "800" }}>{busy ? "Saving…" : "Continue to phone verification"}</Text>
         </PressScale>

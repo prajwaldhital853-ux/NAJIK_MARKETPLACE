@@ -117,6 +117,8 @@ def _exchange_google_code(code: str, redirect_uri: str) -> tuple[dict | None, st
 
 
 def _session_for_google_user(payload: dict, account_type: str, request):
+    from apps.accounts.legal import legal_accepted_from, require_legal_acceptance, stamp_legal_acceptance
+
     sub = payload.get("sub")
     email = (payload.get("email") or "").lower() or None
     email_verified = bool(payload.get("email_verified"))
@@ -130,6 +132,7 @@ def _session_for_google_user(payload: dict, account_type: str, request):
         if user and user.google_sub and user.google_sub != sub:
             return Response({"detail": "Unable to sign in."}, status=status.HTTP_400_BAD_REQUEST)
     if user is None:
+        require_legal_acceptance(request.data)
         user = AppUser(
             email=email,
             username=email or f"google_{sub}",
@@ -142,6 +145,7 @@ def _session_for_google_user(payload: dict, account_type: str, request):
             return Response({"detail": "Google account has no email."}, status=status.HTTP_400_BAD_REQUEST)
         user.set_unusable_password()
         user.save()
+        stamp_legal_acceptance(user, request.data)
     else:
         if user.account_type != account_type:
             return Response(wrong_role_payload(user.account_type), status=status.HTTP_409_CONFLICT)
@@ -152,6 +156,8 @@ def _session_for_google_user(payload: dict, account_type: str, request):
         if email and not user.email:
             user.email = email
         user.save()
+        if legal_accepted_from(request.data):
+            stamp_legal_acceptance(user, request.data)
     if not user.is_active:
         return Response(
             {"detail": inactive_auth_error(user)},

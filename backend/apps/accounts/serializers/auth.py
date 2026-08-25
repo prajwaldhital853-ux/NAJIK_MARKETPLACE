@@ -129,6 +129,8 @@ class AppUserPublicSerializer(serializers.ModelSerializer):
             "hide_phone_on_ads",
             "is_active",
             "account_status",
+            "terms_accepted_at",
+            "privacy_accepted_at",
         )
         read_only_fields = fields
 
@@ -204,6 +206,7 @@ class RegisterSerializer(serializers.Serializer):
     password = serializers.CharField(write_only=True, min_length=8, max_length=128, style={"input_type": "password"})
     account_type = serializers.ChoiceField(choices=AppUser.ACCOUNT_CHOICES)
     referral_code = serializers.CharField(required=False, allow_blank=True, max_length=32)
+    legal_accepted = serializers.BooleanField(required=False, default=False)
 
     def validate_phone(self, value):
         if not value:
@@ -223,6 +226,9 @@ class RegisterSerializer(serializers.Serializer):
         phone = attrs.get("phone") or None
         if not email and not phone:
             raise serializers.ValidationError("Provide an email or a phone number.")
+        from apps.accounts.legal import require_legal_acceptance
+
+        require_legal_acceptance(attrs)
         if email:
             existing = AppUser.objects.filter(email__iexact=email).first()
             if existing:
@@ -256,9 +262,13 @@ class RegisterSerializer(serializers.Serializer):
         return attrs
 
     def create(self, validated_data):
+        validated_data.pop("legal_accepted", None)
         referral_raw = (validated_data.pop("referral_code", "") or "").strip()
         password = validated_data.pop("password")
         user = AppUser.objects.create_user(password=password, **validated_data)
+        from apps.accounts.legal import stamp_legal_acceptance
+
+        stamp_legal_acceptance(user, {"legal_accepted": True})
         from apps.accounts.models.referral import apply_referral_code, generate_referral_code
 
         generate_referral_code(user)

@@ -87,6 +87,7 @@ class ProviderRegisterCompleteSerializer(serializers.Serializer):
     other_document_uri = serializers.CharField(required=False, allow_blank=True)
     profile_data = serializers.DictField(required=False)
     referral_code = serializers.CharField(required=False, allow_blank=True, max_length=32)
+    legal_accepted = serializers.BooleanField(required=False, default=False)
 
     def validate_phone(self, value):
         phone = normalize_phone(value)
@@ -126,6 +127,10 @@ class ProviderRegisterCompleteSerializer(serializers.Serializer):
         email = attrs["email"]
         if not verify_otp(phone, "phone", attrs["code"]):
             raise serializers.ValidationError({"code": "Invalid or expired code."})
+
+        from apps.accounts.legal import require_legal_acceptance
+
+        require_legal_acceptance(attrs)
 
         # Block non-reclaimable collisions (e.g. active verified provider / buyer).
         for field, value, lookup in (
@@ -219,6 +224,10 @@ class ProviderRegisterCompleteView(APIView):
         referral_raw = (data.get("referral_code") or "").strip()
         if referral_raw:
             apply_referral_code(user, referral_raw)
+
+        from apps.accounts.legal import stamp_legal_acceptance
+
+        stamp_legal_acceptance(user, {"legal_accepted": True})
 
         user = AppUser.objects.select_related("provider_application").get(pk=user.pk)
         tokens = AppTokenSerializer.for_user(user)

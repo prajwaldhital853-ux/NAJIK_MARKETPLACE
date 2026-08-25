@@ -28,9 +28,10 @@ import { KeyboardScreen, useKeyboardScroll } from "../components/KeyboardScreen"
 import { PressScale } from "../components/PressScale";
 import { ReportComplaintModal } from "../components/ReportComplaintModal";
 import { useAuth } from "../context/AuthContext";
+import { isProvider } from "../demo";
+import { infoLinkDocId } from "../legal/types";
 import { useInbox } from "../context/InboxContext";
 import { normTargetId } from "../inboxBridge";
-import { isProvider } from "../demo";
 import { catalogMeta, listingById, type CatalogItem } from "../data/catalog";
 import { apiCategoryForKey, liveListingById, listingsToCatalog, listingToCatalog } from "../data/liveListings";
 import { rankSimilarListings, relatedKeywordsFor } from "../data/similarListings";
@@ -759,7 +760,15 @@ function ListingBody({
 
       <View style={{ flexDirection: "row", flexWrap: "wrap", paddingHorizontal: 16, paddingTop: 22, gap: 10 }}>
         {infoLinks.map((label) => (
-          <Pressable key={label} onPress={() => Alert.alert(label, "NAJIK demo page.")}>
+          <Pressable
+            key={label}
+            onPress={() => {
+              const doc = infoLinkDocId(label);
+              if (!doc) return;
+              const legalRole = isProvider(user) ? "seller" : "buyer";
+              navigation.navigate("LegalDocument", { doc, role: legalRole });
+            }}
+          >
             <Text style={{ color: GREEN, fontSize: 12, textDecorationLine: "underline" }}>{label}</Text>
           </Pressable>
         ))}

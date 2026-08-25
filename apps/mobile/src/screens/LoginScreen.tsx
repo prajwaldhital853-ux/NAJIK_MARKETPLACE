@@ -18,6 +18,7 @@ import { StatusBar as ExpoStatusBar } from "expo-status-bar";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { GoogleMark } from "../components/GoogleMark";
 import { GoogleSignInModal } from "../components/GoogleSignInModal";
+import { LegalAcceptanceRow } from "../components/LegalAcceptanceRow";
 import { NajikWordmark } from "../components/NajikWordmark";
 import { PressScale } from "../components/PressScale";
 import { ApiError, friendlyError } from "../api";
@@ -154,7 +155,6 @@ function loginMetrics(insetsTop: number, insetsBottom: number) {
     btnR,
     cornerTop: Math.round(90 + 40 * s),
     chipIcon: Math.round(26 + 6 * s),
-    gapAfterHero: gapAfterHero,
     gapBeforeBtn,
     dotsGap,
     sectionGap,
@@ -172,6 +172,8 @@ export function LoginScreen() {
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState(hint.message || "");
   const [googleOpen, setGoogleOpen] = useState(false);
+  const [buyerLegalAccepted, setBuyerLegalAccepted] = useState(false);
+  const [sellerLegalAccepted, setSellerLegalAccepted] = useState(false);
   const metrics = useMemo(() => loginMetrics(insets.top, insets.bottom), [insets.top, insets.bottom]);
 
   useEffect(() => {
@@ -219,6 +221,10 @@ export function LoginScreen() {
   }
 
   async function onGoogle() {
+    if (!buyerLegalAccepted) {
+      Alert.alert("Terms & Privacy", "Please read and agree to the Terms & Conditions and Privacy Policy to continue.");
+      return;
+    }
     if (!GOOGLE_CLIENT_ID) {
       Alert.alert("Google", "Add EXPO_PUBLIC_GOOGLE_CLIENT_ID and restart Expo.");
       return;
@@ -243,13 +249,23 @@ export function LoginScreen() {
           metrics={metrics}
           busy={busy}
           notice={page === 0 ? notice : ""}
+          legalAccepted={buyerLegalAccepted}
+          onLegalAcceptedChange={setBuyerLegalAccepted}
           onGoogle={() => void onGoogle()}
         />
         <SellerPage
           metrics={metrics}
           notice={page === 1 ? notice : ""}
+          legalAccepted={sellerLegalAccepted}
+          onLegalAcceptedChange={setSellerLegalAccepted}
           onBack={() => goPage(0)}
-          onRegister={() => navigation.navigate("ProviderRegister")}
+          onRegister={() => {
+            if (!sellerLegalAccepted) {
+              Alert.alert("Terms & Privacy", "Please read and agree to the Terms & Conditions and Privacy Policy before registering.");
+              return;
+            }
+            navigation.navigate("ProviderRegister");
+          }}
           onLogin={() => navigation.navigate("SellerLogin")}
         />
       </ScrollView>
@@ -264,11 +280,15 @@ function BuyerPage({
   metrics,
   busy,
   notice,
+  legalAccepted,
+  onLegalAcceptedChange,
   onGoogle,
 }: {
   metrics: Metrics;
   busy: boolean;
   notice: string;
+  legalAccepted: boolean;
+  onLegalAcceptedChange: (value: boolean) => void;
   onGoogle: () => void;
 }) {
   return (
@@ -314,9 +334,10 @@ function BuyerPage({
         </Text>
         <Dots active={0} gap={metrics.dotsGap} />
         {notice ? <Text style={{ marginTop: 6, color: colors.red, textAlign: "center", fontWeight: "700", fontSize: 12 }}>{notice}</Text> : null}
+        <LegalAcceptanceRow role="buyer" checked={legalAccepted} onChange={onLegalAcceptedChange} compact disabled={busy} />
         <PressScale
           onPress={onGoogle}
-          disabled={busy}
+          disabled={busy || !legalAccepted}
           style={{
             marginTop: metrics.gapBeforeBtn,
             backgroundColor: "#111111",
@@ -324,7 +345,7 @@ function BuyerPage({
             height: metrics.btnH,
             alignItems: "center",
             justifyContent: "center",
-            opacity: busy ? 0.7 : 1,
+            opacity: busy || !legalAccepted ? 0.55 : 1,
           }}
         >
           <View style={{ position: "absolute", left: 14, width: 28, height: 28, borderRadius: 14, backgroundColor: "#fff", alignItems: "center", justifyContent: "center" }}>
@@ -342,12 +363,16 @@ function BuyerPage({
 function SellerPage({
   metrics,
   notice,
+  legalAccepted,
+  onLegalAcceptedChange,
   onBack,
   onRegister,
   onLogin,
 }: {
   metrics: Metrics;
   notice: string;
+  legalAccepted: boolean;
+  onLegalAcceptedChange: (value: boolean) => void;
   onBack: () => void;
   onRegister: () => void;
   onLogin: () => void;
@@ -409,7 +434,8 @@ function SellerPage({
         </Text>
         <Dots active={1} />
         {notice ? <Text style={{ marginTop: 8, color: colors.red, textAlign: "center", fontWeight: "700", fontSize: 12 }}>{notice}</Text> : null}
-        <PressScale onPress={onRegister} style={{ marginTop: metrics.gapBeforeBtn, borderRadius: 14, overflow: "hidden" }}>
+        <LegalAcceptanceRow role="seller" checked={legalAccepted} onChange={onLegalAcceptedChange} compact />
+        <PressScale onPress={onRegister} style={{ marginTop: metrics.gapBeforeBtn, borderRadius: 14, overflow: "hidden", opacity: legalAccepted ? 1 : 0.55 }}>
           <LinearGradient
             colors={[GREEN, "#2FA24A"]}
             start={{ x: 0, y: 0 }}

@@ -64,6 +64,8 @@ class AppUser(AbstractBaseUser, PermissionsMixin):
     allow_buyer_calls = models.BooleanField(default=True)
     hide_phone_on_ads = models.BooleanField(default=False)
     referral_code = models.CharField(max_length=32, unique=True, null=True, blank=True, db_index=True)
+    terms_accepted_at = models.DateTimeField(null=True, blank=True)
+    privacy_accepted_at = models.DateTimeField(null=True, blank=True)
 
     objects = AppUserManager()
 

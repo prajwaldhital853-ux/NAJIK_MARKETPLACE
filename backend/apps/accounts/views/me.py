@@ -25,6 +25,7 @@ class MePhotoPatchSerializer(serializers.Serializer):
     allow_buyer_calls = serializers.BooleanField(required=False)
     hide_phone_on_ads = serializers.BooleanField(required=False)
     referral_code = serializers.CharField(required=False, allow_blank=True, max_length=32)
+    legal_accepted = serializers.BooleanField(required=False, default=False)
 
     def validate_photo_uri(self, value):
         return file_from_data_uri(value, "avatar")
@@ -46,6 +47,7 @@ class MePhotoPatchSerializer(serializers.Serializer):
             "allow_buyer_calls",
             "hide_phone_on_ads",
             "referral_code",
+            "legal_accepted",
         )
         if not any(key in self.initial_data for key in keys):
             raise serializers.ValidationError("Nothing to update.")
@@ -67,6 +69,11 @@ class MeView(APIView):
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
         referral_raw = (data.get("referral_code") or "").strip()
+        profile_keys = {"full_name", "phone", "address"}
+        if profile_keys.intersection(data.keys()) and not user.terms_accepted_at:
+            from apps.accounts.legal import require_legal_acceptance
+
+            require_legal_acceptance(data)
         if user.account_type == user.ACCOUNT_PROVIDER and "photo_uri" in data:
             return Response(
                 {"detail": "Service providers update their photo from profile edit, which admin must verify."},
@@ -99,7 +106,11 @@ class MeView(APIView):
         if "hide_phone_on_ads" in data:
             user.hide_phone_on_ads = bool(data.get("hide_phone_on_ads"))
             updates.append("hide_phone_on_ads")
-        if not updates and not referral_raw:
+        if data.get("legal_accepted"):
+            from apps.accounts.legal import stamp_legal_acceptance
+
+            stamp_legal_acceptance(user, data)
+        if not updates and not referral_raw and not data.get("legal_accepted"):
             return Response({"detail": "Nothing to update."}, status=status.HTTP_400_BAD_REQUEST)
         if updates:
             user.save(update_fields=updates)

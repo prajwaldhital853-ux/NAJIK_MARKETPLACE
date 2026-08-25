@@ -39,6 +39,7 @@ import { ProviderRegisterScreen } from "../screens/ProviderRegisterScreen";
 import { ProviderIdCardScreen } from "../screens/ProviderIdCardScreen";
 import { BookingsScreen } from "../screens/BookingsScreen";
 import { SellerHubScreen } from "../screens/SellerHubScreen";
+import { LegalDocumentScreen } from "../screens/LegalDocumentScreen";
 import { UrgentSellListScreen } from "../screens/UrgentSellListScreen";
 import { colors } from "../theme";
 import { createInstantTabNavigator } from "./InstantTabs";
@@ -115,6 +116,7 @@ function MainDrawer() {
       <Drawer.Screen name="BuyerInviteEarn" component={BuyerInviteEarnScreen} />
       <Drawer.Screen name="SellerProfile" component={SellerProfileScreen} />
       <Drawer.Screen name="ProviderIdCard" component={ProviderIdCardScreen} />
+      <Drawer.Screen name="LegalDocument" component={LegalDocumentScreen} />
     </Drawer.Navigator>
   );
 }
@@ -165,6 +167,7 @@ export function RootNavigator() {
         {gate === "otp" ? <Stack.Screen name="Otp" component={OtpScreen} /> : null}
         {gate === "buyer-profile" ? <Stack.Screen name="BuyerProfile" component={BuyerProfileSetupScreen} /> : null}
         {gate === "apply" ? <Stack.Screen name="SellerApply" component={SellerApplyScreen} /> : null}
+        {gate !== "guest" && gate !== "main" ? <Stack.Screen name="LegalDocument" component={LegalDocumentScreen} /> : null}
         {gate === "guest" ? (
           <>
             <Stack.Screen name="Login" component={LoginScreen} />
@@ -174,6 +177,7 @@ export function RootNavigator() {
             <Stack.Screen name="ProviderRegister" component={ProviderRegisterScreen} />
             <Stack.Screen name="ProviderOtp" component={ProviderOtpScreen} />
             <Stack.Screen name="PasswordReset" component={PasswordResetScreen} />
+            <Stack.Screen name="LegalDocument" component={LegalDocumentScreen} />
           </>
         ) : null}
       </Stack.Navigator>

@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { KeyboardScreen, useKeyboardScroll } from "../components/KeyboardScreen";
 import { NajikWordmark } from "../components/NajikWordmark";
 import { PressScale } from "../components/PressScale";
+import { LegalAcceptanceRow } from "../components/LegalAcceptanceRow";
 import { friendlyError } from "../api";
 import { useAuth } from "../context/AuthContext";
 import { colors, shadow } from "../theme";
@@ -25,6 +26,7 @@ export function RegisterScreen() {
   const [referralCode, setReferralCode] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [legalAccepted, setLegalAccepted] = useState(false);
   const { onInputFocus } = useKeyboardScroll();
 
   async function submit() {
@@ -39,6 +41,10 @@ export function RegisterScreen() {
     }
     if (!phone.replace(/\s/g, "")) {
       setError("Enter a phone number.");
+      return;
+    }
+    if (!legalAccepted) {
+      setError("Please agree to the Terms & Conditions and Privacy Policy.");
       return;
     }
     setBusy(true);
@@ -83,9 +89,10 @@ export function RegisterScreen() {
           {seller ? "Next you will verify OTP, then enter seller details." : "Next you will verify your phone with OTP. Your friend earns after your phone is verified."}
         </Text>
         {error ? <Text style={{ marginTop: 10, color: colors.red }}>{error}</Text> : null}
+        <LegalAcceptanceRow role={seller ? "seller" : "buyer"} checked={legalAccepted} onChange={setLegalAccepted} disabled={busy} />
         <PressScale
           onPress={() => void submit()}
-          style={{ marginTop: 16, backgroundColor: colors.green, borderRadius: 28, paddingVertical: 14, alignItems: "center", opacity: busy ? 0.7 : 1 }}
+          style={{ marginTop: 16, backgroundColor: colors.green, borderRadius: 28, paddingVertical: 14, alignItems: "center", opacity: busy || !legalAccepted ? 0.65 : 1 }}
         >
           <Text style={{ color: "#fff", fontWeight: "800", fontSize: 16 }}>{busy ? "Creating…" : seller ? "Continue to OTP" : "Create account"}</Text>
         </PressScale>

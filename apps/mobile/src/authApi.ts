@@ -84,7 +84,7 @@ export async function registerAccount(body: {
 }) {
   const data = await api<AuthPayload>("/api/auth/register/", {
     method: "POST",
-    body: JSON.stringify(body),
+    body: JSON.stringify({ ...body, legal_accepted: true }),
   });
   return persist(data);
 }
@@ -105,6 +105,7 @@ export async function loginWithGoogle(
     method: "POST",
     body: JSON.stringify({
       account_type: accountType,
+      legal_accepted: true,
       ...(payload.idToken ? { id_token: payload.idToken } : {}),
       ...(payload.code ? { code: payload.code, redirect_uri: payload.redirectUri || GOOGLE_REDIRECT_URI } : {}),
     }),
@@ -122,7 +123,7 @@ export async function completeBuyerProfile(payload: {
     api<AppUser>("/api/auth/me/", {
       method: "PATCH",
       token,
-      body: JSON.stringify(payload),
+      body: JSON.stringify({ ...payload, legal_accepted: true }),
     }),
   );
 }
@@ -179,7 +180,7 @@ export async function completeProviderRegister(payload: {
 }) {
   const data = await api<AuthPayload>("/api/auth/register/provider/complete/", {
     method: "POST",
-    body: JSON.stringify(payload),
+    body: JSON.stringify({ ...payload, legal_accepted: true }),
   });
   return persist(data);
 }

@@ -55,6 +55,7 @@ class AuthFlowTests(TestCase):
             "password": PASS,
             "account_type": account_type,
             "email": extra.pop("email", None) or email(account_type[0]),
+            "legal_accepted": True,
             **extra,
         }
         if "phone" in extra and extra["phone"] is None:
@@ -75,6 +76,8 @@ class AuthFlowTests(TestCase):
         self.assertFalse(res.data["user"]["email_verified"])
         user = AppUser.objects.get(email=body["email"])
         self.assertTrue(user.password.startswith("argon2"))
+        self.assertIsNotNone(user.terms_accepted_at)
+        self.assertIsNotNone(user.privacy_accepted_at)
 
         self.client.credentials()
         login = self.client.post(
@@ -104,6 +107,15 @@ class AuthFlowTests(TestCase):
         )
         self.assertEqual(login.status_code, 200, login.data)
 
+    def test_register_requires_legal_acceptance(self):
+        res = self.client.post(
+            "/api/auth/register/",
+            {"email": email(), "password": PASS, "account_type": "user", "full_name": "No Legal"},
+            format="json",
+        )
+        self.assertEqual(res.status_code, 400)
+        self.assertIn("legal_accepted", res.data)
+
     def test_register_requires_email_or_phone(self):
         res = self.client.post(
             "/api/auth/register/",
@@ -123,7 +135,7 @@ class AuthFlowTests(TestCase):
     def test_register_rejects_weak_password(self):
         res = self.client.post(
             "/api/auth/register/",
-            {"email": email(), "password": "password", "account_type": "user"},
+            {"email": email(), "password": "password", "account_type": "user", "legal_accepted": True},
             format="json",
         )
         self.assertEqual(res.status_code, 400)
@@ -131,7 +143,7 @@ class AuthFlowTests(TestCase):
     def test_register_rejects_invalid_phone(self):
         res = self.client.post(
             "/api/auth/register/",
-            {"phone": "12345", "password": PASS, "account_type": "user"},
+            {"phone": "12345", "password": PASS, "account_type": "user", "legal_accepted": True},
             format="json",
         )
         self.assertEqual(res.status_code, 400)
@@ -142,7 +154,7 @@ class AuthFlowTests(TestCase):
         self.assertEqual(first.status_code, 201, first.data)
         second = self.client.post(
             "/api/auth/register/",
-            {"email": addr, "password": PASS, "account_type": "provider", "full_name": "Other"},
+            {"email": addr, "password": PASS, "account_type": "provider", "full_name": "Other", "legal_accepted": True},
             format="json",
         )
         self.assertEqual(second.status_code, 400)
@@ -155,7 +167,7 @@ class AuthFlowTests(TestCase):
         self.assertEqual(first.status_code, 201, first.data)
         second = self.client.post(
             "/api/auth/register/",
-            {"phone": p, "email": email("b"), "password": PASS, "account_type": "user"},
+            {"phone": p, "email": email("b"), "password": PASS, "account_type": "user", "legal_accepted": True},
             format="json",
         )
         self.assertEqual(second.status_code, 400)

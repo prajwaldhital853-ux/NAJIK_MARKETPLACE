@@ -147,11 +147,11 @@ class StaffUser(models.Model):
             return False
         
         # Check direct staff permissions (can grant or deny)
-        staff_perm = self.staff_permissions.filter(
+        staff_perm = self.individual_permissions.filter(
             permission__code=permission_code
         ).first()
         
-        if staff_perm and staff_perm.is_active():
+        if staff_perm and staff_perm.is_valid():
             return staff_perm.is_granted
         
         # Check role permissions
@@ -177,8 +177,8 @@ class StaffUser(models.Model):
             )
         
         # Add/remove direct staff permissions
-        for staff_perm in self.staff_permissions.select_related("permission").all():
-            if staff_perm.is_active():
+        for staff_perm in self.individual_permissions.select_related("permission").all():
+            if staff_perm.is_valid():
                 if staff_perm.is_granted:
                     permissions.add(staff_perm.permission.code)
                 else:

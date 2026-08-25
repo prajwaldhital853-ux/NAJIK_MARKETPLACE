@@ -35,7 +35,7 @@ ROLE_DEFINITIONS = [
 
 # Default demo staff logins (role name, email, temp password, display name)
 DEFAULT_STAFF_ACCOUNTS = [
-    ("Admin", "admin@najik.com", "Admin@1234", "Default Admin"),
+    ("Admin", "staff-admin@najik.com", "Admin@1234", "Default Admin"),
     ("Moderator", "moderator@najik.com", "Moderator@1234", "Default Moderator"),
     ("Verification Officer", "verification@najik.com", "Verify@1234", "Default Verification Officer"),
     ("Support Agent", "support@najik.com", "Support@1234", "Default Support Agent"),

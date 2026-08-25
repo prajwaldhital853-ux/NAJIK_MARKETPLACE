@@ -299,12 +299,15 @@ export function StaffManagementHub() {
   const [confirmDelete, setConfirmDelete] = useState<{ type: "staff" | "role"; id: string; label: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const loadedOnce = useRef(false);
+  const loadInflight = useRef(false);
 
   const loadData = useCallback(async (opts?: { silent?: boolean }) => {
     if (!isSuperAdmin) {
       setLoading(false);
       return;
     }
+    if (loadInflight.current) return;
+    loadInflight.current = true;
     if (!opts?.silent && !loadedOnce.current) setLoading(true);
     try {
       const [staffData, rolesData, permsData] = await Promise.all([
@@ -321,6 +324,7 @@ export function StaffManagementHub() {
         toastRef.current(err instanceof Error ? err.message : "Failed to load staff data");
       }
     } finally {
+      loadInflight.current = false;
       setLoading(false);
     }
   }, [isSuperAdmin]);

@@ -33,6 +33,15 @@ ROLE_DEFINITIONS = [
     ("Business Manager", "Analytics, payments, and business operations", True),
 ]
 
+# Default demo staff logins (role name, email, temp password, display name)
+DEFAULT_STAFF_ACCOUNTS = [
+    ("Admin", "admin@najik.com", "Admin@1234", "Default Admin"),
+    ("Moderator", "moderator@najik.com", "Moderator@1234", "Default Moderator"),
+    ("Verification Officer", "verification@najik.com", "Verify@1234", "Default Verification Officer"),
+    ("Support Agent", "support@najik.com", "Support@1234", "Default Support Agent"),
+    ("Business Manager", "business@najik.com", "Business@1234", "Default Business Manager"),
+]
+
 
 def ensure_page_rbac(force: bool = False) -> dict:
     """
@@ -143,3 +152,59 @@ def _grant_permissions(role, permission_list):
     for perm in permission_list:
         if perm:
             RolePermission.objects.get_or_create(role=role, permission=perm)
+
+
+def ensure_default_staff_accounts(created_by=None) -> list[dict]:
+    """
+    Create default staff logins for each system role (except Super Admin).
+    Idempotent — skips existing emails. All seeded staff must change password on first login.
+    """
+    from apps.staff.models import StaffUser
+
+    ensure_page_rbac()
+    roles = {r.name: r for r in Role.objects.filter(is_system_role=True, is_active=True)}
+    created = []
+
+    for role_name, email, password, full_name in DEFAULT_STAFF_ACCOUNTS:
+        role = roles.get(role_name)
+        if not role:
+            continue
+
+        staff = StaffUser.objects.filter(email__iexact=email).first()
+        if staff:
+            updates = []
+            if not staff.is_super_admin and staff.role_id != role.id:
+                staff.role = role
+                updates.append("role")
+            if not staff.is_active:
+                staff.is_active = True
+                updates.append("is_active")
+            if updates:
+                staff.save(update_fields=updates)
+            continue
+
+        if not StaffUser.validate_password_strength(password):
+            continue
+
+        staff = StaffUser(
+            email=email.lower().strip(),
+            full_name=full_name,
+            role=role,
+            is_active=True,
+            is_super_admin=False,
+            must_change_password=True,
+            created_by=created_by,
+        )
+        staff.save()
+        staff.set_password(password)
+        staff.must_change_password = True
+        staff.save(update_fields=["password", "must_change_password", "last_password_change"])
+
+        created.append({
+            "role": role_name,
+            "email": staff.email,
+            "password": password,
+            "must_change_password": True,
+        })
+
+    return created

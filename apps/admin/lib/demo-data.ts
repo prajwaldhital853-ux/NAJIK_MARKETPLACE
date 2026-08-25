@@ -204,6 +204,7 @@ export type Staff = {
   password: string;
   isSuperAdmin?: boolean;
   permissions?: string[];
+  mustChangePassword?: boolean;
 };
 
 export const STAFF: Staff[] = [];

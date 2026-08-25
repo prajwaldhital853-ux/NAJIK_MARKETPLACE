@@ -16,7 +16,10 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         self.stdout.write("Setting up page-based RBAC...")
         result = ensure_page_rbac(force=options["force"])
+        from apps.staff.rbac_seed import ensure_default_staff_accounts
+        seeded = ensure_default_staff_accounts()
         self.stdout.write(self.style.SUCCESS(
             f"\n[SUCCESS] Page-based RBAC setup complete! "
-            f"({result['permissions']} permissions, {result['roles']} roles)"
+            f"({result['permissions']} permissions, {result['roles']} roles, "
+            f"{len(seeded)} new default staff)"
         ))

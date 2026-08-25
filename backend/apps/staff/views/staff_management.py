@@ -56,10 +56,20 @@ class StaffCreateSerializer(serializers.ModelSerializer):
 class StaffUpdateSerializer(serializers.ModelSerializer):
     """Update staff details (excluding password)."""
     role_id = serializers.UUIDField(required=False, allow_null=True)
+    email = serializers.EmailField(required=False)
 
     class Meta:
         model = StaffUser
-        fields = ("full_name", "role_id", "is_active", "is_super_admin")
+        fields = ("email", "full_name", "role_id", "is_active", "is_super_admin")
+
+    def validate_email(self, value):
+        value = value.lower().strip()
+        qs = StaffUser.objects.filter(email__iexact=value)
+        if self.instance:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise serializers.ValidationError("A staff account with this email already exists.")
+        return value
 
     def validate_role_id(self, value):
         if value:
@@ -75,7 +85,7 @@ class StaffUpdateSerializer(serializers.ModelSerializer):
         
         if role_id:
             instance.role_id = role_id
-        elif 'role_id' in validated_data:
+        elif 'role_id' in self.initial_data and role_id is None:
             instance.role_id = None
         
         instance.save()

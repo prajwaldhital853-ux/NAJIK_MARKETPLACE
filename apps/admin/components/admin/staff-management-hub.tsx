@@ -20,6 +20,7 @@ import { DataTable, type Column, type RowMenuAction } from "@/components/admin/t
 import { Avatar, Btn, Drawer, Field, Modal, StatusBadge, inputClass } from "@/components/admin/ui";
 import { useAdmin } from "@/lib/store";
 import { useSession } from "@/lib/session";
+import { DEFAULT_STAFF_LOGINS } from "@/lib/default-staff-accounts";
 import {
   checkPasswordStrength,
   createRole,
@@ -227,10 +228,12 @@ function PermissionMatrix({
 
 function RoleCard({
   role,
+  staffEmails,
   onEdit,
   onDelete,
 }: {
   role: StaffRole;
+  staffEmails: string[];
   onEdit: () => void;
   onDelete?: () => void;
 }) {
@@ -251,6 +254,19 @@ function RoleCard({
           <div className="mt-2 flex flex-wrap gap-2 text-[10px] text-muted">
             <span>{count} permissions</span>
             {role.staff_count !== undefined ? <span>{role.staff_count} staff assigned</span> : null}
+          </div>
+          <div className="mt-2 rounded border border-line bg-elevated/40 px-2 py-1.5">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted">Login accounts</p>
+            {staffEmails.length ? (
+              <ul className="mt-1 space-y-0.5">
+                {staffEmails.map((email) => (
+                  <li key={email} className="truncate text-[11px] text-ink">{email}</li>
+                ))}
+              </ul>
+            ) : (
+              <p className="mt-1 text-[11px] text-muted">No staff assigned yet — create staff and pick this role.</p>
+            )}
+            <p className="mt-1 text-[10px] text-faint">Change temp password after first login. Super Admin can edit email above.</p>
           </div>
         </div>
         <Shield size={16} className="shrink-0 text-brand/70" />
@@ -282,13 +298,14 @@ export function StaffManagementHub() {
   const [roleEditor, setRoleEditor] = useState<StaffRole | "new" | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<{ type: "staff" | "role"; id: string; label: string } | null>(null);
   const [busy, setBusy] = useState(false);
+  const loadedOnce = useRef(false);
 
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (opts?: { silent?: boolean }) => {
     if (!isSuperAdmin) {
       setLoading(false);
       return;
     }
-    setLoading(true);
+    if (!opts?.silent && !loadedOnce.current) setLoading(true);
     try {
       const [staffData, rolesData, permsData] = await Promise.all([
         listStaffMembers(),
@@ -298,8 +315,11 @@ export function StaffManagementHub() {
       setStaff(staffData);
       setRoles(rolesData);
       setPermissions(permsData.pages);
+      loadedOnce.current = true;
     } catch (err) {
-      toastRef.current(err instanceof Error ? err.message : "Failed to load staff data");
+      if (!loadedOnce.current) {
+        toastRef.current(err instanceof Error ? err.message : "Failed to load staff data");
+      }
     } finally {
       setLoading(false);
     }
@@ -311,6 +331,22 @@ export function StaffManagementHub() {
 
   const systemRoles = useMemo(() => roles.filter((r) => r.is_system_role), [roles]);
   const customRoles = useMemo(() => roles.filter((r) => !r.is_system_role), [roles]);
+  const staffByRoleId = useMemo(() => {
+    const map = new Map<string, string[]>();
+    for (const member of staff) {
+      if (member.is_super_admin) continue;
+      const roleId = member.role?.id;
+      if (!roleId) continue;
+      const list = map.get(roleId) || [];
+      list.push(member.email);
+      map.set(roleId, list);
+    }
+    return map;
+  }, [staff]);
+  const superAdminAccounts = useMemo(
+    () => staff.filter((m) => m.is_super_admin).map((m) => m.email),
+    [staff],
+  );
 
   const staffColumns: Column<StaffMember>[] = [
     {
@@ -374,7 +410,7 @@ export function StaffManagementHub() {
       else await deleteRole(confirmDelete.id);
       admin.toast(confirmDelete.type === "staff" ? "Staff deactivated" : "Role deleted");
       setConfirmDelete(null);
-      await loadData();
+      await loadData({ silent: true });
     } catch (err) {
       admin.toast(err instanceof Error ? err.message : "Delete failed");
     } finally {
@@ -457,6 +493,39 @@ export function StaffManagementHub() {
         />
       ) : (
         <div className="space-y-4">
+          <div className="rounded border border-brand/30 bg-brand-soft/20 p-3 text-[12px] leading-relaxed text-ink">
+            <p className="font-semibold text-brand">Default login accounts</p>
+            <p className="mt-1 text-muted">
+              Created automatically when you run <code className="rounded bg-elevated px-1">create_super_admin</code> or on Render deploy.
+              Default staff must change password on first login. Super Admin can edit emails in the Staff tab.
+            </p>
+            <div className="mt-3 overflow-hidden rounded border border-line">
+              <table className="min-w-full text-left text-[11px]">
+                <thead className="bg-elevated text-muted">
+                  <tr>
+                    <th className="px-2 py-1.5 font-semibold">Role</th>
+                    <th className="px-2 py-1.5 font-semibold">Email</th>
+                    <th className="px-2 py-1.5 font-semibold">Temp password</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {DEFAULT_STAFF_LOGINS.map((row) => (
+                    <tr key={row.role} className="border-t border-line">
+                      <td className="px-2 py-1.5 text-ink">{row.role}</td>
+                      <td className="px-2 py-1.5 text-ink">{row.email}</td>
+                      <td className="px-2 py-1.5 font-mono text-muted">{row.password}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {superAdminAccounts.length ? (
+              <p className="mt-2 text-[11px] text-muted">
+                Live Super Admin email(s): {superAdminAccounts.join(", ")}
+              </p>
+            ) : null}
+          </div>
+
           <section>
             <div className="mb-2 flex items-center justify-between">
               <div>
@@ -466,7 +535,12 @@ export function StaffManagementHub() {
             </div>
             <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
               {systemRoles.map((role) => (
-                <RoleCard key={role.id} role={role} onEdit={() => setRoleEditor(role)} />
+                <RoleCard
+                  key={role.id}
+                  role={role}
+                  staffEmails={staffByRoleId.get(role.id) || []}
+                  onEdit={() => setRoleEditor(role)}
+                />
               ))}
             </div>
           </section>
@@ -482,6 +556,7 @@ export function StaffManagementHub() {
                   <RoleCard
                     key={role.id}
                     role={role}
+                    staffEmails={staffByRoleId.get(role.id) || []}
                     onEdit={() => setRoleEditor(role)}
                     onDelete={() => setConfirmDelete({ type: "role", id: role.id, label: role.name })}
                   />
@@ -512,7 +587,7 @@ export function StaffManagementHub() {
         onSaved={async () => {
           setStaffDrawer(null);
           admin.toast("Staff saved");
-          await loadData();
+          await loadData({ silent: true });
         }}
       />
 
@@ -524,7 +599,7 @@ export function StaffManagementHub() {
         onSaved={async () => {
           setRoleEditor(null);
           admin.toast("Role saved");
-          await loadData();
+          await loadData({ silent: true });
         }}
       />
 
@@ -640,6 +715,7 @@ function StaffAccessDrawer({
     setBusy(true);
     try {
       await updateStaffMember(staff.id, {
+        email: form.email,
         full_name: form.full_name,
         role_id: form.is_super_admin ? null : form.role_id || null,
         is_super_admin: form.is_super_admin,
@@ -707,7 +783,12 @@ function StaffAccessDrawer({
           {mode === "edit" && step === 0 ? (
             <>
               <Field label="Email">
-                <input className={`${inputClass} opacity-70`} disabled value={form.email} />
+                <input
+                  className={inputClass}
+                  type="email"
+                  value={form.email}
+                  onChange={(e) => setForm({ ...form, email: e.target.value })}
+                />
               </Field>
               <Field label="Full name">
                 <input className={inputClass} value={form.full_name} onChange={(e) => setForm({ ...form, full_name: e.target.value })} />

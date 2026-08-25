@@ -226,16 +226,20 @@ class EmailVerificationSerializer(serializers.Serializer):
 
 class PasswordChangeSerializer(serializers.Serializer):
     """Change password with validation."""
-    current_password = serializers.CharField(write_only=True)
+    current_password = serializers.CharField(write_only=True, required=False, allow_blank=True)
     new_password = serializers.CharField(write_only=True)
     confirm_password = serializers.CharField(write_only=True)
 
     def validate(self, attrs):
         user = self.context['request'].user
+        forced = getattr(user, "must_change_password", False)
 
-        # Verify current password
-        if not user.check_password(attrs['current_password']):
-            raise serializers.ValidationError({"current_password": "Current password is incorrect"})
+        if not forced:
+            current = attrs.get("current_password") or ""
+            if not current:
+                raise serializers.ValidationError({"current_password": "Current password is required"})
+            if not user.check_password(current):
+                raise serializers.ValidationError({"current_password": "Current password is incorrect"})
 
         # Check new password matches confirmation
         if attrs['new_password'] != attrs['confirm_password']:

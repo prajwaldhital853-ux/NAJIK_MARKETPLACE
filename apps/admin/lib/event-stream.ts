@@ -26,7 +26,8 @@ export function connectAdminEventStream(onEvent: (event: AdminStreamEvent) => vo
           },
         });
         if (!res.ok || !res.body) {
-          await sleep(5000);
+          // Back off longer when stream endpoint is missing (404) to avoid tight retry loops.
+          await sleep(res.status === 404 ? 30_000 : 5000);
           continue;
         }
         reader = res.body.getReader();

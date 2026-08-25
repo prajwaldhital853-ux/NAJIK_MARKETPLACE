@@ -52,8 +52,8 @@ export default function StaffLoginPage() {
     setError("");
     try {
       if (verifyStep) {
-        await verifyLogin(verifyStep.staffId, verificationCode.trim());
-        router.replace("/admin");
+        const live = await verifyLogin(verifyStep.staffId, verificationCode.trim());
+        router.replace(live.mustChangePassword ? "/admin/change-password" : "/admin");
         return;
       }
 
@@ -69,7 +69,7 @@ export default function StaffLoginPage() {
         setVerificationCode(result.verify.debugCode || "1234");
         return;
       }
-      router.replace("/admin");
+      router.replace(result.staff?.mustChangePassword ? "/admin/change-password" : "/admin");
     } catch (err) {
       setError(formatLoginError(err));
     } finally {

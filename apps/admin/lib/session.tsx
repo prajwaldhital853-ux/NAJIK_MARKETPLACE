@@ -17,6 +17,7 @@ const SessionCtx = createContext<{
   login: (email: string, password: string) => Promise<{ staff?: Staff; verify?: { staffId: string; email: string; message: string; debugCode?: string } }>;
   verifyLogin: (staffId: string, code: string) => Promise<Staff>;
   logout: () => void;
+  refreshStaff: () => Promise<void>;
 } | null>(null);
 
 export function SessionProvider({ children }: { children: React.ReactNode }) {
@@ -128,9 +129,21 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  const refreshStaff = useCallback(async () => {
+    try {
+      const live = await restoreStaffApiSession();
+      if (live) {
+        setStaff(live);
+        setApiSession(true);
+      }
+    } catch {
+      logout();
+    }
+  }, [logout]);
+
   const value = useMemo(
-    () => ({ staff, ready, apiSession, login, verifyLogin, logout }),
-    [staff, ready, apiSession, login, verifyLogin, logout],
+    () => ({ staff, ready, apiSession, login, verifyLogin, logout, refreshStaff }),
+    [staff, ready, apiSession, login, verifyLogin, logout, refreshStaff],
   );
 
   return <SessionCtx.Provider value={value}>{children}</SessionCtx.Provider>;

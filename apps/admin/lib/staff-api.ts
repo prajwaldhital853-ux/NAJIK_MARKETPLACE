@@ -57,6 +57,7 @@ type StaffApiUser = {
   email: string;
   full_name: string;
   is_super_admin: boolean;
+  must_change_password?: boolean;
   permissions?: string[];
   role?: { id: string; name: string; description?: string; is_system_role?: boolean };
 };
@@ -92,6 +93,7 @@ export function mapApiStaff(user: StaffApiUser): Staff {
     password: "",
     isSuperAdmin: user.is_super_admin,
     permissions: user.permissions || [],
+    mustChangePassword: Boolean(user.must_change_password),
   };
 }
 
@@ -1266,6 +1268,7 @@ export async function getStaffMember(staffId: string) {
 }
 
 export async function updateStaffMember(staffId: string, payload: {
+  email?: string;
   full_name?: string;
   role_id?: string | null;
   is_active?: boolean;
@@ -1351,7 +1354,7 @@ export async function checkPasswordStrength(password: string) {
 }
 
 export async function changeOwnPassword(payload: {
-  current_password: string;
+  current_password?: string;
   new_password: string;
   confirm_password: string;
 }) {

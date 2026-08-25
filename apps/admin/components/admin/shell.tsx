@@ -22,7 +22,9 @@ export function AdminProviders({ children }: { children: React.ReactNode }) {
 
 export function AdminShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  if (pathname.startsWith("/admin/login")) return <>{children}</>;
+  if (pathname.startsWith("/admin/login") || pathname.startsWith("/admin/change-password")) {
+    return <>{children}</>;
+  }
   return (
     <Suspense fallback={<div className="min-h-screen bg-surface" />}>
       <ShellInner>{children}</ShellInner>
@@ -38,9 +40,15 @@ function ShellInner({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!ready || !staff) return;
+    if (staff.mustChangePassword && pathname !== "/admin/change-password") {
+      router.replace("/admin/change-password");
+      return;
+    }
     if (canAccessPath(staff, pathname)) return;
-    router.replace(firstAllowedPath(staff));
-  }, [ready, staff, pathname, router]);
+    const target = firstAllowedPath(staff);
+    if (target === pathname) return;
+    router.replace(target);
+  }, [ready, staff?.id, staff?.isSuperAdmin, staff?.mustChangePassword, staff?.permissions?.join("|"), pathname, router]);
 
   if (!ready || !staff) {
     return <div className="flex min-h-screen items-center justify-center bg-surface text-muted">Loading panel…</div>;

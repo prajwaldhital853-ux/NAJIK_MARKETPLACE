@@ -4,16 +4,20 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Search } from "lucide-react";
 import { NAV } from "@/lib/nav";
+import { filterNavForStaff } from "@/lib/rbac";
+import { useSession } from "@/lib/session";
 import { useAdmin } from "@/lib/store";
 
 export function CommandPalette({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [q, setQ] = useState("");
   const router = useRouter();
+  const { staff } = useSession();
   const { users, properties, jobs, gadgets } = useAdmin();
+  const navItems = useMemo(() => filterNavForStaff(NAV, staff), [staff]);
 
   const results = useMemo(() => {
     const needle = q.trim().toLowerCase();
-    const pages = NAV.flatMap((n) => [
+    const pages = navItems.flatMap((n) => [
       { href: n.href, label: n.label, kind: "Page" },
       ...(n.children || []).map((c) => ({ href: c.href, label: c.label, kind: "Page" })),
     ]);
@@ -32,7 +36,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
     const all = [...pages, ...people, ...props, ...jobRows, ...gear];
     if (!needle) return all.slice(0, 12);
     return all.filter((r) => r.label.toLowerCase().includes(needle)).slice(0, 16);
-  }, [q, users, properties, jobs, gadgets]);
+  }, [q, users, properties, jobs, gadgets, navItems]);
 
   if (!open) return null;
 

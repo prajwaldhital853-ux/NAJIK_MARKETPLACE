@@ -1,10 +1,11 @@
 "use client";
 
-import { Suspense, useState } from "react";
-import { usePathname } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import { AdminStoreProvider } from "@/lib/store";
 import { SessionProvider, useSession } from "@/lib/session";
 import { ThemeProvider } from "@/lib/theme";
+import { canAccessPath, firstAllowedPath } from "@/lib/rbac";
 import { Sidebar } from "./sidebar";
 import { Topbar } from "./topbar";
 import { ToastHost } from "./ui";
@@ -30,8 +31,17 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
 }
 
 function ShellInner({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+  const router = useRouter();
   const { ready, staff } = useSession();
   const [mobile, setMobile] = useState(false);
+
+  useEffect(() => {
+    if (!ready || !staff) return;
+    if (canAccessPath(staff, pathname)) return;
+    router.replace(firstAllowedPath(staff));
+  }, [ready, staff, pathname, router]);
+
   if (!ready || !staff) {
     return <div className="flex min-h-screen items-center justify-center bg-surface text-muted">Loading panel…</div>;
   }

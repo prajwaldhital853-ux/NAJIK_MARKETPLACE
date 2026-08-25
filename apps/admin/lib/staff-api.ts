@@ -57,6 +57,8 @@ type StaffApiUser = {
   email: string;
   full_name: string;
   is_super_admin: boolean;
+  permissions?: string[];
+  role?: { id: string; name: string; description?: string; is_system_role?: boolean };
 };
 
 type StaffLoginApiResponse =
@@ -82,12 +84,14 @@ export function mapApiStaff(user: StaffApiUser): Staff {
     id: user.id,
     name: user.full_name || user.email,
     email: user.email,
-    role: user.is_super_admin ? "Super Administrator" : "Staff",
+    role: user.is_super_admin ? "Super Administrator" : user.role?.name || "Staff",
     roleKey: user.is_super_admin ? "super" : "kyc",
     city: "—",
     status: "active",
     lastLogin: "Just now",
     password: "",
+    isSuperAdmin: user.is_super_admin,
+    permissions: user.permissions || [],
   };
 }
 

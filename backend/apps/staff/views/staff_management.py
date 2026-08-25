@@ -8,7 +8,7 @@ from rest_framework.views import APIView
 from django.db import transaction
 
 from apps.staff.authentication import StaffJWTAuthentication
-from apps.staff.permissions import require_super_admin
+from apps.staff.permissions import IsStaffUser, require_super_admin
 from apps.staff.models import StaffUser, Role
 from apps.staff.serializers.auth import StaffPublicSerializer, RoleSerializer
 
@@ -88,6 +88,7 @@ class StaffListCreateView(APIView):
     POST: Create new staff account (super admin only)
     """
     authentication_classes = [StaffJWTAuthentication]
+    permission_classes = [IsStaffUser]
 
     @require_super_admin
     def get(self, request):
@@ -129,6 +130,7 @@ class StaffDetailView(APIView):
     DELETE: Delete/deactivate staff
     """
     authentication_classes = [StaffJWTAuthentication]
+    permission_classes = [IsStaffUser]
 
     @require_super_admin
     def get(self, request, staff_id):
@@ -207,6 +209,7 @@ class StaffDetailView(APIView):
 class StaffResetPasswordView(APIView):
     """Reset staff password (super admin only)."""
     authentication_classes = [StaffJWTAuthentication]
+    permission_classes = [IsStaffUser]
 
     @require_super_admin
     def post(self, request, staff_id):

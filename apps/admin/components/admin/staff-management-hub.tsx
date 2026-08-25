@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   Check,
@@ -19,6 +19,7 @@ import { PageHeader, SummaryStrip, AdminLoadingState } from "@/components/admin/
 import { DataTable, type Column, type RowMenuAction } from "@/components/admin/table";
 import { Avatar, Btn, Drawer, Field, Modal, StatusBadge, inputClass } from "@/components/admin/ui";
 import { useAdmin } from "@/lib/store";
+import { useSession } from "@/lib/session";
 import {
   checkPasswordStrength,
   createRole,
@@ -266,6 +267,10 @@ function RoleCard({
 
 export function StaffManagementHub() {
   const admin = useAdmin();
+  const { staff: sessionStaff } = useSession();
+  const toastRef = useRef(admin.toast);
+  toastRef.current = admin.toast;
+  const isSuperAdmin = Boolean(sessionStaff?.isSuperAdmin);
   const [tab, setTab] = useState<HubTab>("staff");
   const [loading, setLoading] = useState(true);
   const [staff, setStaff] = useState<StaffMember[]>([]);
@@ -279,6 +284,10 @@ export function StaffManagementHub() {
   const [busy, setBusy] = useState(false);
 
   const loadData = useCallback(async () => {
+    if (!isSuperAdmin) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const [staffData, rolesData, permsData] = await Promise.all([
@@ -290,11 +299,11 @@ export function StaffManagementHub() {
       setRoles(rolesData);
       setPermissions(permsData.pages);
     } catch (err) {
-      admin.toast(err instanceof Error ? err.message : "Failed to load staff data");
+      toastRef.current(err instanceof Error ? err.message : "Failed to load staff data");
     } finally {
       setLoading(false);
     }
-  }, [admin]);
+  }, [isSuperAdmin]);
 
   useEffect(() => {
     void loadData();
@@ -374,6 +383,21 @@ export function StaffManagementHub() {
   }
 
   if (loading) return <AdminLoadingState label="Loading staff & roles…" />;
+
+  if (!isSuperAdmin) {
+    return (
+      <>
+        <PageHeader
+          title="Admin & Staff"
+          crumb="Dashboard / Staff"
+          summary="Staff and role management is limited to Super Admin accounts."
+        />
+        <div className="rounded border border-line bg-card px-4 py-10 text-center text-sm text-muted">
+          You can see this menu item with staff permission, but only Super Admin can manage accounts and roles.
+        </div>
+      </>
+    );
+  }
 
   return (
     <>

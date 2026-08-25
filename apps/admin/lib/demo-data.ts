@@ -202,6 +202,8 @@ export type Staff = {
   status: "active" | "invited" | "disabled";
   lastLogin: string;
   password: string;
+  isSuperAdmin?: boolean;
+  permissions?: string[];
 };
 
 export const STAFF: Staff[] = [];

@@ -54,6 +54,7 @@ import {
   type StaffPaymentsSummary,
 } from "./staff-api";
 import { buildInbox, navBadges, readSeenInbox, writeSeenInbox, type InboxItem } from "./live-inbox";
+import { hasPermission } from "./rbac";
 import { ADMIN_POLL_FALLBACK_MS, connectAdminEventStream } from "./event-stream";
 import { useSession } from "./session";
 
@@ -252,14 +253,24 @@ export function AdminStoreProvider({ children }: { children: React.ReactNode }) 
         return;
       }
       try {
-        await Promise.all([
-          refreshUsers(),
-          refreshListings(),
-          refreshApplications(),
-          refreshReports(),
-          refreshLoadRequests(),
-          refreshPayments(),
-        ]);
+        const tasks: Promise<void>[] = [];
+        if (hasPermission(sessionStaff, "user_management.view")) tasks.push(refreshUsers());
+        if (
+          hasPermission(sessionStaff, "property_management.view") ||
+          hasPermission(sessionStaff, "job_management.view") ||
+          hasPermission(sessionStaff, "service_management.view") ||
+          hasPermission(sessionStaff, "electronics_management.view") ||
+          hasPermission(sessionStaff, "other_listings.view")
+        ) {
+          tasks.push(refreshListings());
+        }
+        if (hasPermission(sessionStaff, "kyc_verification.view")) tasks.push(refreshApplications());
+        if (hasPermission(sessionStaff, "reports_complaints.view")) tasks.push(refreshReports());
+        if (hasPermission(sessionStaff, "seller_payments.view")) tasks.push(refreshLoadRequests());
+        if (hasPermission(sessionStaff, "seller_payments.view") || hasPermission(sessionStaff, "analytics.view")) {
+          tasks.push(refreshPayments());
+        }
+        await Promise.all(tasks);
       } catch {
         // Keep the last successful snapshot so a blip does not empty the inbox.
       } finally {
@@ -282,7 +293,7 @@ export function AdminStoreProvider({ children }: { children: React.ReactNode }) 
       window.clearInterval(fallbackId);
       disconnect();
     };
-  }, [apiSession]);
+  }, [apiSession, sessionStaff]);
 
   const toast = useCallback((text: string) => {
     const id = `t${Date.now()}`;

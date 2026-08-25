@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   Bell,
   Briefcase,
@@ -27,6 +27,8 @@ import {
   SlidersHorizontal,
 } from "lucide-react";
 import { NAV } from "@/lib/nav";
+import { filterNavForStaff } from "@/lib/rbac";
+import { useSession } from "@/lib/session";
 import { useAdmin } from "@/lib/store";
 import { CountBadge } from "./inbox-list";
 import { OperationalStatus } from "./operational-status";
@@ -73,9 +75,11 @@ export function Sidebar({
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const search = searchParams.toString();
+  const { staff } = useSession();
   const { badges } = useAdmin();
+  const navItems = useMemo(() => filterNavForStaff(NAV, staff), [staff]);
   const [open, setOpen] = useState<string>(() => {
-    const match = NAV.find((n) => {
+    const match = navItems.find((n) => {
       if (n.href === "/admin") return false;
       if (pathname.startsWith(n.href)) return true;
       return Boolean(n.children?.some((c) => pathname.startsWith(c.href.split("?")[0])));
@@ -98,7 +102,7 @@ export function Sidebar({
       </div>
 
       <nav className="admin-scroll min-h-0 flex-1 overflow-y-auto px-2 py-2">
-        {NAV.map((item) => {
+        {navItems.map((item) => {
           const isOpen = open === item.href;
           const active = item.href === "/admin" ? pathname === "/admin" : pathname.startsWith(item.href);
           return (

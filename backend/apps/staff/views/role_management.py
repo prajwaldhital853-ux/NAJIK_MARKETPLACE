@@ -5,10 +5,16 @@ Supports custom role creation with granular permission assignment.
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
+from apps.staff.authentication import StaffJWTAuthentication
 from apps.staff.models import Role, Permission, RolePermission
-from apps.staff.permissions import require_super_admin
+from apps.staff.permissions import IsStaffUser, require_super_admin
 from apps.staff.serializers.auth import RoleSerializer
 from rest_framework import serializers
+
+
+class StaffRBACAPIView(APIView):
+    authentication_classes = [StaffJWTAuthentication]
+    permission_classes = [IsStaffUser]
 
 
 class PermissionSerializer(serializers.ModelSerializer):
@@ -104,7 +110,7 @@ class RoleDetailSerializer(serializers.ModelSerializer):
         return obj.staff_users.filter(is_active=True).count()
 
 
-class PermissionListView(APIView):
+class PermissionListView(StaffRBACAPIView):
     """List all available permissions grouped by page."""
     
     @require_super_admin
@@ -129,7 +135,7 @@ class PermissionListView(APIView):
         })
 
 
-class RoleListCreateView(APIView):
+class RoleListCreateView(StaffRBACAPIView):
     """List all roles or create a new custom role."""
     
     @require_super_admin
@@ -151,7 +157,7 @@ class RoleListCreateView(APIView):
         )
 
 
-class RoleDetailView(APIView):
+class RoleDetailView(StaffRBACAPIView):
     """Get, update, or delete a specific role."""
     
     @require_super_admin

@@ -65,7 +65,7 @@ class StaffLockoutTests(TestCase):
 
         locked = self.login(password="WrongPass!word1", device_fingerprint=self.device_a)
         self.assertEqual(locked.status_code, 423, locked.data)
-        self.assertIn("device and network", str(locked.data.get("detail", "")).lower())
+        self.assertIn("this device", str(locked.data.get("detail", "")).lower())
 
         self.staff.refresh_from_db()
         self.assertFalse(self.staff.is_locked)

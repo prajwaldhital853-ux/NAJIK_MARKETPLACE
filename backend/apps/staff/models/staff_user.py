@@ -210,8 +210,8 @@ class PasswordHistory(models.Model):
 
 class StaffLoginLockout(models.Model):
     """
-    Tracks failed staff login attempts per email + IP + device fingerprint.
-    Locking one device/network does not block the same staff account elsewhere.
+    Tracks failed staff login attempts per email + browser device id.
+    Locking one browser does not block the same staff account or other staff elsewhere.
     """
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)

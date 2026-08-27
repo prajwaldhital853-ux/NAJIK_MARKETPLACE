@@ -26,7 +26,7 @@ from apps.staff.throttles import StaffLoginRateThrottle
 class StaffLoginView(APIView):
     """
     Staff login with security features:
-    - IP/device lockout after 3 failed attempts (10 minutes) on that device only
+    - Device lockout after 3 failed attempts (10 minutes) on that browser only
     - Device verification for new devices
     - Login attempt logging
     """

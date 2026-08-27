@@ -1,6 +1,5 @@
-import { File, Paths } from "expo-file-system";
-import * as FileSystemLegacy from "expo-file-system/legacy";
-import { api, ApiError, firstError, friendlyError } from "./api";
+import * as FileSystem from "expo-file-system";
+import { api, ApiError, firstError } from "./api";
 import { API_URL, GOOGLE_REDIRECT_URI } from "./config";
 import { getAppAccessToken, getAppRefreshToken, saveAppTokens } from "./auth";
 import { accessTokenFresh } from "./jwt";
@@ -293,29 +292,23 @@ export async function submitSellerApplication(payload: {
 
 export async function exportMyAccountDataPdf(): Promise<string> {
   return withAppAuth(async (token) => {
-    const fileName = `najik-data-export-${Date.now()}.pdf`;
-    const url = `${API_URL}/api/auth/me/export/`;
-    const headers = {
-      Authorization: `Bearer ${token}`,
-      Accept: "application/pdf",
-    };
-
-    try {
-      const destination = new File(Paths.cache, fileName);
-      const downloaded = await File.downloadFileAsync(url, destination, {
-        headers,
-        idempotent: true,
-      });
-      return downloaded.uri;
-    } catch (primary) {
-      const target = `${FileSystemLegacy.cacheDirectory ?? FileSystemLegacy.documentDirectory}${fileName}`;
-      const result = await FileSystemLegacy.downloadAsync(url, target, { headers });
-      if (result.status < 200 || result.status >= 300) {
-        const message = primary instanceof Error ? primary.message : "Could not export account data PDF.";
-        throw new ApiError(friendlyError(primary, message), result.status);
-      }
-      return result.uri;
+    const response = await fetch(`${API_URL}/api/auth/me/export/`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/pdf",
+      },
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new ApiError(firstError(data), response.status);
     }
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    let binary = "";
+    for (let i = 0; i < bytes.length; i += 1) binary += String.fromCharCode(bytes[i]);
+    const base64 = btoa(binary);
+    const path = `${FileSystem.cacheDirectory}najik-data-export-${Date.now()}.pdf`;
+    await FileSystem.writeAsStringAsync(path, base64, { encoding: FileSystem.EncodingType.Base64 });
+    return path;
   });
 }
 

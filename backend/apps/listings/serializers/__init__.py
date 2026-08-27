@@ -113,15 +113,6 @@ class ListingPhotoSerializer(serializers.ModelSerializer):
 
     def get_url(self, obj):
         request = self.context.get("request")
-        try:
-            if obj.image:
-                storage_url = obj.image.url
-                if storage_url.startswith("http://") or storage_url.startswith("https://"):
-                    return storage_url
-                if request:
-                    return request.build_absolute_uri(storage_url)
-        except Exception:
-            pass
         if not request:
             return None
         if request.path.startswith("/api/admin/"):

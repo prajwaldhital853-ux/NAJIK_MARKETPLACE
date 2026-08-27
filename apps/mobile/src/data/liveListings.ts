@@ -1,6 +1,5 @@
 import type { CatalogItem, CatalogKey } from "./catalog";
 import type { ApiListing } from "../listingsApi";
-import { resolveApiMediaUrl } from "../config";
 import { MARKETPLACE_ELECTRONICS } from "./listingVertical";
 
 const CATEGORY_TO_KEY: Record<string, CatalogKey> = {
@@ -112,8 +111,7 @@ export function listingToCatalog(row: ApiListing): CatalogItem {
     apiCategory: row.category,
     promoted: Boolean(row.is_promoted || row.is_boosted),
   };
-  const photoUrl = resolveApiMediaUrl(row.photos[0]?.url);
-  if (photoUrl) item.photo = { uri: photoUrl };
+  if (row.photos[0]?.url) item.photo = { uri: row.photos[0].url };
   rememberLiveListing(item);
   return item;
 }

@@ -135,7 +135,7 @@ class StaffAppUserListView(APIView):
         items = filter_staff_users(items, request)
         from apps.listings.listing_cards import paginate_queryset, parse_page
 
-        page, page_size = parse_page(request, default_size=25, max_size=200)
+        page, page_size = parse_page(request, default_size=25, max_size=100)
         page_items, meta = paginate_queryset(items, page, page_size)
         return Response(
             {

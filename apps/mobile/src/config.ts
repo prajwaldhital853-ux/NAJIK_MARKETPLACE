@@ -21,25 +21,6 @@ function defaultApiUrl() {
 
 export const API_URL = defaultApiUrl();
 
-/** Rewrite API/media URLs to the app’s configured API host (fixes cached/wrong hosts in feed photos). */
-export function resolveApiMediaUrl(url?: string | null): string | undefined {
-  if (!url) return undefined;
-  const trimmed = url.trim();
-  if (!trimmed || trimmed.startsWith("data:")) return trimmed;
-  const apiBase = API_URL.replace(/\/$/, "");
-  if (trimmed.startsWith("/")) return `${apiBase}${trimmed}`;
-  try {
-    const parsed = new URL(trimmed);
-    const path = `${parsed.pathname}${parsed.search}`;
-    if (path.startsWith("/api/") || path.startsWith("/media/")) {
-      return `${apiBase}${path}`;
-    }
-    return trimmed;
-  } catch {
-    return trimmed;
-  }
-}
-
 export const ADMIN_URL =
   process.env.EXPO_PUBLIC_ADMIN_URL ?? API_URL.replace(":8000", ":3000");
 

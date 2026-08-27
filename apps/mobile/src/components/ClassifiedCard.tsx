@@ -19,7 +19,7 @@ import { openListing } from "../navigation/browse";
 import { colors, shadow } from "../theme";
 import { useSavedListings } from "../context/SavedListings";
 import { PressScale } from "./PressScale";
-import { AuthImage } from "./AuthImage";
+import { AppImage } from "./AppImage";
 
 const GREEN = "#1B7D2C";
 const RED = "#DC2626";
@@ -285,7 +285,7 @@ export function ListingListRow({ item }: { item: CatalogItem }) {
         ...shadow.card,
       }}
     >
-      {item.photo ? <AuthImage uri={item.photo.uri} style={{ width: 92, height: 92, borderRadius: 10, backgroundColor: "#E8EEF0" }} /> : (
+      {item.photo ? <AppImage source={item.photo} style={{ width: 92, height: 92, borderRadius: 10, backgroundColor: "#E8EEF0" }} recyclingKey={item.id} /> : (
         <View style={{ width: 92, height: 92, borderRadius: 10, backgroundColor: "#E8EEF0" }} />
       )}
       <View style={{ flex: 1 }}>
@@ -347,7 +347,7 @@ function ListingAdCard({
     >
       {item.photo ? (
         <View>
-          <AuthImage uri={item.photo.uri} style={{ width: "100%", height: photoH, backgroundColor: "#E8EEF0" }} priority="normal" />
+          <AppImage source={item.photo} style={{ width: "100%", height: photoH, backgroundColor: "#E8EEF0" }} recyclingKey={item.id} priority="normal" />
           <ListingCardBadges badges={badges} />
           {item.sold ? (
             <View style={{ position: "absolute", top: badges.length ? 8 + badges.length * 22 : 8, left: 8, backgroundColor: "#DC2626", paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, zIndex: 1 }}>

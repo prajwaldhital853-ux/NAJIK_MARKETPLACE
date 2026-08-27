@@ -107,9 +107,17 @@ class GdprUserTests(TestCase):
         res, body = self.register("user")
         self.auth_from_register(body, res)
         res = self.client.get("/api/auth/me/export/")
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res["Content-Type"], "application/pdf")
+        self.assertTrue(res.content.startswith(b"%PDF"))
+        self.assertTrue(DataSubjectRequestLog.objects.filter(action="export", source="self").exists())
+
+    def test_user_can_export_json_with_format_param(self):
+        res, body = self.register("user")
+        self.auth_from_register(body, res)
+        res = self.client.get("/api/auth/me/export/?format=json")
         self.assertEqual(res.status_code, 200, res.data)
         self.assertEqual(res.data["profile"]["email"], body["email"])
-        self.assertTrue(DataSubjectRequestLog.objects.filter(action="export", source="self").exists())
 
     def test_user_can_delete_account(self):
         res, body = self.register("user")

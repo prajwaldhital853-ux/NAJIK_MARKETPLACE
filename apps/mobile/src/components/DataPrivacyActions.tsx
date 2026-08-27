@@ -1,9 +1,8 @@
 import { useEffect, useState } from "react";
-import { Alert, Share, Text, TextInput, View } from "react-native";
-import * as FileSystem from "expo-file-system";
+import { Alert, Text, TextInput, View } from "react-native";
 import * as Sharing from "expo-sharing";
 import { PressScale } from "./PressScale";
-import { deleteMyAccount, exportMyAccountData } from "../authApi";
+import { deleteMyAccount, exportMyAccountDataPdf } from "../authApi";
 import { useAuth } from "../context/AuthContext";
 import { fetchPrivacyRetentionPublic, type PrivacyRetentionPublic } from "../legalApi";
 import { colors, shadow } from "../theme";
@@ -29,18 +28,11 @@ export function DataPrivacyActions() {
     }
     setBusy("export");
     try {
-      const data = await exportMyAccountData();
-      const json = JSON.stringify(data, null, 2);
-      try {
-        await Share.share({ message: json, title: "NAJIK account data export" });
-      } catch {
-        const path = `${FileSystem.cacheDirectory}najik-data-export.json`;
-        await FileSystem.writeAsStringAsync(path, json);
-        if (await Sharing.isAvailableAsync()) {
-          await Sharing.shareAsync(path, { mimeType: "application/json", dialogTitle: "Export NAJIK data" });
-        } else {
-          Alert.alert("Export ready", "Your data export was prepared but sharing is unavailable on this device.");
-        }
+      const path = await exportMyAccountDataPdf();
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(path, { mimeType: "application/pdf", dialogTitle: "Export NAJIK data (PDF)" });
+      } else {
+        Alert.alert("Export ready", "Your PDF export was saved on this device.");
       }
     } catch (err) {
       Alert.alert("Export failed", err instanceof Error ? err.message : "Could not export your data.");
@@ -80,7 +72,7 @@ export function DataPrivacyActions() {
           onPress={() => void onExport()}
           style={{ backgroundColor: "#E7F6EC", borderRadius: 12, padding: 12, marginBottom: 10, opacity: busy ? 0.6 : 1 }}
         >
-          <Text style={{ color: GREEN, fontWeight: "800" }}>{busy === "export" ? "Preparing export…" : "Export my data (JSON)"}</Text>
+          <Text style={{ color: GREEN, fontWeight: "800" }}>{busy === "export" ? "Preparing PDF…" : "Export my data (PDF)"}</Text>
         </PressScale>
         {!deleteOpen ? (
           <PressScale

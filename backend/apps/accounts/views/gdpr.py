@@ -1,15 +1,35 @@
 """User self-service and staff GDPR export/delete endpoints."""
+from django.http import HttpResponse
 from rest_framework import serializers, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.accounts.authentication import AppJWTAuthentication
+from apps.accounts.export_pdf import build_user_data_pdf, export_pdf_filename
 from apps.accounts.gdpr import delete_user_account, export_user_data, log_data_subject_action
 from apps.accounts.permissions import IsAppUser
 from apps.core.models import DataSubjectRequestLog, PrivacyRetentionConfig
 from apps.staff.authentication import StaffJWTAuthentication
 from apps.staff.permissions import IsStaffUser
 from apps.staff.rbac import require_rbac_method
+
+
+def _wants_json(request) -> bool:
+    fmt = (request.query_params.get("format") or "").strip().lower()
+    if fmt == "json":
+        return True
+    accept = (request.headers.get("Accept") or "").lower()
+    return "application/json" in accept and "application/pdf" not in accept
+
+
+def _export_response(request, payload: dict):
+    if _wants_json(request):
+        return Response(payload)
+    pdf_bytes = build_user_data_pdf(payload)
+    filename = export_pdf_filename(payload.get("profile") or {})
+    response = HttpResponse(pdf_bytes, content_type="application/pdf")
+    response["Content-Disposition"] = f'attachment; filename="{filename}"'
+    return response
 
 
 class UserDataExportView(APIView):
@@ -29,7 +49,7 @@ class UserDataExportView(APIView):
             source=DataSubjectRequestLog.SOURCE_SELF,
             user=request.user,
         )
-        return Response(payload)
+        return _export_response(request, payload)
 
 
 class UserDataDeleteSerializer(serializers.Serializer):
@@ -86,4 +106,4 @@ class StaffUserDataExportView(APIView):
             user=user,
             staff=request.user,
         )
-        return Response(payload)
+        return _export_response(request, payload)

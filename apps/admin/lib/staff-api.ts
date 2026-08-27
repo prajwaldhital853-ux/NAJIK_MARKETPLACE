@@ -1,8 +1,9 @@
-import { api, ApiError } from "./api";
+import { api, ApiError, getApiBaseUrl } from "./api";
 import { getStaffAccessToken, getStaffRefreshToken, saveStaffTokens } from "./auth";
 import { getDeviceFingerprint } from "./device";
 import type { Staff } from "./demo-data";
 import { accessTokenFresh } from "./jwt";
+import { formatAdminError } from "./rbac-errors";
 
 const REFRESH_SKEW_MS = 60_000;
 const KEEP_ALIVE_SKEW_MS = 15 * 60 * 1000;
@@ -1486,5 +1487,16 @@ export async function patchLegalDocument(
 }
 
 export async function exportAppUserData(userId: string) {
-  return staffRequest<Record<string, unknown>>(`/api/admin/users/${userId}/export/`);
+  const token = await ensureStaffAccessToken();
+  const response = await fetch(`${getApiBaseUrl()}/api/admin/users/${userId}/export/`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: "application/pdf",
+    },
+  });
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    throw new ApiError(formatAdminError(data, "Export failed"), response.status);
+  }
+  return response.blob();
 }

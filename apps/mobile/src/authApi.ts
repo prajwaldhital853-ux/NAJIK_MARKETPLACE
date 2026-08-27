@@ -1,5 +1,6 @@
-import { api, ApiError } from "./api";
-import { GOOGLE_REDIRECT_URI } from "./config";
+import * as FileSystem from "expo-file-system";
+import { api, ApiError, firstError } from "./api";
+import { API_URL, GOOGLE_REDIRECT_URI } from "./config";
 import { getAppAccessToken, getAppRefreshToken, saveAppTokens } from "./auth";
 import { accessTokenFresh } from "./jwt";
 import type { AccountType, AppUser } from "./types";
@@ -289,10 +290,26 @@ export async function submitSellerApplication(payload: {
   );
 }
 
-export async function exportMyAccountData() {
-  return withAppAuth((token) =>
-    api<Record<string, unknown>>("/api/auth/me/export/", { token }),
-  );
+export async function exportMyAccountDataPdf(): Promise<string> {
+  return withAppAuth(async (token) => {
+    const response = await fetch(`${API_URL}/api/auth/me/export/`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/pdf",
+      },
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new ApiError(firstError(data), response.status);
+    }
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    let binary = "";
+    for (let i = 0; i < bytes.length; i += 1) binary += String.fromCharCode(bytes[i]);
+    const base64 = btoa(binary);
+    const path = `${FileSystem.cacheDirectory}najik-data-export-${Date.now()}.pdf`;
+    await FileSystem.writeAsStringAsync(path, base64, { encoding: FileSystem.EncodingType.Base64 });
+    return path;
+  });
 }
 
 export async function deleteMyAccount(payload: { confirm: string; password?: string }) {

@@ -7,19 +7,13 @@ import { useSession } from "@/lib/session";
 import { ADMIN_POLL_MS } from "@/lib/live-inbox";
 import { fetchSystemStatus, type SystemStatus, type SystemStatusCheck } from "@/lib/staff-api";
 import { formatNptTime } from "@/lib/format";
-import { hasPermission, LISTING_CATEGORY_PAGE, permissionForPath, type StaffAccess } from "@/lib/rbac";
-
-const LISTING_PAGES = [...new Set(Object.values(LISTING_CATEGORY_PAGE))];
+import { hasPermission, permissionForPath, type StaffAccess } from "@/lib/rbac";
 
 function canSeeStatusCheck(staff: StaffAccess | null | undefined, item: SystemStatusCheck) {
   if (!staff) return false;
   if (staff.isSuperAdmin) return true;
   if (!item.href) return true;
-  const path = item.href.split("?")[0];
-  if (path === "/admin/listing-queue") {
-    return LISTING_PAGES.some((page) => hasPermission(staff, `${page}.view`));
-  }
-  const perm = permissionForPath(path);
+  const perm = permissionForPath(item.href.split("?")[0]);
   if (!perm) return true;
   return hasPermission(staff, perm);
 }
@@ -108,7 +102,9 @@ export function OperationalStatus({
               <div>
                 <p className="text-sm font-semibold text-ink">System operational status</p>
                 <p className="text-[11px] text-muted">
-                  {visibleStatus?.checked_at ? `Checked ${formatNptTime(visibleStatus.checked_at)} NPT` : "Live checks from the API"}
+                  {visibleStatus?.checked_at
+                    ? `Checked ${formatNptTime(visibleStatus.checked_at)} NPT · platform config only`
+                    : "API, security, RBAC, and storage checks"}
                 </p>
               </div>
               <div className="flex items-center gap-1">
@@ -163,7 +159,7 @@ export function OperationalStatus({
                             tone === "ok" ? "text-green" : tone === "attention" ? "text-amber" : "text-red"
                           }`}
                         >
-                          {tone === "ok" ? "Active" : tone === "attention" ? "Needs review" : "Problem"}
+                          {tone === "ok" ? "Configured" : tone === "attention" ? "Review" : "Problem"}
                         </span>
                       </div>
                       <p className="mt-0.5 text-[12px] text-muted">{item.detail}</p>

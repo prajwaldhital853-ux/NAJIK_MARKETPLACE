@@ -1035,8 +1035,9 @@ export type SystemStatus = {
   label: string;
   checked_at: string;
   problem_count: number;
+  attention_count?: number;
   checks: SystemStatusCheck[];
-  counts: Record<string, number>;
+  counts?: Record<string, number>;
 };
 
 export async function fetchSystemStatus() {

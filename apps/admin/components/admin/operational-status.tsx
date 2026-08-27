@@ -5,15 +5,51 @@ import { useEffect, useState } from "react";
 import { AlertTriangle, CheckCircle2, RefreshCw, X } from "lucide-react";
 import { useSession } from "@/lib/session";
 import { ADMIN_POLL_MS } from "@/lib/live-inbox";
-import { fetchSystemStatus, type SystemStatus } from "@/lib/staff-api";
+import { fetchSystemStatus, type SystemStatus, type SystemStatusCheck } from "@/lib/staff-api";
 import { formatNptTime } from "@/lib/format";
+import { hasPermission, LISTING_CATEGORY_PAGE, permissionForPath, type StaffAccess } from "@/lib/rbac";
+
+const LISTING_PAGES = [...new Set(Object.values(LISTING_CATEGORY_PAGE))];
+
+function canSeeStatusCheck(staff: StaffAccess | null | undefined, item: SystemStatusCheck) {
+  if (!staff) return false;
+  if (staff.isSuperAdmin) return true;
+  if (!item.href) return true;
+  const path = item.href.split("?")[0];
+  if (path === "/admin/listing-queue") {
+    return LISTING_PAGES.some((page) => hasPermission(staff, `${page}.view`));
+  }
+  const perm = permissionForPath(path);
+  if (!perm) return true;
+  return hasPermission(staff, perm);
+}
+
+function filterStatusForStaff(status: SystemStatus | null, staff: StaffAccess | null | undefined): SystemStatus | null {
+  if (!status) return null;
+  const checks = status.checks.filter((item) => canSeeStatusCheck(staff, item));
+  const problem_count = checks.filter((item) => item.status === "problem").length;
+  const attention_count = checks.filter((item) => item.status === "attention").length;
+  let overall = status.overall;
+  let label = status.label;
+  if (problem_count) {
+    overall = "problems";
+    label = "Problems detected";
+  } else if (attention_count) {
+    overall = "attention";
+    label = "Needs attention";
+  } else if (checks.length) {
+    overall = "operational";
+    label = "Operational";
+  }
+  return { ...status, checks, problem_count, attention_count, overall, label };
+}
 
 export function OperationalStatus({
   className = "",
 }: {
   className?: string;
 }) {
-  const { apiSession } = useSession();
+  const { apiSession, staff } = useSession();
   const [open, setOpen] = useState(false);
   const [status, setStatus] = useState<SystemStatus | null>(null);
   const [error, setError] = useState("");
@@ -39,10 +75,11 @@ export function OperationalStatus({
     return () => window.clearInterval(id);
   }, [apiSession]);
 
-  const overall = status?.overall || "attention";
+  const visibleStatus = filterStatusForStaff(status, staff);
+  const overall = visibleStatus?.overall || "attention";
   const dot =
     overall === "operational" ? "bg-green" : overall === "attention" ? "bg-amber" : "bg-red";
-  const label = status?.label || (error ? "Status unavailable" : "Checking…");
+  const label = visibleStatus?.label || (error ? "Status unavailable" : "Checking…");
 
   return (
     <>
@@ -71,7 +108,7 @@ export function OperationalStatus({
               <div>
                 <p className="text-sm font-semibold text-ink">System operational status</p>
                 <p className="text-[11px] text-muted">
-                  {status?.checked_at ? `Checked ${formatNptTime(status.checked_at)} NPT` : "Live checks from the API"}
+                  {visibleStatus?.checked_at ? `Checked ${formatNptTime(visibleStatus.checked_at)} NPT` : "Live checks from the API"}
                 </p>
               </div>
               <div className="flex items-center gap-1">
@@ -91,8 +128,11 @@ export function OperationalStatus({
 
             <div className="admin-scroll max-h-[calc(88vh-4rem)] space-y-2 overflow-y-auto p-4">
               {error ? <p className="text-sm text-red">{error}</p> : null}
-              {!status && !error ? <p className="text-sm text-muted">Loading checks…</p> : null}
-              {status?.checks.map((item) => {
+              {!visibleStatus && !error ? <p className="text-sm text-muted">Loading checks…</p> : null}
+              {!visibleStatus?.checks.length && visibleStatus && !error ? (
+                <p className="text-sm text-muted">No status areas match your role permissions.</p>
+              ) : null}
+              {visibleStatus?.checks.map((item) => {
                 const tone =
                   item.status === "problem" ? "problem" : item.status === "attention" ? "attention" : "ok";
                 return (

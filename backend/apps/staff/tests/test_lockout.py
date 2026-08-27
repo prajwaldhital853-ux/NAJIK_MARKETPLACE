@@ -65,21 +65,21 @@ class StaffLockoutTests(TestCase):
 
         locked = self.login(password="WrongPass!word1", device_fingerprint=self.device_a)
         self.assertEqual(locked.status_code, 423, locked.data)
-        self.assertIn("this device", str(locked.data.get("detail", "")).lower())
+        self.assertIn("device and network", str(locked.data.get("detail", "")).lower())
 
         self.staff.refresh_from_db()
         self.assertFalse(self.staff.is_locked)
         self.assertEqual(self.staff.failed_login_attempts, 0)
 
-    def test_other_device_same_account_can_still_login(self):
+    def test_same_ip_different_browser_still_locked(self):
         for _ in range(LOCKOUT_AFTER):
             self.login(password="WrongPass!word1", device_fingerprint=self.device_a)
 
         locked = self.login(password="WrongPass!word1", device_fingerprint=self.device_a)
         self.assertEqual(locked.status_code, 423, locked.data)
 
-        ok = self.login(device_fingerprint=self.device_b)
-        self.assertIn(ok.status_code, {200, 423})
+        blocked_other_browser = self.login(password=PASS, device_fingerprint=self.device_b)
+        self.assertEqual(blocked_other_browser.status_code, 423, blocked_other_browser.data)
 
     def test_other_staff_same_device_can_still_login(self):
         for _ in range(LOCKOUT_AFTER):
@@ -91,7 +91,7 @@ class StaffLockoutTests(TestCase):
         ok = self.login(email=self.other_email, device_fingerprint=self.device_a)
         self.assertIn(ok.status_code, {200, 423})
 
-    def test_lockout_status_tracks_device(self):
+    def test_lockout_status_tracks_ip_for_email(self):
         for _ in range(LOCKOUT_AFTER):
             self.login(password="WrongPass!word1", device_fingerprint=self.device_a)
 
@@ -100,8 +100,8 @@ class StaffLockoutTests(TestCase):
         self.assertTrue(status.data.get("locked"))
         self.assertGreater(status.data.get("seconds_remaining"), 0)
 
-        other_device_status = self.lockout_status(device_fingerprint=self.device_b)
-        self.assertFalse(other_device_status.data.get("locked"))
+        same_ip_other_browser = self.lockout_status(device_fingerprint=self.device_b)
+        self.assertTrue(same_ip_other_browser.data.get("locked"))
 
     def test_lockout_expires_on_device(self):
         for _ in range(LOCKOUT_AFTER):

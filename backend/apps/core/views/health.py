@@ -10,6 +10,7 @@ from apps.listings.models import Listing
 from apps.reports.models import Complaint
 from apps.staff.authentication import StaffJWTAuthentication
 from apps.staff.permissions import IsStaffUser
+from apps.staff.rbac import LISTING_PAGES, user_has_rbac
 from apps.verification.models import ProviderApplication, ProviderIdCard
 
 
@@ -22,9 +23,9 @@ class HealthView(APIView):
         return Response({"status": "ok", "service": "najik-api"})
 
 
-def _check(label: str, status: str, detail: str, href: str = ""):
-    """status: ok | attention | problem"""
-    return {
+def _check(label: str, status: str, detail: str, href: str = "", rbac_page: str | None = "__unset__"):
+    """status: ok | attention | problem. rbac_page=None means visible to all staff."""
+    item = {
         "id": label.lower().replace(" ", "_").replace("/", "_"),
         "label": label,
         "ok": status == "ok",
@@ -32,6 +33,25 @@ def _check(label: str, status: str, detail: str, href: str = ""):
         "detail": detail,
         "href": href,
     }
+    if rbac_page != "__unset__":
+        item["rbac_page"] = rbac_page
+    return item
+
+
+def _staff_can_see_status_check(user, check: dict) -> bool:
+    if getattr(user, "is_super_admin", False):
+        return True
+    page = check.get("rbac_page")
+    if page is None:
+        return True
+    if page == "any_listing":
+        return any(user_has_rbac(user, listing_page, "view") for listing_page in LISTING_PAGES)
+    return user_has_rbac(user, page, "view")
+
+
+def _visible_status_checks(user, checks: list[dict]) -> list[dict]:
+    visible = [check for check in checks if _staff_can_see_status_check(user, check)]
+    return [{k: v for k, v in item.items() if k != "rbac_page"} for item in visible]
 
 
 class StaffSystemStatusView(APIView):
@@ -51,7 +71,7 @@ class StaffSystemStatusView(APIView):
         except Exception as exc:
             db_ok = False
             db_detail = f"Database error: {exc}"
-        checks.append(_check("API / Database", "ok" if db_ok else "problem", db_detail))
+        checks.append(_check("API / Database", "ok" if db_ok else "problem", db_detail, rbac_page=None))
 
         buyers = AppUser.objects.filter(account_type=AppUser.ACCOUNT_USER).count()
         sellers = AppUser.objects.filter(account_type=AppUser.ACCOUNT_PROVIDER).count()
@@ -71,6 +91,7 @@ class StaffSystemStatusView(APIView):
                 f"{active_buyers} active / {buyers} total"
                 + (f" · {blocked_users} blocked/deactivated" if blocked_users else ""),
                 "/admin/users",
+                rbac_page="user_management",
             )
         )
 
@@ -83,6 +104,7 @@ class StaffSystemStatusView(APIView):
                 seller_status,
                 f"{active_sellers} active / {sellers} total",
                 "/admin/providers?status=all",
+                rbac_page="kyc_verification",
             )
         )
 
@@ -100,6 +122,7 @@ class StaffSystemStatusView(APIView):
                 kyc_status,
                 f"{verified_kyc} verified · {pending_kyc} pending · {rejected_kyc} rejected",
                 "/admin/providers?status=pending",
+                rbac_page="kyc_verification",
             )
         )
 
@@ -116,6 +139,7 @@ class StaffSystemStatusView(APIView):
                 id_status,
                 f"{id_requests} requests waiting · {id_blocked} blocked cards",
                 "/admin/id-cards?status=requested",
+                rbac_page="kyc_verification",
             )
         )
 
@@ -133,6 +157,7 @@ class StaffSystemStatusView(APIView):
                 listing_status,
                 f"{live_listings} live · {pending_listings} awaiting approval · {deactivated} deactivated",
                 "/admin/listing-queue",
+                rbac_page="any_listing",
             )
         )
 
@@ -151,6 +176,7 @@ class StaffSystemStatusView(APIView):
                 report_status,
                 f"{open_reports} open tickets · {high_reports} high severity",
                 "/admin/reports",
+                rbac_page="reports_complaints",
             )
         )
 
@@ -160,8 +186,11 @@ class StaffSystemStatusView(APIView):
                 "ok" if db_ok else "problem",
                 "Login API ready" if db_ok else "Auth depends on database — fix DB first",
                 "/admin/users",
+                rbac_page="user_management",
             )
         )
+
+        checks = _visible_status_checks(request.user, checks)
 
         problem_count = sum(1 for item in checks if item["status"] == "problem")
         attention_count = sum(1 for item in checks if item["status"] == "attention")

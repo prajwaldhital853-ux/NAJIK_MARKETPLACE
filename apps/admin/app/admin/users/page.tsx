@@ -54,13 +54,17 @@ export default function UsersPage() {
   const query = (params.get("q") || "").trim();
   const tab = params.get("status") || "all";
   const openId = params.get("id");
+  const pageNum = Math.max(1, Number(params.get("page") || "1") || 1);
 
-  // Use store data by default for instant load
-  const storeUsers = admin.users;
-  const displayUsers = searchResults || storeUsers;
+  const [pageUsers, setPageUsers] = useState<User[]>([]);
+  const [totalCount, setTotalCount] = useState(0);
+  const [hasNextPage, setHasNextPage] = useState(false);
+  const [loadingUsers, setLoadingUsers] = useState(true);
+
+  const displayUsers = query ? searchResults || [] : pageUsers;
 
   const writeParams = useCallback(
-    (next: { role?: "buyer" | "provider" | null; q?: string; id?: string | null; status?: string }) => {
+    (next: { role?: "buyer" | "provider" | null; q?: string; id?: string | null; status?: string; page?: number | null }) => {
       const qs = new URLSearchParams(params.toString());
 
       if (next.role !== undefined) {
@@ -81,6 +85,11 @@ export default function UsersPage() {
       if (next.id !== undefined) {
         if (next.id) qs.set("id", next.id);
         else qs.delete("id");
+      }
+
+      if (next.page !== undefined) {
+        if (next.page && next.page > 1) qs.set("page", String(next.page));
+        else qs.delete("page");
       }
 
       const suffix = qs.toString();
@@ -110,6 +119,40 @@ export default function UsersPage() {
 
     return () => window.clearTimeout(id);
   }, [query]);
+
+  useEffect(() => {
+    if (!inboxReady || query) return;
+    let alive = true;
+    setLoadingUsers(true);
+    const status =
+      tab && tab !== "all"
+        ? (tab as "active" | "pending" | "verified" | "blocked" | "deactivated")
+        : undefined;
+    void listAppUsersPage({
+      page: pageNum,
+      page_size: 100,
+      role,
+      status,
+    })
+      .then((data) => {
+        if (!alive) return;
+        setPageUsers(data.results.map(mapDirectoryUser));
+        setTotalCount(data.count);
+        setHasNextPage(Boolean(data.has_next));
+      })
+      .catch(() => {
+        if (!alive) return;
+        setPageUsers([]);
+        setTotalCount(0);
+        setHasNextPage(false);
+      })
+      .finally(() => {
+        if (alive) setLoadingUsers(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [inboxReady, query, role, tab, pageNum]);
 
   // Sync search input with URL
   useEffect(() => {
@@ -146,6 +189,7 @@ export default function UsersPage() {
   }
 
   const filtered = useMemo(() => {
+    if (!query) return displayUsers;
     let list = displayUsers;
     if (role) list = list.filter((u) => (role === "buyer" ? u.role === "buyer" : u.role === "provider"));
     if (tab && tab !== "all") {
@@ -153,12 +197,15 @@ export default function UsersPage() {
       list = list.filter((u) => u.status.toLowerCase().replace(/\s+/g, "_") === needle);
     }
     return list;
-  }, [displayUsers, role, tab]);
+  }, [displayUsers, role, tab, query]);
+
+  const totalUsers = query ? filtered.length : totalCount || admin.userTotalCount;
+  const pageCount = Math.max(1, Math.ceil((totalUsers || 0) / 100));
 
   const kpis = useMemo(
     () => [
-      { label: "Total", value: storeUsers.length, tone: "brand" as const },
-      { label: "Showing", value: filtered.length, tone: "green" as const },
+      { label: "Total", value: totalUsers, tone: "brand" as const },
+      { label: "On page", value: filtered.length, tone: "green" as const },
       {
         label: "Buyers",
         value: filtered.filter((u) => u.role === "buyer").length,
@@ -171,7 +218,7 @@ export default function UsersPage() {
       },
       { label: "Blocked", value: filtered.filter((u) => u.status === "blocked").length, tone: "red" as const },
     ],
-    [filtered, storeUsers.length],
+    [filtered, totalUsers],
   );
 
   const columns: Column<User>[] = [
@@ -242,7 +289,7 @@ export default function UsersPage() {
       <PageHeader
         title="User Management"
         crumb="Dashboard / Users"
-        summary={`${storeUsers.length} live accounts. Search works across 10k+ users. Data refreshes automatically.`}
+        summary={`${totalUsers.toLocaleString()} live accounts. Browse with pages below; search works across all users.`}
         extra={<AdminUsageGuideButton staff={staff} />}
       />
       <SummaryStrip items={kpis} />
@@ -268,21 +315,21 @@ export default function UsersPage() {
         <div className="flex flex-wrap gap-1">
           <button
             type="button"
-            onClick={() => writeParams({ role: null })}
+            onClick={() => writeParams({ role: null, page: 1 })}
             className={`rounded-full px-3 py-1 text-xs font-semibold ${!role ? "bg-brand text-white" : "border border-line text-ink"}`}
           >
             All accounts
           </button>
           <button
             type="button"
-            onClick={() => writeParams({ role: "buyer" })}
+            onClick={() => writeParams({ role: "buyer", page: 1 })}
             className={`rounded-full px-3 py-1 text-xs font-semibold ${role === "buyer" ? "bg-brand text-white" : "border border-line text-ink"}`}
           >
             Buyers
           </button>
           <button
             type="button"
-            onClick={() => writeParams({ role: "provider" })}
+            onClick={() => writeParams({ role: "provider", page: 1 })}
             className={`rounded-full px-3 py-1 text-xs font-semibold ${role === "provider" ? "bg-brand text-white" : "border border-line text-ink"}`}
           >
             Sellers
@@ -294,7 +341,7 @@ export default function UsersPage() {
         columns={columns}
         tabs={["All", "Active", "Pending", "Verified", "Blocked", "Deactivated"]}
         tab={tab === "all" || !tab ? "All" : tab.charAt(0).toUpperCase() + tab.slice(1)}
-        onTab={(label) => writeParams({ status: label.toLowerCase() })}
+        onTab={(label) => writeParams({ status: label.toLowerCase(), page: 1 })}
         onRow={(row) => {
           setOpen(row);
           writeParams({ id: row.id });
@@ -302,10 +349,35 @@ export default function UsersPage() {
         }}
         rowActions={rowActions}
         hideSearch
-        loading={!inboxReady || searching}
-        loadingLabel={searching ? "Searching…" : "Loading users…"}
+        loading={!inboxReady || searching || loadingUsers}
+        loadingLabel={searching ? "Searching…" : loadingUsers ? "Loading users…" : "Loading users…"}
         emptyLabel="No users in this view."
       />
+      {!query ? (
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-sm">
+          <span className="text-muted">
+            Page {pageNum} of {pageCount.toLocaleString()} · {totalUsers.toLocaleString()} users total
+          </span>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              disabled={pageNum <= 1 || loadingUsers}
+              onClick={() => writeParams({ page: pageNum - 1 })}
+              className="rounded-lg border border-line px-3 py-1.5 font-semibold disabled:opacity-40"
+            >
+              Previous
+            </button>
+            <button
+              type="button"
+              disabled={!hasNextPage || loadingUsers}
+              onClick={() => writeParams({ page: pageNum + 1 })}
+              className="rounded-lg border border-line px-3 py-1.5 font-semibold disabled:opacity-40"
+            >
+              Next
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       <DetailOverlay
         open={!!open}

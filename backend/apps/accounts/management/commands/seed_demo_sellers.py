@@ -520,12 +520,9 @@ class Command(BaseCommand):
 
         if skip_if_enough:
             demo_phones = [f"+{PHONE_BASE + i}" for i in range(count)]
-            existing_sellers = AppUser.objects.filter(
-                account_type=AppUser.ACCOUNT_PROVIDER,
-                phone__in=demo_phones,
-            ).count()
+            existing_sellers = AppUser.objects.filter(email__iendswith="@najik-demo.com").count()
             existing_listings = Listing.objects.filter(
-                owner__phone__in=demo_phones,
+                owner__email__iendswith="@najik-demo.com",
                 status=Listing.STATUS_APPROVED,
             ).count()
             target_listings = count * listings_per_seller

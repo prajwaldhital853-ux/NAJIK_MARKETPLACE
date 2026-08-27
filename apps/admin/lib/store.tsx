@@ -82,6 +82,7 @@ function writeExtras(list: User[]) {
 
 type Store = {
   users: User[];
+  userTotalCount: number;
   liveCount: number;
   activity: Activity[];
   kpis: typeof PLATFORM_KPIS;
@@ -137,6 +138,7 @@ export function AdminStoreProvider({ children }: { children: React.ReactNode }) 
   const { apiSession, staff: sessionStaff } = useSession();
   const [users, setUsers] = useState(USERS);
   const [liveUsers, setLiveUsers] = useState<User[]>([]);
+  const [userTotalCount, setUserTotalCount] = useState(0);
   const [liveActivity, setLiveActivity] = useState<Activity[]>([]);
   const [liveListings, setLiveListings] = useState<StaffListing[]>([]);
   const [listingTotals, setListingTotals] = useState<{
@@ -197,13 +199,14 @@ export function AdminStoreProvider({ children }: { children: React.ReactNode }) 
     }
 
     async function refreshUsers() {
-      const usersPage = await listAppUsersPage({ page_size: 100 });
+      const usersPage = await listAppUsersPage({ page_size: 200 });
       if (!alive) return;
       const sortedUsers = [...usersPage.results].sort(
         (a, b) => new Date(b.date_joined).getTime() - new Date(a.date_joined).getTime(),
       );
       setLiveUsers(sortedUsers.map(mapDirectoryUser));
       setLiveActivity(sortedUsers.map(mapDirectoryActivity));
+      setUserTotalCount(usersPage.count || sortedUsers.length);
     }
 
     async function refreshApplications() {
@@ -548,7 +551,8 @@ export function AdminStoreProvider({ children }: { children: React.ReactNode }) 
   const value = useMemo(
     () => ({
       users: mergedUsers,
-      liveCount: liveUsers.length,
+      userTotalCount,
+      liveCount: userTotalCount || liveUsers.length,
       activity,
       kpis,
       growth,
@@ -582,6 +586,7 @@ export function AdminStoreProvider({ children }: { children: React.ReactNode }) 
     }),
     [
       mergedUsers,
+      userTotalCount,
       liveUsers.length,
       activity,
       kpis,

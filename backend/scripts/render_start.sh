@@ -12,11 +12,13 @@ python manage.py setup_page_rbac
 LOAD_TEST_TARGET="${NAJIK_LOAD_TEST_SEED:-0}"
 if [[ "${LOAD_TEST_TARGET}" =~ ^[1-9][0-9]*$ ]]; then
   echo "NAJIK_LOAD_TEST_SEED=${LOAD_TEST_TARGET} — ensuring demo sellers/listings exist…"
-  python manage.py seed_demo_sellers \
-    --count "${LOAD_TEST_TARGET}" \
-    --listings-per-seller 1 \
-    --fast \
-    --skip-if-enough
+  if [[ "${LOAD_TEST_TARGET}" == "5000" ]]; then
+    SEED_ARGS=(--load-test --skip-if-enough)
+  else
+    SEED_ARGS=(--count "${LOAD_TEST_TARGET}" --listings-per-seller 1 --fast --skip-if-enough)
+  fi
+  # Run in background so Render deploy is not killed during a long first seed (~10–15 min).
+  python manage.py seed_demo_sellers "${SEED_ARGS[@]}" >> /tmp/najik_load_test_seed.log 2>&1 &
 else
   # Remove any demo sellers left from old auto-seed deploys (idempotent, fast when empty).
   python manage.py purge_demo_sellers

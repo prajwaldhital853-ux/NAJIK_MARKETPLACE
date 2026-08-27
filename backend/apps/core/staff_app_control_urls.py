@@ -8,6 +8,12 @@ from apps.core.views.app_control import (
     StaffProviderPlanListCreateView,
 )
 from apps.accounts.views.referral import StaffReferEarnConfigView, StaffReferralListView
+from apps.core.views.privacy_compliance import (
+    StaffApplyRetentionView,
+    StaffLegalDocumentDetailView,
+    StaffLegalDocumentListView,
+    StaffPrivacyRetentionView,
+)
 from apps.core.views.seller_wallet import (
     StaffListingFeeRefundView,
     StaffLoadRequestApproveView,
@@ -39,4 +45,12 @@ urlpatterns = [
     path("listings/<uuid:listing_id>/refund-fee/", StaffListingFeeRefundView.as_view(), name="staff-listing-fee-refund"),
     path("refer-earn/", StaffReferEarnConfigView.as_view(), name="staff-refer-earn"),
     path("referrals/", StaffReferralListView.as_view(), name="staff-referrals"),
+    path("privacy-retention/", StaffPrivacyRetentionView.as_view(), name="staff-privacy-retention"),
+    path("privacy-retention/apply/", StaffApplyRetentionView.as_view(), name="staff-apply-retention"),
+    path("legal-documents/", StaffLegalDocumentListView.as_view(), name="staff-legal-documents"),
+    path(
+        "legal-documents/<str:doc_type>/<str:role>/",
+        StaffLegalDocumentDetailView.as_view(),
+        name="staff-legal-document-detail",
+    ),
 ]

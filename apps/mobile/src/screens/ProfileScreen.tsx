@@ -8,6 +8,7 @@ import { useAppRefreshControl } from "../components/KeyboardScreen";
 import { PressScale } from "../components/PressScale";
 import { SellerHeroBanner } from "../components/SellerHeroBanner";
 import { SellerProfileEditModal } from "../components/SellerProfileEditModal";
+import { DataPrivacyActions } from "../components/DataPrivacyActions";
 import { AccountStatusCard, ListingAdminNotesCard, StaffWarningCard } from "../components/StaffWarningBanner";
 import { useAuth } from "../context/AuthContext";
 import { isPendingProvider, isProvider, isRejectedProvider, isVerifiedProvider, isAccountRestricted } from "../demo";
@@ -596,6 +597,8 @@ function BuyerProfile() {
             </PressScale>
           ))}
         </View>
+
+        <DataPrivacyActions />
       </ScrollView>
     </View>
   );

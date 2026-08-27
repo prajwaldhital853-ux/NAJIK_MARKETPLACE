@@ -193,7 +193,13 @@ class StaffAppUserDetailView(APIView):
 
     def delete(self, request, pk):
         require_rbac_method(request.user, "user_management", "DELETE")
+        from apps.accounts.gdpr import delete_user_account
+        from apps.core.models import DataSubjectRequestLog
+
         user = get_object_or_404(AppUser, pk=pk)
-        revoke_app_tokens(user)
-        user.delete()
-        return Response(status=status.HTTP_204_NO_CONTENT)
+        result = delete_user_account(
+            user,
+            source=DataSubjectRequestLog.SOURCE_STAFF,
+            staff=request.user,
+        )
+        return Response(result, status=status.HTTP_200_OK)

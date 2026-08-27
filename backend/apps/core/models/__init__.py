@@ -138,6 +138,11 @@ class ProviderLedgerEntry(models.Model):
         return f"{self.title} ({self.provider_id})"
 
 
+from apps.core.models.privacy_compliance import (
+    DataSubjectRequestLog,
+    LegalDocumentConfig,
+    PrivacyRetentionConfig,
+)
 from apps.core.models.seller_wallet import (
     SellerLoadRequest,
     SellerPaymentConfig,

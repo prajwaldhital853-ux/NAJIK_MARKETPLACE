@@ -10,6 +10,7 @@ import { AuthImage } from "../components/AuthImage";
 import { KeyboardScreen, useKeyboardScroll } from "../components/KeyboardScreen";
 import { PressScale } from "../components/PressScale";
 import { SellerProfileEditModal } from "../components/SellerProfileEditModal";
+import { DataPrivacyActions } from "../components/DataPrivacyActions";
 import { updateProviderPrivacySettings, fetchSellerApplication } from "../authApi";
 import { useAuth } from "../context/AuthContext";
 import { useInbox, noticeSenderLabel, noticeKindLabel } from "../context/InboxContext";
@@ -1214,7 +1215,7 @@ function SettingsBody() {
           { icon: "person-outline", label: "Profile", onPress: () => setEditOpen(true) },
           { icon: "lock-closed-outline", label: "Security", onPress: () => Alert.alert("Security", "PIN / biometrics in a later build.") },
           { icon: "card-outline", label: "Payouts", onPress: () => Alert.alert("Payouts", "Add eSewa or bank details.") },
-          { icon: "trash-outline", label: "Delete", onPress: () => Alert.alert("Delete account", "Contact NAJIK support to close this account.") },
+          { icon: "trash-outline", label: "Delete", onPress: () => Alert.alert("Delete account", "Use the Data & privacy section below to delete your account.") },
         ]}
       />
       <Text style={{ fontWeight: "800", marginHorizontal: 16, marginTop: 16 }}>Account</Text>
@@ -1247,6 +1248,7 @@ function SettingsBody() {
         <SettingRow icon="language-outline" title="Language" value="English" />
         <SettingRow icon="moon-outline" title="Appearance" value="Light" last />
       </View>
+      <DataPrivacyActions />
     </>
   );
 }

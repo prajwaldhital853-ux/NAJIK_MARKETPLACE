@@ -288,3 +288,19 @@ export async function submitSellerApplication(payload: {
     }),
   );
 }
+
+export async function exportMyAccountData() {
+  return withAppAuth((token) =>
+    api<Record<string, unknown>>("/api/auth/me/export/", { token }),
+  );
+}
+
+export async function deleteMyAccount(payload: { confirm: string; password?: string }) {
+  return withAppAuth((token) =>
+    api<{ deleted: boolean }>("/api/auth/me/delete/", {
+      method: "POST",
+      token,
+      body: JSON.stringify(payload),
+    }),
+  );
+}

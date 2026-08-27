@@ -8,6 +8,8 @@ import { useAdmin } from "@/lib/store";
 import { toastAdminError } from "@/lib/rbac";
 import { ReadOnlyBanner, useRbacGuard } from "@/lib/use-page-rbac";
 import { UrgentSellAdminPanel } from "@/components/admin/urgent-sell-admin-panel";
+import { LegalDocumentsPanel } from "@/components/admin/legal-documents-panel";
+import { PrivacyRetentionPanel } from "@/components/admin/privacy-retention-panel";
 import {
   createHomeBannerSlide,
   deleteHomeBannerSlide,
@@ -142,7 +144,7 @@ export default function GeneralAppControlPage() {
     <div>
       <PageHeader
         title="General App Control"
-        summary="Up to 3 home banners auto-scroll on buyer or seller Home. Pick who sees each banner. Changes appear in the app within about a minute without refresh."
+        summary="Home banners, urgent sell, editable Terms/Privacy, and privacy/retention controls for GDPR-style data rights."
       />
       {error ? <p className="mb-4 text-sm text-red">{error}</p> : null}
       {readOnly ? <div className="mb-4"><ReadOnlyBanner label="General App Control" /></div> : null}
@@ -232,6 +234,10 @@ export default function GeneralAppControlPage() {
       ) : null}
 
       <UrgentSellAdminPanel />
+
+      <LegalDocumentsPanel />
+
+      <PrivacyRetentionPanel />
     </div>
   );
 }

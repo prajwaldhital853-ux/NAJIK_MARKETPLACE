@@ -1392,3 +1392,89 @@ export async function changeOwnPassword(payload: {
     body: JSON.stringify(payload),
   });
 }
+
+export type PrivacyRetentionConfig = {
+  inactive_account_retention_days: number;
+  kyc_retention_days_after_deletion: number;
+  chat_message_retention_days: number;
+  login_lockout_retention_days: number;
+  staff_login_attempt_retention_days: number;
+  otp_retention_days: number;
+  password_reset_token_retention_days: number;
+  allow_self_service_export: boolean;
+  allow_self_service_delete: boolean;
+  require_password_for_self_delete: boolean;
+  anonymize_complaint_snapshots_on_delete: boolean;
+  retention_policy_summary: string;
+  updated_at: string;
+  recent_requests?: Array<{
+    id: string;
+    action: string;
+    source: string;
+    user_id: string | null;
+    user_email: string;
+    detail: string;
+    created_at: string;
+  }>;
+};
+
+export async function getPrivacyRetentionConfig() {
+  return staffRequest<PrivacyRetentionConfig>("/api/admin/app-control/privacy-retention/");
+}
+
+export async function patchPrivacyRetentionConfig(payload: Partial<PrivacyRetentionConfig>) {
+  return staffRequest<PrivacyRetentionConfig>("/api/admin/app-control/privacy-retention/", {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function applyRetentionPolicies(purgeInactive = false) {
+  return staffRequest<{ ok: boolean; stats: Record<string, number> }>(
+    "/api/admin/app-control/privacy-retention/apply/",
+    {
+      method: "POST",
+      body: JSON.stringify({ purge_inactive: purgeInactive }),
+    },
+  );
+}
+
+export type LegalSection = {
+  title: string;
+  paragraphs: string[];
+  bullets?: string[];
+};
+
+export type LegalDocumentAdmin = {
+  doc_type: "terms" | "privacy";
+  role: "buyer" | "seller";
+  id: string;
+  title: string;
+  lastUpdated: string;
+  intro: string;
+  sections: LegalSection[];
+  footer: string;
+  version: number;
+  is_published: boolean;
+  updated_at: string;
+  published_at: string | null;
+};
+
+export async function listLegalDocuments() {
+  return staffRequest<LegalDocumentAdmin[]>("/api/admin/app-control/legal-documents/");
+}
+
+export async function patchLegalDocument(
+  docType: "terms" | "privacy",
+  role: "buyer" | "seller",
+  payload: Partial<LegalDocumentAdmin> & { publish?: boolean },
+) {
+  return staffRequest<LegalDocumentAdmin>(`/api/admin/app-control/legal-documents/${docType}/${role}/`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function exportAppUserData(userId: string) {
+  return staffRequest<Record<string, unknown>>(`/api/admin/users/${userId}/export/`);
+}

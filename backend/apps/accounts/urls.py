@@ -1,6 +1,7 @@
 from django.urls import path
 
 from apps.accounts.views.google import GoogleAuthCallbackView, GoogleAuthView
+from apps.accounts.views.gdpr import UserDataDeleteView, UserDataExportView
 from apps.accounts.views.login import LoginView
 from apps.accounts.views.logout import LogoutView
 from apps.accounts.views.me import MePhotoView, MeView
@@ -24,6 +25,8 @@ urlpatterns = [
     path("refresh/", RefreshView.as_view(), name="app-refresh"),
     path("logout/", LogoutView.as_view(), name="app-logout"),
     path("me/photo/", MePhotoView.as_view(), name="app-me-photo"),
+    path("me/export/", UserDataExportView.as_view(), name="app-me-export"),
+    path("me/delete/", UserDataDeleteView.as_view(), name="app-me-delete"),
     path("me/", MeView.as_view(), name="app-me"),
     path("payments/me/", SellerPaymentsMeView.as_view(), name="app-payments-me"),
     path("payments/load-requests/", SellerLoadRequestCreateView.as_view(), name="app-payments-load"),

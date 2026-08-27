@@ -1,10 +1,12 @@
+import { useEffect, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
-import { Linking, ScrollView, Text, View } from "react-native";
+import { ActivityIndicator, Linking, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { PressScale } from "../components/PressScale";
 import { getLegalDocument } from "../legal/legalDocuments";
-import type { LegalDocId, LegalRole } from "../legal/types";
+import { fetchLegalDocument } from "../legalApi";
+import type { LegalDocId, LegalDocument, LegalRole } from "../legal/types";
 import { colors, shadow } from "../theme";
 
 const GREEN = "#1B7D2C";
@@ -25,7 +27,24 @@ export function LegalDocumentScreen() {
   const route = useRoute<any>();
   const role = parseRole(route.params?.role);
   const docId = parseDoc(route.params?.doc);
-  const doc = getLegalDocument(docId, role);
+  const [doc, setDoc] = useState<LegalDocument>(() => getLegalDocument(docId, role));
+  const [loading, setLoading] = useState(docId === "terms" || docId === "privacy");
+
+  useEffect(() => {
+    if (docId !== "terms" && docId !== "privacy") return;
+    let alive = true;
+    setLoading(true);
+    void fetchLegalDocument(docId, role)
+      .then((next) => {
+        if (alive) setDoc(next);
+      })
+      .finally(() => {
+        if (alive) setLoading(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [docId, role]);
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
@@ -55,6 +74,11 @@ export function LegalDocumentScreen() {
         contentContainerStyle={{ padding: 16, paddingBottom: insets.bottom + 24 }}
         showsVerticalScrollIndicator={false}
       >
+        {loading ? (
+          <View style={{ paddingVertical: 40, alignItems: "center" }}>
+            <ActivityIndicator color={GREEN} />
+          </View>
+        ) : (
         <View style={{ backgroundColor: colors.white, borderRadius: 20, padding: 18, borderWidth: 1, borderColor: colors.border, ...shadow.card }}>
           <Text style={{ fontSize: 13, lineHeight: 21, color: colors.textSecondary }}>{doc.intro}</Text>
 
@@ -87,6 +111,7 @@ export function LegalDocumentScreen() {
             ) : null}
           </View>
         </View>
+        )}
       </ScrollView>
     </View>
   );

@@ -1,11 +1,11 @@
 """User self-service and staff GDPR export/delete endpoints."""
-from django.http import HttpResponse
 from rest_framework import serializers, status
+from rest_framework.renderers import JSONRenderer
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.accounts.authentication import AppJWTAuthentication
-from apps.accounts.export_pdf import build_user_data_pdf, export_pdf_filename
+from apps.accounts.export_pdf import PDFRenderer, build_user_data_pdf, export_pdf_filename
 from apps.accounts.gdpr import delete_user_account, export_user_data, log_data_subject_action
 from apps.accounts.permissions import IsAppUser
 from apps.core.models import DataSubjectRequestLog, PrivacyRetentionConfig
@@ -27,12 +27,24 @@ def _export_response(request, payload: dict):
         return Response(payload)
     pdf_bytes = build_user_data_pdf(payload)
     filename = export_pdf_filename(payload.get("profile") or {})
-    response = HttpResponse(pdf_bytes, content_type="application/pdf")
+    response = Response(pdf_bytes, content_type="application/pdf")
     response["Content-Disposition"] = f'attachment; filename="{filename}"'
     return response
 
 
-class UserDataExportView(APIView):
+EXPORT_RENDERERS = [JSONRenderer, PDFRenderer]
+
+
+class DataExportViewMixin:
+    renderer_classes = EXPORT_RENDERERS
+
+    def perform_content_negotiation(self, request, force=False):
+        if _wants_json(request):
+            return (JSONRenderer(), "application/json")
+        return (PDFRenderer(), "application/pdf")
+
+
+class UserDataExportView(DataExportViewMixin, APIView):
     authentication_classes = [AppJWTAuthentication]
     permission_classes = [IsAppUser]
 
@@ -89,7 +101,7 @@ class UserDataDeleteView(APIView):
         return Response(result, status=status.HTTP_200_OK)
 
 
-class StaffUserDataExportView(APIView):
+class StaffUserDataExportView(DataExportViewMixin, APIView):
     authentication_classes = [StaffJWTAuthentication]
     permission_classes = [IsStaffUser]
 

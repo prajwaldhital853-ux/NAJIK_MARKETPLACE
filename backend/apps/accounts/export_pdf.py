@@ -10,6 +10,7 @@ from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer
+from rest_framework.renderers import BaseRenderer
 
 GREEN = colors.HexColor("#1B7D2C")
 INK = colors.HexColor("#0F172A")
@@ -237,3 +238,21 @@ def build_user_data_pdf(data: dict) -> bytes:
 def export_pdf_filename(profile: dict) -> str:
     user_id = (profile or {}).get("id") or "account"
     return f"najik-data-export-{user_id}.pdf"
+
+
+class PDFRenderer(BaseRenderer):
+    """Allow DRF content negotiation for PDF export endpoints."""
+
+    media_type = "application/pdf"
+    format = "pdf"
+    charset = None
+    render_style = "binary"
+
+    def render(self, data, accepted_media_type=None, renderer_context=None):
+        if data is None:
+            return b""
+        if isinstance(data, (bytes, bytearray)):
+            return bytes(data)
+        if isinstance(data, str):
+            return data.encode("utf-8")
+        return b""

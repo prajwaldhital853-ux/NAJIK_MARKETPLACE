@@ -112,6 +112,15 @@ class GdprUserTests(TestCase):
         self.assertTrue(res.content.startswith(b"%PDF"))
         self.assertTrue(DataSubjectRequestLog.objects.filter(action="export", source="self").exists())
 
+    def test_user_can_export_pdf_with_accept_header(self):
+        res, body = self.register("user")
+        self.auth_from_register(body, res)
+        res = self.client.get("/api/auth/me/export/", HTTP_ACCEPT="application/pdf")
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res["Content-Type"], "application/pdf")
+        self.assertTrue(res.content.startswith(b"%PDF"))
+        self.assertTrue(DataSubjectRequestLog.objects.filter(action="export", source="self").exists())
+
     def test_user_can_export_json_with_format_param(self):
         res, body = self.register("user")
         self.auth_from_register(body, res)

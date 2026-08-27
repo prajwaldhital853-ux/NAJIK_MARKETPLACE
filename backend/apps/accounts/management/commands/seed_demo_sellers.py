@@ -506,11 +506,37 @@ class Command(BaseCommand):
             action="store_true",
             help="Replace existing demo listing photos on this run",
         )
+        parser.add_argument(
+            "--skip-if-enough",
+            action="store_true",
+            help="Exit without changes when demo seller count already meets --count (for Render deploys)",
+        )
 
     def handle(self, *args, **options):
         load_test = bool(options.get("load_test"))
         count = MAX_SELLER_COUNT if load_test else max(1, min(options["count"], MAX_SELLER_COUNT))
         listings_per_seller = 1 if load_test else max(1, min(options["listings_per_seller"], 5))
+        skip_if_enough = bool(options.get("skip_if_enough"))
+
+        if skip_if_enough:
+            demo_phones = [f"+{PHONE_BASE + i}" for i in range(count)]
+            existing_sellers = AppUser.objects.filter(
+                account_type=AppUser.ACCOUNT_PROVIDER,
+                phone__in=demo_phones,
+            ).count()
+            existing_listings = Listing.objects.filter(
+                owner__phone__in=demo_phones,
+                status=Listing.STATUS_APPROVED,
+            ).count()
+            target_listings = count * listings_per_seller
+            if existing_sellers >= count and existing_listings >= target_listings:
+                self.stdout.write(
+                    self.style.SUCCESS(
+                        f"Load test data ready ({existing_sellers} sellers, {existing_listings} approved listings). Skipping seed."
+                    )
+                )
+                return
+
         password = options["password"]
         fast = bool(options.get("fast")) or load_test
         refresh_photos = bool(options.get("refresh_photos"))

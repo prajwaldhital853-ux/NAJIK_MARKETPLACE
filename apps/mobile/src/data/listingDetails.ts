@@ -1,4 +1,5 @@
 import { adsCount, sellerPhone, type CatalogItem, type CatalogKey } from "./catalog";
+import { resolveApiMediaUrl } from "../config";
 import { liveSpecs, uniqueLabels } from "./liveListings";
 import type { ApiListing } from "../listingsApi";
 
@@ -340,7 +341,10 @@ export function richFor(item: CatalogItem, live?: ApiListing | null): ListingRic
     const avg = live.rating_avg || (reviews.length ? reviews.reduce((sum, row) => sum + row.rating, 0) / reviews.length : 0);
     const photos = live.photos || [];
     return {
-      gallery: photos.map((photo) => ({ uri: photo.url })),
+      gallery: photos
+        .map((photo) => resolveApiMediaUrl(photo.url))
+        .filter(Boolean)
+        .map((uri) => ({ uri: uri! })),
       rating: avg,
       reviewCount: live.review_count || reviews.length,
       views: live.view_count || 0,

@@ -265,6 +265,53 @@ PICSUM_SEEDS = [
     "najik-load-p", "najik-load-q", "najik-load-r", "najik-load-s", "najik-load-t",
 ]
 
+CATEGORY_PICSUM_SEEDS = {
+    Listing.CATEGORY_PROPERTY: [
+        "najik-property-house",
+        "najik-property-apartment",
+        "najik-property-room",
+        "najik-property-building",
+    ],
+    Listing.CATEGORY_VEHICLES: [
+        "najik-vehicle-car",
+        "najik-vehicle-motorcycle",
+        "najik-vehicle-truck",
+        "najik-vehicle-scooter",
+    ],
+    Listing.CATEGORY_JOBS: [
+        "najik-job-office",
+        "najik-job-laptop",
+        "najik-job-team",
+        "najik-job-workplace",
+    ],
+    Listing.CATEGORY_SERVICES: [
+        "najik-service-tools",
+        "najik-service-food",
+        "najik-service-salon",
+        "najik-service-repair",
+    ],
+    Listing.CATEGORY_MARKETPLACE: [
+        "najik-market-electronics",
+        "najik-market-fashion",
+        "najik-market-furniture",
+        "najik-market-gadgets",
+    ],
+    Listing.CATEGORY_BUSINESS: [
+        "najik-business-shop",
+        "najik-business-store",
+        "najik-business-cafe",
+        "najik-business-market",
+    ],
+    Listing.CATEGORY_NEARBY: [
+        "najik-nearby-local",
+        "najik-nearby-street",
+        "najik-nearby-bazaar",
+        "najik-nearby-neighbourhood",
+    ],
+}
+
+_CATEGORY_PHOTO_CACHE: dict[str, list[bytes]] = {}
+
 
 def _coords_for_city(city: str) -> tuple[float, float]:
     lat, lng = CITY_COORDS.get(city, (27.7172, 85.3240))
@@ -325,6 +372,36 @@ def _copy_photo_from_source(listing: Listing, source: ListingPhoto, sort_order: 
         return False
 
 
+def _download_picsum_seed(seed: str) -> bytes | None:
+    url = f"https://picsum.photos/seed/{seed}/640/480.jpg"
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "NAJIK-LoadTest/1.0"})
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            data = resp.read()
+            if len(data) > 1024:
+                return data
+    except (urllib.error.URLError, TimeoutError, OSError):
+        pass
+    return None
+
+
+def _category_photo_pool(category: str) -> list[bytes]:
+    if category in _CATEGORY_PHOTO_CACHE:
+        return _CATEGORY_PHOTO_CACHE[category]
+
+    seeds = CATEGORY_PICSUM_SEEDS.get(category, PICSUM_SEEDS)
+    pool: list[bytes] = []
+    for index, seed in enumerate(seeds):
+        blob = _download_picsum_seed(seed)
+        if blob:
+            pool.append(blob)
+        else:
+            pool.append(_jpeg_bytes(PHOTO_COLORS[index % len(PHOTO_COLORS)]))
+
+    _CATEGORY_PHOTO_CACHE[category] = pool or _photo_pool()
+    return _CATEGORY_PHOTO_CACHE[category]
+
+
 def _web_photo_pool() -> list[bytes]:
     global _WEB_PHOTO_CACHE
     if _WEB_PHOTO_CACHE:
@@ -332,17 +409,11 @@ def _web_photo_pool() -> list[bytes]:
 
     pool: list[bytes] = []
     for seed in PICSUM_SEEDS:
-        url = f"https://picsum.photos/seed/{seed}/640/480.jpg"
-        try:
-            req = urllib.request.Request(url, headers={"User-Agent": "NAJIK-LoadTest/1.0"})
-            with urllib.request.urlopen(req, timeout=20) as resp:
-                data = resp.read()
-                if len(data) > 1024:
-                    pool.append(data)
-                    continue
-        except (urllib.error.URLError, TimeoutError, OSError):
-            pass
-        pool.append(_jpeg_bytes(PHOTO_COLORS[len(pool) % len(PHOTO_COLORS)]))
+        blob = _download_picsum_seed(seed)
+        if blob:
+            pool.append(blob)
+        else:
+            pool.append(_jpeg_bytes(PHOTO_COLORS[len(pool) % len(PHOTO_COLORS)]))
 
     _WEB_PHOTO_CACHE = pool or _photo_pool()
     return _WEB_PHOTO_CACHE
@@ -356,18 +427,25 @@ def _photo_count_for_listing(seller_index: int, listing_index: int) -> int:
     return 1
 
 
-def _attach_photos_from_pool(listing: Listing, photo_count: int, pool: list[bytes], *, refresh: bool = False) -> int:
+def _attach_photos_from_pool(
+    listing: Listing,
+    photo_count: int,
+    pool: list[bytes] | None = None,
+    *,
+    refresh: bool = False,
+) -> int:
     if listing.photos.exists() and not refresh:
         return 0
     if refresh:
         listing.photos.all().delete()
 
-    start = hash(str(listing.id)) % len(pool)
+    blobs = pool or _category_photo_pool(listing.category)
+    start = hash(str(listing.id)) % len(blobs)
     saved = 0
     for i in range(max(1, photo_count)):
         photo = ListingPhoto(listing=listing, sort_order=i)
         filename = f"load_{listing.id}_photo_{i}.jpg"
-        blob = pool[(start + i) % len(pool)]
+        blob = blobs[(start + i) % len(blobs)]
         photo.image.save(filename, ContentFile(blob, name=filename), save=False)
         photo.save()
         saved += 1
@@ -446,6 +524,26 @@ def _pick_listings(seller_index: int, count: int):
 def _pick_listing_pair(seller_index: int):
     rows = _pick_listings(seller_index, 2)
     return rows[0], rows[1]
+
+
+def _backfill_missing_demo_photos() -> int:
+    from django.db.models import Count
+    from apps.listings.listing_cards import bump_listing_feed_cache
+
+    missing = (
+        Listing.objects.filter(
+            owner__email__iendswith="@najik-demo.com",
+            status=Listing.STATUS_APPROVED,
+        )
+        .annotate(photo_total=Count("photos"))
+        .filter(photo_total=0)
+    )
+    added = 0
+    for listing in missing.iterator(chunk_size=250):
+        added += _attach_photos_from_pool(listing, 1)
+    if added:
+        bump_listing_feed_cache()
+    return added
 
 
 def _seller_profile(index: int):
@@ -527,6 +625,9 @@ class Command(BaseCommand):
             ).count()
             target_listings = count * listings_per_seller
             if existing_sellers >= count and existing_listings >= target_listings:
+                backfilled = _backfill_missing_demo_photos()
+                if backfilled:
+                    self.stdout.write(f"Backfilled photos on {backfilled} demo listings that had none.")
                 self.stdout.write(
                     self.style.SUCCESS(
                         f"Load test data ready ({existing_sellers} sellers, {existing_listings} approved listings). Skipping seed."
@@ -541,15 +642,15 @@ class Command(BaseCommand):
         created_listings = 0
         created_apps = 0
         photos_added = 0
-        photo_pool = _web_photo_pool() if fast else None
 
         self.stdout.write(
             f"Seeding {count} demo sellers ({listings_per_seller} approved listing(s) each, fast={fast})..."
         )
         if fast:
-            self.stdout.write("Downloading reusable listing photo pool…")
-            photo_pool = _web_photo_pool()
-            self.stdout.write(f"Photo pool ready ({len(photo_pool)} images).")
+            self.stdout.write("Preparing category photo pools (property, vehicles, jobs, etc.)…")
+            for cat in CATEGORY_PICSUM_SEEDS:
+                _category_photo_pool(cat)
+            self.stdout.write(f"Photo pools ready ({len(_CATEGORY_PHOTO_CACHE)} categories).")
 
         for idx in range(count):
             seller_data = _seller_profile(idx)
@@ -638,12 +739,11 @@ class Command(BaseCommand):
                 if created:
                     created_listings += 1
                 try:
-                    if fast and photo_pool:
+                    if fast:
                         photo_count = _photo_count_for_listing(idx, listing_index)
                         added = _attach_photos_from_pool(
                             listing,
                             photo_count,
-                            photo_pool,
                             refresh=refresh_photos,
                         )
                     else:
@@ -658,6 +758,11 @@ class Command(BaseCommand):
 
             if fast and (idx + 1) % 250 == 0:
                 self.stdout.write(f"… {idx + 1}/{count} sellers processed")
+
+        backfilled = _backfill_missing_demo_photos()
+        if backfilled:
+            photos_added += backfilled
+            self.stdout.write(f"Backfilled photos on {backfilled} demo listings that had none.")
 
         demo_phones = [f"+{PHONE_BASE + i}" for i in range(count)]
         for listing in Listing.objects.filter(owner__phone__in=demo_phones, lat__isnull=True):

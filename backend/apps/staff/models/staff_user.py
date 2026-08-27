@@ -118,17 +118,10 @@ class StaffUser(models.Model):
         return True
 
     def record_failed_login(self):
-        """Record a failed login attempt and lock if threshold exceeded."""
+        """Legacy audit counter only — login lockout is IP/device scoped via StaffLoginLockout."""
         self.failed_login_attempts += 1
         self.last_failed_login = timezone.now()
-        
-        from apps.staff.lockout import LOCKOUT_AFTER, LOCKOUT_MINUTES
-
-        if self.failed_login_attempts >= LOCKOUT_AFTER:
-            self.is_locked = True
-            self.locked_until = timezone.now() + timezone.timedelta(minutes=LOCKOUT_MINUTES)
-        
-        self.save(update_fields=["failed_login_attempts", "last_failed_login", "is_locked", "locked_until"])
+        self.save(update_fields=["failed_login_attempts", "last_failed_login"])
 
     def record_successful_login(self):
         """Reset failed attempts on successful login."""
@@ -213,6 +206,29 @@ class PasswordHistory(models.Model):
 
     def __str__(self):
         return f"{self.staff.email} password change at {self.changed_at}"
+
+
+class StaffLoginLockout(models.Model):
+    """
+    Tracks failed staff login attempts per email + IP + device fingerprint.
+    Locking one device/network does not block the same staff account elsewhere.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    lock_key = models.CharField(max_length=512, unique=True, db_index=True)
+    email = models.EmailField(db_index=True)
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    device_fingerprint = models.CharField(max_length=255, blank=True, default="")
+    fail_count = models.PositiveIntegerField(default=0)
+    locked_until = models.DateTimeField(null=True, blank=True, db_index=True)
+    last_failed_at = models.DateTimeField(null=True, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-updated_at"]
+
+    def __str__(self):
+        return f"{self.email} @ {self.ip_address or 'unknown'}"
 
 
 class LoginAttempt(models.Model):

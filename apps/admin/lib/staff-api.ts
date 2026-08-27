@@ -133,7 +133,10 @@ export type StaffLockoutStatus = {
 export async function fetchStaffLockoutStatus(email: string): Promise<StaffLockoutStatus> {
   const trimmed = email.trim();
   if (!trimmed) return { locked: false };
-  const params = new URLSearchParams({ email: trimmed });
+  const params = new URLSearchParams({
+    email: trimmed,
+    device_fingerprint: getDeviceFingerprint(),
+  });
   const data = await api<{
     locked?: boolean;
     locked_until?: string;

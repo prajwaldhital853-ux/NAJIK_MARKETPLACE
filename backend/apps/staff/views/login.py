@@ -9,7 +9,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework import status
 
-from apps.staff.lockout import lockout_payload
+from apps.staff.lockout import get_lockout_row, lockout_payload, lockout_seconds_remaining
 from apps.staff.models import EmailVerificationCode, StaffUser
 from apps.staff.serializers.auth import (
     EmailVerificationSerializer,
@@ -17,6 +17,8 @@ from apps.staff.serializers.auth import (
     StaffPublicSerializer,
     StaffTokenSerializer,
     generate_verification_code,
+    get_client_ip,
+    get_device_fingerprint,
 )
 from apps.staff.throttles import StaffLoginRateThrottle
 
@@ -24,7 +26,7 @@ from apps.staff.throttles import StaffLoginRateThrottle
 class StaffLoginView(APIView):
     """
     Staff login with security features:
-    - Account lockout after 3 failed attempts (10 minutes)
+    - IP/device lockout after 3 failed attempts (10 minutes) on that device only
     - Device verification for new devices
     - Login attempt logging
     """
@@ -83,14 +85,28 @@ class StaffLockoutStatusView(APIView):
 
     def get(self, request):
         email = (request.query_params.get("email") or "").strip().lower()
+        device_fingerprint = (
+            (request.query_params.get("device_fingerprint") or "").strip()
+            or get_device_fingerprint(request)
+        )
         if not email:
             return Response({"locked": False})
 
         staff = StaffUser.objects.filter(email__iexact=email).first()
-        if not staff or not staff.is_account_locked():
+        if staff and staff.is_account_locked():
+            return Response(
+                {
+                    "locked": True,
+                    "detail": "This staff account has been locked by an administrator. Contact your Super Admin.",
+                    "code": "account_locked",
+                }
+            )
+
+        row = get_lockout_row(email, get_client_ip(request), device_fingerprint)
+        if not row or not lockout_seconds_remaining(row):
             return Response({"locked": False})
 
-        return Response({"locked": True, **lockout_payload(staff)})
+        return Response({"locked": True, **lockout_payload(row)})
 
 
 class EmailVerificationView(APIView):

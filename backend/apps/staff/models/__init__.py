@@ -1,6 +1,7 @@
 from apps.staff.models.staff_user import (
     StaffUser,
     PasswordHistory,
+    StaffLoginLockout,
     LoginAttempt,
     TrustedDevice,
     EmailVerificationCode,
@@ -15,6 +16,7 @@ from apps.staff.models.role import (
 __all__ = [
     "StaffUser",
     "PasswordHistory",
+    "StaffLoginLockout",
     "LoginAttempt",
     "TrustedDevice",
     "EmailVerificationCode",

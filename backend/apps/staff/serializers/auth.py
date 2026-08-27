@@ -8,7 +8,13 @@ from rest_framework import serializers
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from apps.staff.exceptions import StaffAccountLocked
-from apps.staff.lockout import LOCKOUT_AFTER
+from apps.staff.lockout import (
+    LOCKOUT_AFTER,
+    assert_login_not_locked,
+    lockout_seconds_remaining,
+    record_login_failure,
+    record_login_success,
+)
 from apps.staff.models import (
     StaffUser,
     LoginAttempt,
@@ -135,26 +141,31 @@ class StaffLoginSerializer(serializers.Serializer):
             attempt.save(update_fields=["failure_reason"])
             raise serializers.ValidationError("Your account has been deactivated.")
 
-        # Check if account is locked
+        # Super-admin manual account lock still blocks all devices.
         if staff.is_account_locked():
             seconds_left = max(1, int((staff.locked_until - timezone.now()).total_seconds()))
             attempt.failure_reason = f"Account locked ({seconds_left}s remaining)"
             attempt.save(update_fields=["failure_reason"])
-            raise StaffAccountLocked(staff)
+            raise serializers.ValidationError(
+                "This staff account has been locked by an administrator. Contact your Super Admin."
+            )
+
+        assert_login_not_locked(email, ip_address, device_fingerprint)
 
         if not staff.check_password(password):
-            staff.record_failed_login()
+            row = record_login_failure(email, ip_address, device_fingerprint)
             attempt.failure_reason = "Invalid password"
             attempt.save(update_fields=["failure_reason"])
 
-            if staff.failed_login_attempts >= LOCKOUT_AFTER:
-                staff.refresh_from_db(fields=["is_locked", "locked_until", "failed_login_attempts"])
-                raise StaffAccountLocked(staff)
+            if lockout_seconds_remaining(row):
+                raise StaffAccountLocked(row)
 
-            remaining = LOCKOUT_AFTER - staff.failed_login_attempts
+            remaining = LOCKOUT_AFTER - row.fail_count
             raise serializers.ValidationError(
                 f"{GENERIC_AUTH_ERROR} ({remaining} attempts remaining)"
             )
+
+        record_login_success(email, ip_address, device_fingerprint)
 
         # Success - record it
         attempt.success = True

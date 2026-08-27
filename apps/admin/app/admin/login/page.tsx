@@ -292,7 +292,7 @@ export default function StaffLoginPage() {
                           <div>
                             <p className="text-[13px] font-semibold text-[#92400e]">Account temporarily locked</p>
                             <p className="mt-1 text-[12px] leading-relaxed text-[#b45309]">
-                              Too many failed login attempts. You can try again in{" "}
+                              Too many failed login attempts from this device and network. You can try again in{" "}
                               <span className="font-bold tabular-nums">{formatLockoutCountdown(lockoutSecondsLeft)}</span>{" "}
                               (minutes:seconds).
                             </p>

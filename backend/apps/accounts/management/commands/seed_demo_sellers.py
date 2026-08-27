@@ -1,14 +1,20 @@
 """Seed demo seller accounts with listings — LOCAL DEV ONLY.
 
 Not run on Render/production. Use purge_demo_sellers to clean up demo rows.
+
+Load test example:
+  python manage.py seed_demo_sellers --load-test
 """
 
 import random
+import urllib.error
+import urllib.request
 from io import BytesIO
 from pathlib import Path
 
 from django.core.files.base import ContentFile
 from django.core.management.base import BaseCommand
+from django.db import models
 from django.utils import timezone
 
 from apps.accounts.models import AppUser
@@ -17,8 +23,9 @@ from apps.listings.models import Listing, ListingPhoto
 from apps.verification.models import ProviderApplication
 
 SELLER_COUNT = 100
+MAX_SELLER_COUNT = 5000
 LISTINGS_PER_SELLER = 2
-PHONE_BASE = 9779841234501  # +9779841234501 .. +9779841234600
+PHONE_BASE = 9779841234501  # +9779841234501 ..
 
 FIRST_NAMES = [
     "Ramesh", "Sita", "Bikash", "Anita", "Suresh", "Maya", "Prakash", "Sunita", "Rajesh", "Pooja",
@@ -249,6 +256,14 @@ PHOTO_COLORS = [
     (185, 28, 28),
 ]
 _JPEG_CACHE: list[bytes] = []
+_WEB_PHOTO_CACHE: list[bytes] = []
+
+PICSUM_SEEDS = [
+    "najik-load-a", "najik-load-b", "najik-load-c", "najik-load-d", "najik-load-e",
+    "najik-load-f", "najik-load-g", "najik-load-h", "najik-load-i", "najik-load-j",
+    "najik-load-k", "najik-load-l", "najik-load-m", "najik-load-n", "najik-load-o",
+    "najik-load-p", "najik-load-q", "najik-load-r", "najik-load-s", "najik-load-t",
+]
 
 
 def _coords_for_city(city: str) -> tuple[float, float]:
@@ -310,6 +325,55 @@ def _copy_photo_from_source(listing: Listing, source: ListingPhoto, sort_order: 
         return False
 
 
+def _web_photo_pool() -> list[bytes]:
+    global _WEB_PHOTO_CACHE
+    if _WEB_PHOTO_CACHE:
+        return _WEB_PHOTO_CACHE
+
+    pool: list[bytes] = []
+    for seed in PICSUM_SEEDS:
+        url = f"https://picsum.photos/seed/{seed}/640/480.jpg"
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": "NAJIK-LoadTest/1.0"})
+            with urllib.request.urlopen(req, timeout=20) as resp:
+                data = resp.read()
+                if len(data) > 1024:
+                    pool.append(data)
+                    continue
+        except (urllib.error.URLError, TimeoutError, OSError):
+            pass
+        pool.append(_jpeg_bytes(PHOTO_COLORS[len(pool) % len(PHOTO_COLORS)]))
+
+    _WEB_PHOTO_CACHE = pool or _photo_pool()
+    return _WEB_PHOTO_CACHE
+
+
+def _photo_count_for_listing(seller_index: int, listing_index: int) -> int:
+    if seller_index == 0 and listing_index == 0:
+        return 3
+    if listing_index == 0 and seller_index % 100 == 0:
+        return 3
+    return 1
+
+
+def _attach_photos_from_pool(listing: Listing, photo_count: int, pool: list[bytes], *, refresh: bool = False) -> int:
+    if listing.photos.exists() and not refresh:
+        return 0
+    if refresh:
+        listing.photos.all().delete()
+
+    start = hash(str(listing.id)) % len(pool)
+    saved = 0
+    for i in range(max(1, photo_count)):
+        photo = ListingPhoto(listing=listing, sort_order=i)
+        filename = f"load_{listing.id}_photo_{i}.jpg"
+        blob = pool[(start + i) % len(pool)]
+        photo.image.save(filename, ContentFile(blob, name=filename), save=False)
+        photo.save()
+        saved += 1
+    return saved
+
+
 def _attach_generated_photos(listing: Listing) -> int:
     pool = _photo_pool()
     start = hash(str(listing.id)) % len(pool)
@@ -355,47 +419,42 @@ def _attach_listing_photos(listing: Listing, *, refresh: bool = False) -> int:
     return _attach_generated_photos(listing)
 
 
-def _pick_listing_pair(seller_index: int):
+def _pick_listings(seller_index: int, count: int):
     templates = list(LISTING_TEMPLATES)
-    t1 = templates[seller_index % len(templates)]
-    t2 = templates[(seller_index + 7) % len(templates)]
-    loc1 = LOCATIONS[seller_index % len(LOCATIONS)]
-    loc2 = LOCATIONS[(seller_index + 5) % len(LOCATIONS)]
-    title1 = t1["titles"][seller_index % len(t1["titles"])]
-    title2 = t2["titles"][(seller_index + 3) % len(t2["titles"])]
-    price1 = random.randint(*t1["price_range"])
-    price2 = random.randint(*t2["price_range"])
-    return (
-        {
-            "title": title1,
-            "category": t1["category"],
-            "subcategory": t1["subcategory"],
-            "description": f"{title1}. Quality item from a verified NAJIK seller. Contact for details and viewing.",
-            "price": price1,
-            "location": loc1[0],
-            "city": loc1[1],
-            "district": loc1[2],
-        },
-        {
-            "title": title2,
-            "category": t2["category"],
-            "subcategory": t2["subcategory"],
-            "description": f"{title2}. Posted by a local verified seller on NAJIK Marketplace.",
-            "price": price2,
-            "location": loc2[0],
-            "city": loc2[1],
-            "district": loc2[2],
-        },
-    )
+    rows = []
+    for listing_index in range(max(1, count)):
+        template = templates[(seller_index + listing_index * 3) % len(templates)]
+        loc = LOCATIONS[(seller_index + listing_index * 5) % len(LOCATIONS)]
+        title = template["titles"][(seller_index + listing_index) % len(template["titles"])]
+        if count > 1 or seller_index > 0:
+            title = f"{title} #{seller_index + 1}"
+        rows.append(
+            {
+                "title": title,
+                "category": template["category"],
+                "subcategory": template["subcategory"],
+                "description": f"{title}. Quality listing from a verified NAJIK seller for load testing.",
+                "price": random.randint(*template["price_range"]),
+                "location": loc[0],
+                "city": loc[1],
+                "district": loc[2],
+            }
+        )
+    return rows
+
+
+def _pick_listing_pair(seller_index: int):
+    rows = _pick_listings(seller_index, 2)
+    return rows[0], rows[1]
 
 
 def _seller_profile(index: int):
     first = FIRST_NAMES[index % len(FIRST_NAMES)]
     last = LAST_NAMES[(index // len(FIRST_NAMES)) % len(LAST_NAMES)]
-    suffix = (index % 100) + 1
+    suffix = index + 1
     full_name = f"{first} {last}"
     phone = f"+{PHONE_BASE + index}"
-    slug = f"{first.lower()}.{last.lower()}{suffix}"
+    slug = f"{first.lower()}.{last.lower()}.{suffix}"
     loc = LOCATIONS[index % len(LOCATIONS)]
     service = SERVICE_TYPES[index % len(SERVICE_TYPES)]
     return {
@@ -411,14 +470,20 @@ def _seller_profile(index: int):
 
 
 class Command(BaseCommand):
-    help = "Seed 100 demo seller accounts with 2 listings each"
+    help = "Seed demo seller accounts with approved listings (up to 5000 for load testing)"
 
     def add_arguments(self, parser):
         parser.add_argument(
             "--count",
             type=int,
             default=SELLER_COUNT,
-            help="Number of demo sellers to create (default: 100)",
+            help=f"Number of demo sellers to create (default: {SELLER_COUNT}, max: {MAX_SELLER_COUNT})",
+        )
+        parser.add_argument(
+            "--listings-per-seller",
+            type=int,
+            default=LISTINGS_PER_SELLER,
+            help=f"Approved listings per seller (default: {LISTINGS_PER_SELLER})",
         )
         parser.add_argument(
             "--password",
@@ -427,21 +492,41 @@ class Command(BaseCommand):
             help="Password for all demo seller accounts",
         )
         parser.add_argument(
+            "--load-test",
+            action="store_true",
+            help=f"Shortcut for --count {MAX_SELLER_COUNT} --listings-per-seller 1 --fast",
+        )
+        parser.add_argument(
+            "--fast",
+            action="store_true",
+            help="Use web photo pool, skip KYC uploads, quieter logging (recommended for 1000+ sellers)",
+        )
+        parser.add_argument(
             "--refresh-photos",
             action="store_true",
-            help="Replace placeholder demo listing photos with copies from real seller listings",
+            help="Replace existing demo listing photos on this run",
         )
 
     def handle(self, *args, **options):
-        count = max(1, min(options["count"], 500))
+        load_test = bool(options.get("load_test"))
+        count = MAX_SELLER_COUNT if load_test else max(1, min(options["count"], MAX_SELLER_COUNT))
+        listings_per_seller = 1 if load_test else max(1, min(options["listings_per_seller"], 5))
         password = options["password"]
+        fast = bool(options.get("fast")) or load_test
         refresh_photos = bool(options.get("refresh_photos"))
         created_users = 0
         created_listings = 0
         created_apps = 0
         photos_added = 0
+        photo_pool = _web_photo_pool() if fast else None
 
-        self.stdout.write(f"Seeding {count} demo sellers ({LISTINGS_PER_SELLER} listings each)...")
+        self.stdout.write(
+            f"Seeding {count} demo sellers ({listings_per_seller} approved listing(s) each, fast={fast})..."
+        )
+        if fast:
+            self.stdout.write("Downloading reusable listing photo pool…")
+            photo_pool = _web_photo_pool()
+            self.stdout.write(f"Photo pool ready ({len(photo_pool)} images).")
 
         for idx in range(count):
             seller_data = _seller_profile(idx)
@@ -459,8 +544,9 @@ class Command(BaseCommand):
                     email_verified=True,
                 )
                 created_users += 1
-                self.stdout.write(f"[+] Seller {idx + 1}/{count}: {user.full_name}")
-            else:
+                if not fast or idx < 3 or (idx + 1) % 250 == 0:
+                    self.stdout.write(f"[+] Seller {idx + 1}/{count}: {user.full_name}")
+            elif not fast or (idx + 1) % 250 == 0:
                 self.stdout.write(f"[=] Seller {idx + 1}/{count}: {user.full_name} (exists)")
 
             if not ProviderApplication.objects.filter(owner=user).exists():
@@ -480,22 +566,24 @@ class Command(BaseCommand):
                             "demo_seed": True,
                         },
                     )
-                    app.nagrita.save(f"nagrita_{user.id}.jpg", _demo_jpeg("nagrita_demo.jpg", 0), save=False)
-                    app.photo.save(f"photo_{user.id}.jpg", _demo_jpeg("photo_demo.jpg", 1), save=False)
+                    if not fast:
+                        app.nagrita.save(f"nagrita_{user.id}.jpg", _demo_jpeg("nagrita_demo.jpg", 0), save=False)
+                        app.photo.save(f"photo_{user.id}.jpg", _demo_jpeg("photo_demo.jpg", 1), save=False)
                     app.save()
                     created_apps += 1
                 except Exception as exc:
-                    self.stdout.write(
-                        self.style.WARNING(f"  [!] Verified app skipped for {user.full_name}: {exc}")
-                    )
+                    if not fast:
+                        self.stdout.write(
+                            self.style.WARNING(f"  [!] Verified app skipped for {user.full_name}: {exc}")
+                        )
 
             SellerWallet.objects.get_or_create(
                 provider=user,
                 defaults={"balance_paisa": random.randint(800000, 3500000)},
             )
 
-            listing_1, listing_2 = _pick_listing_pair(idx)
-            for listing_data in [listing_1, listing_2]:
+            listing_rows = _pick_listings(idx, listings_per_seller)
+            for listing_index, listing_data in enumerate(listing_rows):
                 lat, lng = _coords_for_city(listing_data["city"])
                 listing, created = Listing.objects.get_or_create(
                     owner=user,
@@ -517,7 +605,7 @@ class Command(BaseCommand):
                         "status": Listing.STATUS_APPROVED,
                         "reviewed_at": timezone.now(),
                         "view_count": random.randint(25, 850),
-                        "extras": {"dealType": listing_data["subcategory"]},
+                        "extras": {"dealType": listing_data["subcategory"], "demo_seed": True},
                     },
                 )
                 if not created and (listing.lat is None or listing.lng is None):
@@ -527,13 +615,26 @@ class Command(BaseCommand):
                 if created:
                     created_listings += 1
                 try:
-                    added = _attach_listing_photos(listing, refresh=refresh_photos)
+                    if fast and photo_pool:
+                        photo_count = _photo_count_for_listing(idx, listing_index)
+                        added = _attach_photos_from_pool(
+                            listing,
+                            photo_count,
+                            photo_pool,
+                            refresh=refresh_photos,
+                        )
+                    else:
+                        added = _attach_listing_photos(listing, refresh=refresh_photos)
                     if added:
                         photos_added += added
                 except Exception as photo_exc:
-                    self.stdout.write(
-                        self.style.WARNING(f"  [!] Photos skipped for {listing.title}: {photo_exc}")
-                    )
+                    if not fast:
+                        self.stdout.write(
+                            self.style.WARNING(f"  [!] Photos skipped for {listing.title}: {photo_exc}")
+                        )
+
+            if fast and (idx + 1) % 250 == 0:
+                self.stdout.write(f"… {idx + 1}/{count} sellers processed")
 
         demo_phones = [f"+{PHONE_BASE + i}" for i in range(count)]
         for listing in Listing.objects.filter(owner__phone__in=demo_phones, lat__isnull=True):
@@ -546,7 +647,16 @@ class Command(BaseCommand):
             account_type=AppUser.ACCOUNT_PROVIDER,
             phone__in=demo_phones,
         ).count()
-        total_listings = Listing.objects.filter(owner__phone__in=demo_phones).count()
+        total_listings = Listing.objects.filter(
+            owner__phone__in=demo_phones,
+            status=Listing.STATUS_APPROVED,
+        ).count()
+        multi_photo_listings = (
+            Listing.objects.filter(owner__phone__in=demo_phones)
+            .annotate(photo_total=models.Count("photos"))
+            .filter(photo_total__gte=3)
+            .count()
+        )
 
         self.stdout.write(self.style.SUCCESS("\n[SUCCESS] Demo seed complete"))
         self.stdout.write(f"  New sellers this run: {created_users}")
@@ -554,7 +664,10 @@ class Command(BaseCommand):
         self.stdout.write(f"  New listings this run: {created_listings}")
         self.stdout.write(f"  Photos added this run: {photos_added}")
         self.stdout.write(f"  Total demo sellers in DB: {total_sellers}")
-        self.stdout.write(f"  Total demo listings in DB: {total_listings}")
+        self.stdout.write(f"  Total approved demo listings in DB: {total_listings}")
+        self.stdout.write(f"  Listings with 3+ photos: {multi_photo_listings}")
         self.stdout.write("\nSample login:")
         self.stdout.write(f"  Phone: +{PHONE_BASE}")
         self.stdout.write(f"  Password: {password}")
+        self.stdout.write("\nCleanup:")
+        self.stdout.write("  python manage.py purge_demo_sellers")

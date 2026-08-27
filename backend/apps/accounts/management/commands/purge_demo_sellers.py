@@ -6,9 +6,9 @@ from django.db.models import Q
 from apps.accounts.models import AppUser
 from apps.verification.models import ProviderApplication
 
-# Must match seed_demo_sellers.py if that command is ever used locally.
+# Must match seed_demo_sellers.py phone range (supports up to 5000 demo sellers).
 PHONE_BASE = 9779841234501
-PHONE_MAX = PHONE_BASE + 499
+PHONE_MAX = PHONE_BASE + 4999
 
 
 class Command(BaseCommand):

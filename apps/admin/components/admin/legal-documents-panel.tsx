@@ -98,22 +98,14 @@ export function LegalDocumentsPanel() {
   }
 
   if (loading) {
-    return (
-      <section className="mt-6 rounded border border-line bg-card p-4">
-        <p className="text-sm text-muted">Loading legal documents…</p>
-      </section>
-    );
+    return <p className="text-sm text-muted">Loading legal documents…</p>;
   }
 
   return (
-    <section className="mt-6 rounded border border-line bg-card p-4">
-      <h2 className="text-[13px] font-semibold text-ink">Terms & Privacy documents</h2>
-      <p className="mt-1 text-[12px] text-muted">
-        Edit Terms & Conditions and Privacy Policy for buyers and sellers. Published content is served to the mobile app.
-      </p>
-      {error ? <p className="mt-2 text-sm text-red">{error}</p> : null}
+    <section className="rounded border border-line bg-card p-4">
+      {error ? <p className="mb-3 text-sm text-red">{error}</p> : null}
 
-      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+      <div className="grid gap-3 sm:grid-cols-2">
         <Field label="Document">
           <select className={inputClass} value={docType} onChange={(e) => setDocType(e.target.value as "terms" | "privacy")}>
             {DOC_OPTIONS.map((opt) => (

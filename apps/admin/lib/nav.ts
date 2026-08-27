@@ -138,7 +138,16 @@ export const NAV: NavItem[] = [
     ],
   },
   { href: "/admin/analytics", label: "Analytics", icon: "chart" },
-  { href: "/admin/general-app-control", label: "General App Control", icon: "sliders" },
+  {
+    href: "/admin/general-app-control",
+    label: "General App Control",
+    icon: "sliders",
+    children: [
+      { href: "/admin/general-app-control", label: "Home & urgent sell" },
+      { href: "/admin/general-app-control/legal-documents", label: "Terms & Privacy" },
+      { href: "/admin/general-app-control/privacy-retention", label: "Privacy & retention" },
+    ],
+  },
   {
     href: "/admin/staff",
     label: "Admin & Staff Management",

@@ -88,31 +88,18 @@ export function PrivacyRetentionPanel() {
   }
 
   if (loading) {
-    return (
-      <section className="mt-6 rounded border border-line bg-card p-4">
-        <p className="text-sm text-muted">Loading privacy & retention…</p>
-      </section>
-    );
+    return <p className="text-sm text-muted">Loading privacy & retention…</p>;
   }
 
   if (!config) {
-    return (
-      <section className="mt-6 rounded border border-line bg-card p-4">
-        <p className="text-sm text-red">{error || "Privacy settings unavailable."}</p>
-      </section>
-    );
+    return <p className="text-sm text-red">{error || "Privacy settings unavailable."}</p>;
   }
 
   const set = (patch: Partial<PrivacyRetentionConfig>) => setConfig({ ...config, ...patch });
 
   return (
-    <section className="mt-6 rounded border border-line bg-card p-4">
-      <h2 className="text-[13px] font-semibold text-ink">Privacy & data retention</h2>
-      <p className="mt-1 text-[12px] text-muted">
-        GDPR-style controls: retention windows, self-service export/delete toggles, and automated purge jobs.
-      </p>
-
-      <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+    <section className="rounded border border-line bg-card p-4">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {numField("Inactive account retention (days)", config.inactive_account_retention_days, (v) => set({ inactive_account_retention_days: v }), readOnly)}
         {numField("KYC policy retention (days)", config.kyc_retention_days_after_deletion, (v) => set({ kyc_retention_days_after_deletion: v }), readOnly)}
         {numField("Chat message retention (days)", config.chat_message_retention_days, (v) => set({ chat_message_retention_days: v }), readOnly)}

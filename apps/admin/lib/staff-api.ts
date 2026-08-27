@@ -1486,7 +1486,7 @@ export async function patchLegalDocument(
   });
 }
 
-export async function exportAppUserData(userId: string) {
+async function fetchAppUserDataExport(userId: string) {
   const token = await ensureStaffAccessToken();
   const response = await fetch(`${getApiBaseUrl()}/api/admin/users/${userId}/export/`, {
     headers: {
@@ -1498,5 +1498,29 @@ export async function exportAppUserData(userId: string) {
     const data = await response.json().catch(() => ({}));
     throw new ApiError(formatAdminError(data, "Export failed"), response.status);
   }
+  return response;
+}
+
+export async function exportAppUserData(userId: string) {
+  const response = await fetchAppUserDataExport(userId);
   return response.blob();
+}
+
+export async function downloadAppUserDataPdf(userId: string, fallbackName?: string) {
+  const response = await fetchAppUserDataExport(userId);
+  const blob = await response.blob();
+  const disposition = response.headers.get("Content-Disposition") || "";
+  const match = disposition.match(/filename="([^"]+)"/i);
+  const filename = match?.[1] || fallbackName || `najik-data-export-${userId}.pdf`;
+  const url = URL.createObjectURL(blob);
+  try {
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  } finally {
+    URL.revokeObjectURL(url);
+  }
 }

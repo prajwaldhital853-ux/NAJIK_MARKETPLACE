@@ -317,7 +317,7 @@ function BrowseBody({
         </View>
       ) : (
         <View style={{ paddingHorizontal: PAD, paddingTop: 14 }}>
-          {grid ? <ListingGrid items={list} showPromoted /> : <ListingList items={list} />}
+          {grid ? <ListingGrid items={list} /> : <ListingList items={list} />}
         </View>
       )}
     </>

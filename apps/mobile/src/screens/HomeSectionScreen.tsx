@@ -70,7 +70,6 @@ export function HomeSectionScreen() {
           fetchData={fetchData}
           emptyText={`No ${heading.toLowerCase()} yet.`}
           loadingText={`Loading ${heading.toLowerCase()}…`}
-          showPromoted
           pageSize={PAGE_SIZE}
         />
       </View>

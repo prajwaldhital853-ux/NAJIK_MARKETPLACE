@@ -65,7 +65,7 @@ export type ListingCardBadge = { label: string; bg: string; fg: string };
 
 export function listingCardBadges(item: CatalogItem, options?: { showPromoted?: boolean; showVerified?: boolean }) {
   const badges: ListingCardBadge[] = [];
-  const showPromoted = options?.showPromoted !== false;
+  const showPromoted = options?.showPromoted === true;
   const showVerified = options?.showVerified !== false;
   const promoted = Boolean(item.promoted || item.badge === "BOOSTED" || item.badge === "FEATURED");
   if (item.urgent) badges.push({ label: "URGENT", bg: "#EAB308", fg: "#111827" });
@@ -219,7 +219,7 @@ export function UrgentListingCard({ item, showPromoted }: { item: CatalogItem; s
   );
 }
 
-export function ListingGrid({ items, showPromoted = true }: { items: CatalogItem[]; showPromoted?: boolean }) {
+export function ListingGrid({ items, showPromoted = false }: { items: CatalogItem[]; showPromoted?: boolean }) {
   return (
     <View style={{ flexDirection: "row", flexWrap: "wrap", gap: GAP }}>
       {items.map((item) => (

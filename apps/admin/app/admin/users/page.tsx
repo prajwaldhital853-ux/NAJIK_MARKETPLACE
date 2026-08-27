@@ -11,7 +11,7 @@ import { UserListingsPanel } from "@/components/admin/user-listings-panel";
 import { Avatar, Btn, Field, StatusBadge, inputClass } from "@/components/admin/ui";
 import { mapDirectoryUser } from "@/lib/live-users";
 import { useSession } from "@/lib/session";
-import { listAppUsersPage } from "@/lib/staff-api";
+import { listAppUsersPage, downloadAppUserDataPdf } from "@/lib/staff-api";
 import { AdminUsageGuideButton } from "@/components/admin/admin-usage-guide";
 import { formatRbacDeniedMessage, toastAdminError } from "@/lib/rbac";
 import { usePageRbac } from "@/lib/use-page-rbac";
@@ -44,6 +44,7 @@ export default function UsersPage() {
 
   const STATUS_LABELS: Record<string, string> = {
     note: "Sending…",
+    export: "Preparing PDF…",
     active: "Activating…",
     deactivated: "Deactivating…",
     blocked: "Blocking…",
@@ -342,6 +343,21 @@ export default function UsersPage() {
                   View-only access — you cannot edit, block, or deactivate users.
                 </p>
               ) : null}
+              <Btn
+                kind="ghost"
+                loading={busyAction === "export"}
+                loadingLabel={STATUS_LABELS.export}
+                disabled={!!busyAction}
+                onClick={() => {
+                  setBusyAction("export");
+                  void downloadAppUserDataPdf(open.id)
+                    .then(() => admin.toast("User data PDF downloaded."))
+                    .catch((err: unknown) => toastAdminError(admin.toast, err, "Could not export user data."))
+                    .finally(() => setBusyAction(null));
+                }}
+              >
+                Download data (PDF)
+              </Btn>
               {open.role === "provider" ? (
                 <Btn kind="primary" onClick={() => setListingsUser(open)}>
                   See all listings of this user

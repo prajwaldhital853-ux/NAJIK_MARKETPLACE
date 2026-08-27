@@ -8,6 +8,7 @@ import { Kv } from "./resource-page";
 import { useAdmin } from "@/lib/store";
 import { toastAdminError } from "@/lib/rbac";
 import { usePageRbac } from "@/lib/use-page-rbac";
+import { downloadAppUserDataPdf } from "@/lib/staff-api";
 import type { User } from "@/lib/demo-data";
 
 export function userDocuments(u: User) {
@@ -93,6 +94,19 @@ export function UserDetailDrawer({
                   View-only access — you cannot edit, block, or deactivate users.
                 </p>
               ) : null}
+              <Btn
+                kind="ghost"
+                loading={loading === "export"}
+                loadingLabel="Preparing PDF…"
+                onClick={() =>
+                  void runAction("export", async () => {
+                    await downloadAppUserDataPdf(user.id);
+                    admin.toast("User data PDF downloaded.");
+                  })
+                }
+              >
+                Download data (PDF)
+              </Btn>
               {isProvider ? (
                 <Btn kind="primary" onClick={() => setListingsOpen(true)}>
                   See all listings of this user

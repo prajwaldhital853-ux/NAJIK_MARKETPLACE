@@ -1464,10 +1464,20 @@ export async function listLegalDocuments() {
   return staffRequest<LegalDocumentAdmin[]>("/api/admin/app-control/legal-documents/");
 }
 
+export type LegalDocumentPatchPayload = {
+  title?: string;
+  last_updated_label?: string;
+  intro?: string;
+  footer?: string;
+  sections?: LegalSection[];
+  is_published?: boolean;
+  publish?: boolean;
+};
+
 export async function patchLegalDocument(
   docType: "terms" | "privacy",
   role: "buyer" | "seller",
-  payload: Partial<LegalDocumentAdmin> & { publish?: boolean },
+  payload: LegalDocumentPatchPayload,
 ) {
   return staffRequest<LegalDocumentAdmin>(`/api/admin/app-control/legal-documents/${docType}/${role}/`, {
     method: "PATCH",

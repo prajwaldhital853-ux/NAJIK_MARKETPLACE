@@ -36,6 +36,10 @@ def parse_price_rupees(value) -> int:
         return 0
 
 
+def _is_placeholder_tier(row: dict) -> bool:
+    return row["min_rupees"] == 0 and row["max_rupees"] is None and row["fee_rupees"] == 0
+
+
 def normalize_listing_fee_tiers(raw) -> list[dict]:
     rows = []
     if not isinstance(raw, list):
@@ -57,12 +61,17 @@ def normalize_listing_fee_tiers(raw) -> list[dict]:
             fee_rupees = max(0, int(item.get("fee_rupees") or 0))
         except (TypeError, ValueError):
             continue
-        rows.append({"min_rupees": min_rupees, "max_rupees": max_rupees, "fee_rupees": fee_rupees})
+        row = {"min_rupees": min_rupees, "max_rupees": max_rupees, "fee_rupees": fee_rupees}
+        if _is_placeholder_tier(row):
+            continue
+        rows.append(row)
     rows.sort(key=lambda row: (row["min_rupees"], 10**12 if row["max_rupees"] is None else row["max_rupees"]))
-    # Ignore admin UI placeholder: 0 and above with Rs. 0 fee (not a real band).
-    if len(rows) == 1 and rows[0]["min_rupees"] == 0 and rows[0]["max_rupees"] is None and rows[0]["fee_rupees"] == 0:
-        return []
     return rows
+
+
+def _tier_matches(price: int, row: dict) -> bool:
+    top = row["max_rupees"]
+    return price >= row["min_rupees"] and (top is None or price <= top)
 
 
 def listing_fee_rupees_for_price(price_rupees: int, cfg: SellerPaymentConfig | None = None) -> int:
@@ -70,10 +79,15 @@ def listing_fee_rupees_for_price(price_rupees: int, cfg: SellerPaymentConfig | N
     if not cfg.is_active:
         return 0
     price = max(0, int(price_rupees or 0))
-    for row in normalize_listing_fee_tiers(cfg.listing_fee_tiers):
-        top = row["max_rupees"]
-        if price >= row["min_rupees"] and (top is None or price <= top):
-            return row["fee_rupees"]
+    tiers = normalize_listing_fee_tiers(cfg.listing_fee_tiers)
+    best = None
+    for row in tiers:
+        if not _tier_matches(price, row):
+            continue
+        if best is None or row["min_rupees"] >= best["min_rupees"]:
+            best = row
+    if best is not None:
+        return best["fee_rupees"]
     return max(0, int(cfg.listing_fee_rupees or 0))
 
 

@@ -73,8 +73,9 @@ export async function fetchSellerPaymentsMe(priceRupees?: number) {
   if (priceRupees != null && Number.isFinite(priceRupees)) {
     params.set("price", String(Math.max(0, Math.floor(priceRupees))));
   }
-  const q = params.toString() ? `?${params.toString()}` : "";
-  return withAppAuth((token) => api<SellerPaymentsMe>(`/api/auth/payments/me/${q}`, { token }));
+  const q = params.toString();
+  const path = q ? `/api/auth/payments/me/?${q}` : "/api/auth/payments/me/";
+  return withAppAuth((token) => api<SellerPaymentsMe>(path, { token }));
 }
 
 export async function createSellerLoadRequest(payload: {

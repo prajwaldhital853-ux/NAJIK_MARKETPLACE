@@ -63,6 +63,15 @@ function ProofLightbox({
   );
 }
 
+function parseBandMaxRupees(raw: string): number | null {
+  const text = raw.trim().toLowerCase();
+  if (!text || text === "unlimited" || text === "above") return null;
+  const digits = raw.replace(/\D/g, "");
+  if (!digits) return null;
+  const n = Number(digits);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
 export function SellerPaymentsConfigPanel({
   embedded,
   onChanged,
@@ -125,7 +134,7 @@ export function SellerPaymentsConfigPanel({
         listing_fee_tiers: tiers
           .map((row) => ({
             min_rupees: Number(row.min_rupees) || 0,
-            max_rupees: row.max_rupees.trim() === "" ? null : Number(row.max_rupees) || 0,
+            max_rupees: parseBandMaxRupees(row.max_rupees),
             fee_rupees: Number(row.fee_rupees) || 0,
           }))
           .filter((row) => !(row.min_rupees === 0 && row.max_rupees == null && row.fee_rupees === 0)),

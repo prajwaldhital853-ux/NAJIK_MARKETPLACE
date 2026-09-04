@@ -1,28 +1,30 @@
 import type { ListingFeeTier, SellerPaymentConfig } from "./paymentsApi";
 
+function isPlaceholderTier(row: ListingFeeTier) {
+  return row.min_rupees === 0 && (row.max_rupees == null || row.max_rupees <= 0) && Number(row.fee_rupees) === 0;
+}
+
 function activeTiers(config?: SellerPaymentConfig | null) {
-  const tiers = [...(config?.listing_fee_tiers || [])].sort((a, b) => a.min_rupees - b.min_rupees);
-  if (
-    tiers.length === 1 &&
-    tiers[0].min_rupees === 0 &&
-    (tiers[0].max_rupees == null || tiers[0].max_rupees <= 0) &&
-    Number(tiers[0].fee_rupees) === 0
-  ) {
-    return [];
-  }
-  return tiers;
+  return [...(config?.listing_fee_tiers || [])]
+    .filter((row) => !isPlaceholderTier(row))
+    .sort((a, b) => a.min_rupees - b.min_rupees);
+}
+
+function tierMatches(price: number, row: ListingFeeTier) {
+  const top = row.max_rupees;
+  return price >= row.min_rupees && (top == null || top <= 0 || price <= top);
 }
 
 export function quoteListingFeeRupees(priceRupees: number, config?: SellerPaymentConfig | null) {
   if (!config || config.is_active === false) return 0;
   const price = Math.max(0, Math.floor(Number(priceRupees) || 0));
   const tiers = activeTiers(config);
+  let best: ListingFeeTier | null = null;
   for (const row of tiers) {
-    const top = row.max_rupees;
-    if (price >= row.min_rupees && (top == null || top <= 0 || price <= top)) {
-      return Math.max(0, Number(row.fee_rupees) || 0);
-    }
+    if (!tierMatches(price, row)) continue;
+    if (!best || row.min_rupees >= best.min_rupees) best = row;
   }
+  if (best) return Math.max(0, Number(best.fee_rupees) || 0);
   return Math.max(0, Number(config.listing_fee_rupees) || 0);
 }
 

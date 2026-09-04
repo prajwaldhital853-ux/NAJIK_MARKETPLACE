@@ -34,6 +34,7 @@ import { ChatThreadScreen } from "../screens/ChatThreadScreen";
 import { SellerProfileScreen } from "../screens/SellerProfileScreen";
 import { HomeSectionScreen } from "../screens/HomeSectionScreen";
 import { BuyerInviteEarnScreen } from "../screens/BuyerInviteEarnScreen";
+import { BuyerCoinsScreen, BuyerCouponsScreen, BuyerTransactionsScreen, BuyerWalletScreen } from "../screens/BuyerMoneyScreens";
 import { BuyerRecentViewsScreen, BuyerReviewsGivenScreen } from "../screens/BuyerActivityScreens";
 import { SavedScreen } from "../screens/SavedScreen";
 import { SellerApplyScreen } from "../screens/SellerApplyScreen";
@@ -118,6 +119,10 @@ function MainDrawer() {
       <Drawer.Screen name="BuyerReviewsGiven" component={BuyerReviewsGivenScreen} />
       <Drawer.Screen name="BuyerRecentViews" component={BuyerRecentViewsScreen} />
       <Drawer.Screen name="BuyerInviteEarn" component={BuyerInviteEarnScreen} />
+      <Drawer.Screen name="BuyerWallet" component={BuyerWalletScreen} />
+      <Drawer.Screen name="BuyerCoins" component={BuyerCoinsScreen} />
+      <Drawer.Screen name="BuyerCoupons" component={BuyerCouponsScreen} />
+      <Drawer.Screen name="BuyerTransactions" component={BuyerTransactionsScreen} />
       <Drawer.Screen name="SellerProfile" component={SellerProfileScreen} />
       <Drawer.Screen name="ProviderIdCard" component={ProviderIdCardScreen} />
       <Drawer.Screen name="LegalDocument" component={LegalDocumentScreen} />

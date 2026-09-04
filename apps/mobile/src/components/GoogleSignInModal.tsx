@@ -72,9 +72,23 @@ export function GoogleSignInModal({
   }
 
   function onWebError(event: WebViewErrorEvent) {
-    const { domain, code, description } = event.nativeEvent;
-    const detail = [description, domain, code != null ? `code ${code}` : ""].filter(Boolean).join(" · ");
-    finishWithError(detail || "Could not load Google sign-in. Check your internet connection and try again.");
+    const { code, description } = event.nativeEvent;
+    const raw = `${description || ""} ${code ?? ""}`.toLowerCase();
+    const dnsFail =
+      raw.includes("err_name_not_resolved") ||
+      raw.includes("err_internet_disconnected") ||
+      raw.includes("err_address_unreachable") ||
+      raw.includes("err_connection") ||
+      code === -2 ||
+      code === -6 ||
+      code === -8;
+    if (dnsFail) {
+      finishWithError(
+        "The phone could not reach Google (no DNS / no internet). Check Wi‑Fi or mobile data, then try again. This is not a change to the Google login button.",
+      );
+      return;
+    }
+    finishWithError(description || "Could not load Google sign-in. Check your internet connection and try again.");
   }
 
   return (

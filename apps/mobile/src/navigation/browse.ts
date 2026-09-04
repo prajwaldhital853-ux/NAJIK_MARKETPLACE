@@ -121,7 +121,23 @@ export function openInboxNoticeTarget(
 }
 
 export function openBuyerInviteEarn(navigation: { navigate: (...args: any[]) => void }) {
-  navigation.navigate("BuyerInviteEarn");
+  navigateNamed(navigation, "BuyerInviteEarn");
+}
+
+export function openBuyerWallet(navigation: { navigate: (...args: any[]) => void }) {
+  navigateNamed(navigation, "BuyerWallet");
+}
+
+export function openBuyerCoins(navigation: { navigate: (...args: any[]) => void }) {
+  navigateNamed(navigation, "BuyerCoins");
+}
+
+export function openBuyerCoupons(navigation: { navigate: (...args: any[]) => void }) {
+  navigateNamed(navigation, "BuyerCoupons");
+}
+
+export function openBuyerTransactions(navigation: { navigate: (...args: any[]) => void }) {
+  navigateNamed(navigation, "BuyerTransactions");
 }
 
 export function openBuyerReviewsGiven(navigation: { navigate: (...args: any[]) => void }) {

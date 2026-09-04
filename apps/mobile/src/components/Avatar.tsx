@@ -15,6 +15,7 @@ export function Avatar({
   borderColor = "#fff",
   borderWidth = 2,
   onCamera,
+  editIcon = "camera",
   style,
   priority,
 }: {
@@ -24,6 +25,7 @@ export function Avatar({
   borderColor?: string;
   borderWidth?: number;
   onCamera?: () => void;
+  editIcon?: "camera" | "pencil";
   style?: StyleProp<ViewStyle>;
   priority?: "low" | "normal" | "high";
 }) {
@@ -75,7 +77,7 @@ export function Avatar({
             justifyContent: "center",
           }}
         >
-          <Ionicons name="camera" size={Math.max(10, cam * 0.5)} color="#fff" />
+          <Ionicons name={editIcon === "pencil" ? "pencil" : "camera"} size={Math.max(10, cam * 0.5)} color="#fff" />
         </PressScale>
       ) : null}
     </View>

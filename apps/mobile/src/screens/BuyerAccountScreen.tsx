@@ -13,20 +13,25 @@ import { useAuth } from "../context/AuthContext";
 import { infoLinkDocId } from "../legal/types";
 import {
   openBookings,
+  openBuyerCoins,
+  openBuyerCoupons,
   openBuyerInviteEarn,
   openBuyerRecentViews,
   openBuyerReviewsGiven,
+  openBuyerTransactions,
+  openBuyerWallet,
   openChatInbox,
   openMapSearch,
 } from "../navigation/browse";
 import { fetchSellerPaymentsMe } from "../paymentsApi";
 import { choosePhoto } from "../pickPhoto";
 import { colors, shadow } from "../theme";
+import Svg, { Path } from "react-native-svg";
 
 type Ion = ComponentProps<typeof Ionicons>["name"];
 
 const GREEN = colors.greenDeep;
-const HEADER = colors.forestDeep;
+const HEADER = colors.greenDeep;
 const ICON_BG = colors.greenSoft;
 const PAGE_BG = "#F3F4F6";
 
@@ -92,86 +97,87 @@ export function BuyerProfile() {
 
   return (
     <View style={{ flex: 1, backgroundColor: PAGE_BG }}>
-      <View
-        style={{
-          backgroundColor: HEADER,
-          paddingTop: insets.top + 6,
-          paddingHorizontal: 16,
-          paddingBottom: 36,
-          borderBottomLeftRadius: 28,
-          borderBottomRightRadius: 28,
-        }}
-      >
-        <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 16 }}>
-          <Text style={{ flex: 1, color: "#fff", fontWeight: "800", fontSize: 16 }} numberOfLines={1}>
-            {name}
-          </Text>
-          <PressScale onPress={confirmLogout} hitSlop={10}>
-            <Ionicons name="power" size={22} color="#fff" />
-          </PressScale>
-        </View>
-
-        <View style={{ flexDirection: "row", alignItems: "center" }}>
-          <Avatar name={name} uri={photo || undefined} size={84} borderColor="#fff" borderWidth={3} onCamera={pickPhoto} />
-          <View style={{ flex: 1, marginLeft: 14 }}>
-            <Text style={{ color: "#fff", fontWeight: "800", fontSize: 18 }} numberOfLines={1}>
-              {name}
-            </Text>
-            {email ? (
-              <Text style={{ color: "rgba(255,255,255,0.85)", fontSize: 13, marginTop: 3 }} numberOfLines={1}>
-                {email}
-              </Text>
-            ) : (
-              <Text style={{ color: "rgba(255,255,255,0.85)", fontSize: 13, marginTop: 3 }} numberOfLines={1}>
-                {user?.phone || "Add your email"}
-              </Text>
-            )}
-            <PressScale
-              onPress={() => openBuyerInviteEarn(navigation)}
-              style={{
-                marginTop: 10,
-                alignSelf: "flex-start",
-                backgroundColor: "rgba(0,0,0,0.28)",
-                borderRadius: 20,
-                paddingHorizontal: 12,
-                paddingVertical: 6,
-                flexDirection: "row",
-                alignItems: "center",
-                gap: 6,
-              }}
-            >
-              <Ionicons name="wallet-outline" size={14} color="#fff" />
-              <Text style={{ color: "#fff", fontWeight: "700", fontSize: 12 }}>{walletLabel}</Text>
-            </PressScale>
-            <PressScale
-              onPress={() => {
-                if (phoneVerified) {
-                  Alert.alert("Verified", "Your buyer account is already verified.");
-                  return;
-                }
-                openLegal("Contact Us");
-              }}
-              style={{
-                marginTop: 8,
-                alignSelf: "flex-start",
-                borderWidth: 1.5,
-                borderColor: "#fff",
-                borderRadius: 20,
-                paddingHorizontal: 12,
-                paddingVertical: 6,
-              }}
-            >
-              <Text style={{ color: "#fff", fontWeight: "700", fontSize: 12 }}>
-                {phoneVerified ? "Verified buyer" : "Get Verification Badge"}
-              </Text>
+      <View style={{ backgroundColor: HEADER }}>
+        <View style={{ paddingTop: insets.top + 8, paddingHorizontal: 16, paddingBottom: 18 }}>
+          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "flex-end", marginBottom: 14 }}>
+            <PressScale onPress={confirmLogout} hitSlop={10}>
+              <Ionicons name="power" size={22} color="#fff" />
             </PressScale>
           </View>
+
+          <View style={{ flexDirection: "row", alignItems: "center" }}>
+            <Avatar
+              name={name}
+              uri={photo || undefined}
+              size={88}
+              borderColor="#fff"
+              borderWidth={3}
+              editIcon="pencil"
+              onCamera={pickPhoto}
+            />
+            <View style={{ flex: 1, marginLeft: 14 }}>
+              <Text style={{ color: "#fff", fontWeight: "800", fontSize: 18 }} numberOfLines={1}>
+                {name}
+              </Text>
+              {email ? (
+                <Text style={{ color: "rgba(255,255,255,0.88)", fontSize: 13, marginTop: 3 }} numberOfLines={1}>
+                  {email}
+                </Text>
+              ) : (
+                <Text style={{ color: "rgba(255,255,255,0.88)", fontSize: 13, marginTop: 3 }} numberOfLines={1}>
+                  {user?.phone || "Add your email"}
+                </Text>
+              )}
+              <PressScale
+                onPress={() => openBuyerWallet(navigation)}
+                style={{
+                  marginTop: 10,
+                  alignSelf: "flex-start",
+                  backgroundColor: "rgba(0,0,0,0.28)",
+                  borderRadius: 20,
+                  paddingHorizontal: 12,
+                  paddingVertical: 6,
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 6,
+                }}
+              >
+                <Ionicons name="wallet-outline" size={14} color="#fff" />
+                <Text style={{ color: "#fff", fontWeight: "700", fontSize: 12 }}>{walletLabel}</Text>
+              </PressScale>
+              <PressScale
+                onPress={() => {
+                  if (phoneVerified) {
+                    Alert.alert("Verified", "Your buyer account is already verified.");
+                    return;
+                  }
+                  openLegal("Contact Us");
+                }}
+                style={{
+                  marginTop: 8,
+                  alignSelf: "flex-start",
+                  borderWidth: 1.5,
+                  borderColor: "#fff",
+                  borderRadius: 20,
+                  paddingHorizontal: 12,
+                  paddingVertical: 6,
+                }}
+              >
+                <Text style={{ color: "#fff", fontWeight: "700", fontSize: 12 }}>
+                  {phoneVerified ? "Verified buyer" : "Get Verification Badge"}
+                </Text>
+              </PressScale>
+            </View>
+          </View>
         </View>
+        <Svg width="100%" height={18} viewBox="0 0 100 18" preserveAspectRatio="none">
+          <Path d="M0 0 Q50 18 100 0 L100 18 L0 18 Z" fill={PAGE_BG} />
+        </Svg>
       </View>
 
       <ScrollView
         refreshControl={refreshControl}
-        contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 40, marginTop: -22 }}
+        contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: 40 }}
         showsVerticalScrollIndicator={false}
       >
         <View
@@ -185,16 +191,16 @@ export function BuyerProfile() {
         >
           <QuickAction
             icon="storefront-outline"
-            label="Saved ads"
+            label="My Featured Ads"
             onPress={() => navigation.jumpTo("Saved")}
           />
           <View style={{ width: 1, backgroundColor: "#EEF0F3" }} />
-          <QuickAction icon="bag-handle-outline" label="My bookings" onPress={() => openBookings(navigation)} />
+          <QuickAction icon="bag-handle-outline" label="My Orders" onPress={() => openBookings(navigation)} />
           <View style={{ width: 1, backgroundColor: "#EEF0F3" }} />
           <QuickAction
             icon="receipt-outline"
-            label="Invite rewards"
-            onPress={() => openBuyerInviteEarn(navigation)}
+            label="Transaction History"
+            onPress={() => openBuyerTransactions(navigation)}
           />
         </View>
 
@@ -202,10 +208,10 @@ export function BuyerProfile() {
         <StaffWarningCard />
 
         <Section title="My Account">
-          <MenuRow icon="wallet-outline" label="My Wallet" onPress={() => openBuyerInviteEarn(navigation)} />
-          <MenuRow icon="cash-outline" label="NAJIK Coins" onPress={() => openBuyerInviteEarn(navigation)} />
-          <MenuRow icon="pricetag-outline" label="Invite & Earn" onPress={() => openBuyerInviteEarn(navigation)} />
-          <MenuRow icon="return-down-back-outline" label="Bookings & visits" onPress={() => openBookings(navigation)} last />
+          <MenuRow icon="wallet-outline" label="My Wallet" onPress={() => openBuyerWallet(navigation)} />
+          <MenuRow icon="cash-outline" label="NAJIK Coins" onPress={() => openBuyerCoins(navigation)} />
+          <MenuRow icon="pricetag-outline" label="My Coupons" onPress={() => openBuyerCoupons(navigation)} />
+          <MenuRow icon="return-down-back-outline" label="Returns & Refunds" onPress={() => openBookings(navigation)} last />
         </Section>
 
         <Section title="Orders & Delivery">
@@ -257,6 +263,7 @@ export function BuyerProfile() {
         </Section>
 
         <Section title="More">
+          <MenuRow icon="gift-outline" label="Invite & Earn" onPress={() => openBuyerInviteEarn(navigation)} />
           <MenuRow icon="help-circle-outline" label="FAQs" onPress={() => openLegal("FAQ")} />
           <MenuRow icon="share-social-outline" label="Share this app" onPress={() => void shareApp()} />
           <MenuRow

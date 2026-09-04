@@ -21,7 +21,7 @@ import { fetchListingFeed, fetchListingFeedPaginated, fetchSavedListings, type A
 import { getCachedHomeData, hydrateHomeCache, setCachedHomeData } from "../cache/homeCache";
 import { getRecentViewIds } from "../listingViews";
 import { subscribeListingsChanged } from "../listingsRefresh";
-import { openCategory, openHomeSection } from "../navigation/browse";
+import { openAllCategories, openCategory, openHomeSection } from "../navigation/browse";
 import { colors, shadow } from "../theme";
 
 const { width: SCREEN_W } = Dimensions.get("window");
@@ -212,7 +212,7 @@ export function BuyerHomeScreen() {
 
       <CategoryGrid
         onPress={(key) => openCategory(navigation, key)}
-        onSeeAll={() => openHomeSection(navigation, "latest", { title: "All listings" })}
+        onSeeAll={() => openAllCategories(navigation)}
       />
 
       <MarketplaceSection

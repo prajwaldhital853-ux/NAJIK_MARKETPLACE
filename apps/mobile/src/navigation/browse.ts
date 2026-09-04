@@ -75,6 +75,10 @@ export function openVoiceCall(
   navigateNamed(navigation, "VoiceCall", { threadId: uuidFromNorm(threadId), otherName });
 }
 
+export function openAllCategories(navigation: { navigate: (...args: any[]) => void }) {
+  navigateNamed(navigation, "AllCategories");
+}
+
 export function openHomeSection(
   navigation: { navigate: (...args: any[]) => void },
   section: "recommended" | "trending" | "verified" | "latest",

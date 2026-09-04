@@ -208,6 +208,8 @@ class ListingSerializer(serializers.ModelSerializer):
     owner_name = serializers.CharField(source="owner.full_name", read_only=True)
     owner_id = serializers.UUIDField(source="owner.id", read_only=True)
     owner_photo_url = serializers.SerializerMethodField()
+    owner_joined_at = serializers.SerializerMethodField()
+    owner_email_masked = serializers.SerializerMethodField()
     comments = serializers.SerializerMethodField()
     reviews = serializers.SerializerMethodField()
     save_count = serializers.SerializerMethodField()
@@ -266,6 +268,8 @@ class ListingSerializer(serializers.ModelSerializer):
             "owner_name",
             "owner_id",
             "owner_photo_url",
+            "owner_joined_at",
+            "owner_email_masked",
             "view_count",
             "save_count",
             "comment_count",
@@ -290,6 +294,18 @@ class ListingSerializer(serializers.ModelSerializer):
         if not photo:
             return None
         return request.build_absolute_uri(f"/api/listings/sellers/{owner.id}/photo/")
+
+    def get_owner_joined_at(self, obj):
+        joined = getattr(obj.owner, "date_joined", None)
+        return joined.isoformat() if joined else None
+
+    def get_owner_email_masked(self, obj):
+        email = (getattr(obj.owner, "email", None) or obj.contact_email or "").strip()
+        if "@" not in email:
+            return ""
+        local, domain = email.split("@", 1)
+        keep = local[:2] if len(local) >= 2 else (local[:1] or "n")
+        return f"{keep}......@{domain}"
 
     def get_comments(self, obj):
         if self.context.get("compact"):

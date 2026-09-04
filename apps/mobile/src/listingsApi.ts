@@ -43,6 +43,8 @@ export type ApiListing = {
   owner_name: string;
   owner_id: string;
   owner_photo_url?: string | null;
+  owner_joined_at?: string | null;
+  owner_email_masked?: string;
   view_count: number;
   save_count: number;
   comment_count: number;

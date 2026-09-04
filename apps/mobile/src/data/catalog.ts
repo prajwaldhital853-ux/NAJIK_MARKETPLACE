@@ -57,7 +57,7 @@ export const catalogMeta: Record<
   services: { title: "Services", sub: "Local help at your door", icon: "construct", color: "#7C3AED", bg: "#F1E9FF", filters: ["All", "Home", "Verified"] },
   shops: { title: "Shops", sub: "Stores and rentals", icon: "storefront", color: "#E53935", bg: "#FDECEC", filters: ["All", "Retail", "For Rent"] },
   electronics: { title: "Electronics", sub: "Phones, laptops and gadgets", icon: "phone-portrait", color: "#2563EB", bg: "#E8F1FE", filters: ["All", "New", "Used", "Electronics", "Phones", "Laptops", "Appliances"] },
-  used: { title: "Used Items", sub: "Marketplace near you", icon: "bed", color: "#16A34A", bg: "#E7F6EC", filters: ["All", "New", "Used", "Electronics", "Furniture", "Phones", "Laptops", "Appliances", "Fashion", "Bikes", "Books", "Home items", "Other"] },
+  used: { title: "Used Items", sub: "Marketplace near you", icon: "bed", color: "#16A34A", bg: "#E7F6EC", filters: ["All", "New", "Used", "Furniture", "Fashion", "Books", "Home items", "Other"] },
   others: { title: "Others", sub: "More local listings", icon: "grid", color: "#7C3AED", bg: "#F1E9FF", filters: ["All"] },
 };
 

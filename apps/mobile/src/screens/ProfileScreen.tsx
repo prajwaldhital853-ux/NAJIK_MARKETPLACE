@@ -1,26 +1,21 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useFocusEffect, useNavigation } from "@react-navigation/native";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Alert, Dimensions, Image, Modal, Pressable, ScrollView, Text, View } from "react-native";
+import { useNavigation } from "@react-navigation/native";
+import { useEffect, useState } from "react";
+import { Alert, Dimensions, Modal, Pressable, ScrollView, Text, View } from "react-native";
 import { AppHeader } from "../components/AppHeader";
-import { Avatar } from "../components/Avatar";
 import { useAppRefreshControl } from "../components/KeyboardScreen";
 import { PressScale } from "../components/PressScale";
 import { SellerHeroBanner } from "../components/SellerHeroBanner";
 import { SellerProfileEditModal } from "../components/SellerProfileEditModal";
-import { DataPrivacyActions } from "../components/DataPrivacyActions";
 import { AccountStatusCard, ListingAdminNotesCard, StaffWarningCard } from "../components/StaffWarningBanner";
 import { useAuth } from "../context/AuthContext";
 import { isPendingProvider, isProvider, isRejectedProvider, isVerifiedProvider, isAccountRestricted } from "../demo";
-import { fetchMyListings, fetchMyReviewsGiven, fetchSavedListings, fetchSellerProfile, type ApiListing } from "../listingsApi";
-import { getRecentViewIds } from "../listingViews";
-import { listChatThreads } from "../chatApi";
+import { fetchMyListings, fetchSellerProfile, type ApiListing } from "../listingsApi";
 import { subscribeListingsChanged } from "../listingsRefresh";
-import { openBuyerInviteEarn, openBuyerRecentViews, openBuyerReviewsGiven, openProviderIdCard, openSellerPage } from "../navigation/browse";
-import { choosePhoto } from "../pickPhoto";
+import { openProviderIdCard, openSellerPage } from "../navigation/browse";
 import { colors, shadow } from "../theme";
+import { BuyerProfile } from "./BuyerAccountScreen";
 
-const skyline = require("../../assets/login-skyline.png");
 const GAP = 8;
 const PAD = 16;
 const CARD_W = (Dimensions.get("window").width - PAD * 2 - GAP * 3) / 4;
@@ -376,229 +371,6 @@ export function ProfileScreen() {
         <PressScale onPress={logout} style={{ marginTop: 22, alignItems: "center", padding: 12 }}>
           <Text style={{ color: colors.red, fontWeight: "800" }}>Log out</Text>
         </PressScale>
-      </ScrollView>
-    </View>
-  );
-}
-
-function BuyerProfile() {
-  const { user, updateBuyerPhoto } = useAuth();
-  const navigation = useNavigation<any>();
-  const name = user?.full_name || "Account";
-  const phone = user?.phone ? (user.phone.startsWith("+") ? user.phone : `+977 ${user.phone}`) : "";
-  const email = user?.email || "";
-  const photo = user?.photo_uri || "";
-  const location = user?.address || "";
-  const [savedCount, setSavedCount] = useState(0);
-  const [inquiriesCount, setInquiriesCount] = useState(0);
-  const [recentCount, setRecentCount] = useState(0);
-  const [reviewsCount, setReviewsCount] = useState(0);
-
-  const loadCounts = useCallback(() => {
-    void fetchSavedListings()
-      .then((rows) => setSavedCount(rows.length))
-      .catch(() => setSavedCount(0));
-    void listChatThreads()
-      .then((rows) => setInquiriesCount(rows.length))
-      .catch(() => setInquiriesCount(0));
-    void getRecentViewIds()
-      .then((ids) => setRecentCount(ids.length))
-      .catch(() => setRecentCount(0));
-    void fetchMyReviewsGiven()
-      .then((rows) => setReviewsCount(rows.length))
-      .catch(() => setReviewsCount(0));
-  }, []);
-
-  useFocusEffect(
-    useCallback(() => {
-      loadCounts();
-    }, [loadCounts]),
-  );
-
-  const stats = [
-    { icon: "heart" as const, color: GREEN, bg: "#E7F6EC", value: String(savedCount), label: "Saved Items", onPress: () => navigation.jumpTo("Saved") },
-    { icon: "chatbubble-ellipses" as const, color: "#7C3AED", bg: "#F1E9FF", value: String(inquiriesCount), label: "Inquiries", onPress: () => navigation.jumpTo("Messages") },
-    { icon: "time" as const, color: "#2563EB", bg: "#E8F1FE", value: String(recentCount), label: "Recently Viewed", onPress: () => openBuyerRecentViews(navigation) },
-    { icon: "star" as const, color: "#EA580C", bg: "#FFF1E0", value: String(reviewsCount), label: "Reviews Given", onPress: () => openBuyerReviewsGiven(navigation) },
-  ];
-
-  const activity = [
-    { icon: "gift-outline" as const, color: GREEN, bg: "#E7F6EC", title: "Invite & Earn", sub: "Share your code and earn rewards.", onPress: () => openBuyerInviteEarn(navigation) },
-    { icon: "bookmark" as const, color: GREEN, bg: "#E7F6EC", title: "Saved Items", sub: "View your saved listings.", onPress: () => navigation.jumpTo("Saved") },
-    { icon: "help-circle" as const, color: "#6D28D9", bg: "#F1E9FF", title: "My Inquiries", sub: "Track your messages.", onPress: () => navigation.jumpTo("Messages") },
-    { icon: "eye" as const, color: "#1D4ED8", bg: "#E8F1FE", title: "Recently Viewed", sub: "Last 10 listings you opened.", onPress: () => openBuyerRecentViews(navigation) },
-    { icon: "chatbubble" as const, color: "#C2410C", bg: "#FFF1E0", title: "My Reviews", sub: "Ratings you've given sellers.", onPress: () => openBuyerReviewsGiven(navigation) },
-  ];
-
-  const details = [
-    { icon: "person-outline" as const, label: "Full Name", value: name },
-    { icon: "call-outline" as const, label: "Phone Number", value: phone },
-    { icon: "mail-outline" as const, label: "Email Address", value: email },
-    { icon: "location-outline" as const, label: "Location", value: location },
-    { icon: "calendar-outline" as const, label: "Member Since", value: memberSince(user?.date_joined) },
-  ];
-
-  const more = [
-    { icon: "notifications" as const, color: GREEN, bg: "#E7F6EC", title: "Notifications" },
-    { icon: "shield-checkmark" as const, color: "#2563EB", bg: "#E8F1FE", title: "Security" },
-    { icon: "headset" as const, color: "#EA580C", bg: "#FFF1E0", title: "Help & Support" },
-    { icon: "settings" as const, color: "#7C3AED", bg: "#F1E9FF", title: "Settings" },
-  ];
-  const refreshControl = useAppRefreshControl(loadCounts);
-
-  return (
-    <View style={{ flex: 1, backgroundColor: "#F7F8FA" }}>
-      <AppHeader right="bell-settings" showLocation showPro={false} pinColor={GREEN} />
-      <View style={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 10, backgroundColor: "#F7F8FA", borderBottomWidth: 1, borderBottomColor: "#EEF0F3" }}>
-        <PressScale
-          onPress={() => {}}
-          style={{
-            backgroundColor: "#E7F6EC",
-            borderRadius: 18,
-            padding: 14,
-            overflow: "hidden",
-            ...shadow.card,
-          }}
-        >
-          <Image source={skyline} style={{ position: "absolute", right: -8, bottom: -6, width: 170, height: 92, opacity: 0.55 }} resizeMode="contain" />
-          <View style={{ flexDirection: "row", alignItems: "center" }}>
-            <Avatar
-              name={name}
-              uri={photo || undefined}
-              size={82}
-              borderColor={GREEN}
-              borderWidth={3}
-              onCamera={() =>
-                choosePhoto((uri) => {
-                  void updateBuyerPhoto(uri).catch((err) =>
-                    Alert.alert("Photo", err instanceof Error ? err.message : "Could not save photo."),
-                  );
-                }, "Profile photo")
-              }
-            />
-            <View style={{ flex: 1, marginLeft: 12 }}>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
-                <Text style={{ fontWeight: "800", fontSize: 17, color: "#111827" }} numberOfLines={1}>
-                  {name}
-                </Text>
-                <Ionicons name="checkmark-circle" size={16} color={GREEN} />
-              </View>
-              <Text style={{ color: "#6B7280", fontSize: 13, marginTop: 3 }}>{phone}</Text>
-              <Text style={{ color: "#6B7280", fontSize: 12, marginTop: 2 }} numberOfLines={1}>
-                {email}
-              </Text>
-              <View
-                style={{
-                  marginTop: 8,
-                  alignSelf: "flex-start",
-                  backgroundColor: "#D4EFDC",
-                  paddingHorizontal: 8,
-                  paddingVertical: 3,
-                  borderRadius: 12,
-                  flexDirection: "row",
-                  alignItems: "center",
-                  gap: 4,
-                }}
-              >
-                <Ionicons name="checkmark-circle" size={12} color={GREEN} />
-                <Text style={{ color: GREEN, fontSize: 11, fontWeight: "700" }}>Verified User</Text>
-              </View>
-            </View>
-            <Ionicons name="chevron-forward" size={18} color="#9AA0A6" />
-          </View>
-        </PressScale>
-      </View>
-      <ScrollView refreshControl={refreshControl} contentContainerStyle={{ padding: 16, paddingBottom: 36 }} showsVerticalScrollIndicator={false}>
-        <AccountStatusCard />
-        <StaffWarningCard />
-
-        <View style={{ marginTop: 12, backgroundColor: "#fff", borderRadius: 16, paddingVertical: 14, flexDirection: "row", ...shadow.card }}>
-          {stats.map((item) => (
-            <PressScale key={item.label} onPress={item.onPress} style={{ flex: 1, alignItems: "center" }}>
-              <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: item.bg, alignItems: "center", justifyContent: "center" }}>
-                <Ionicons name={item.icon} size={18} color={item.color} />
-              </View>
-              <Text style={{ fontWeight: "800", fontSize: 16, color: "#111827", marginTop: 6 }}>{item.value}</Text>
-              <Text style={{ color: "#8A8F98", fontSize: 10, textAlign: "center", marginTop: 2 }}>{item.label}</Text>
-            </PressScale>
-          ))}
-        </View>
-
-        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 20, marginBottom: 10 }}>
-          <Text style={{ fontSize: 16, fontWeight: "800", color: "#111827" }}>My Activity</Text>
-          <Text style={{ color: GREEN, fontWeight: "700", fontSize: 13 }}>View All ›</Text>
-        </View>
-        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>
-          {activity.map((item) => (
-            <PressScale
-              key={item.title}
-              onPress={item.onPress}
-              style={{
-                width: (Dimensions.get("window").width - 16 * 2 - 10) / 2,
-                backgroundColor: item.bg,
-                borderRadius: 14,
-                padding: 12,
-              }}
-            >
-              <Ionicons name={item.icon} size={22} color={item.color} />
-              <Text style={{ fontWeight: "800", fontSize: 14, color: "#111827", marginTop: 8 }}>{item.title}</Text>
-              <Text style={{ color: "#6B7280", fontSize: 11, marginTop: 2, lineHeight: 15 }}>{item.sub}</Text>
-            </PressScale>
-          ))}
-        </View>
-
-        <View style={{ marginTop: 20, backgroundColor: "#fff", borderRadius: 16, padding: 14, ...shadow.card }}>
-          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-            <Text style={{ fontSize: 16, fontWeight: "800", color: "#111827" }}>Profile Details</Text>
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
-              <Ionicons name="pencil" size={13} color={GREEN} />
-              <Text style={{ color: GREEN, fontWeight: "700", fontSize: 13 }}>Edit Profile</Text>
-            </View>
-          </View>
-          {details.map((item, index) => (
-            <View
-              key={item.label}
-              style={{
-                flexDirection: "row",
-                alignItems: "center",
-                paddingVertical: 12,
-                borderTopWidth: index === 0 ? 0 : 1,
-                borderTopColor: "#F0F1F3",
-              }}
-            >
-              <Ionicons name={item.icon} size={18} color={GREEN} />
-              <Text style={{ flex: 1, marginLeft: 10, color: "#6B7280", fontSize: 13 }}>{item.label}</Text>
-              <Text style={{ fontWeight: "700", fontSize: 13, color: "#111827", marginRight: 6 }} numberOfLines={1}>
-                {item.value}
-              </Text>
-              <Ionicons name="chevron-forward" size={16} color="#C4C7CC" />
-            </View>
-          ))}
-        </View>
-
-        <Text style={{ fontSize: 16, fontWeight: "800", color: "#111827", marginTop: 20, marginBottom: 10 }}>More Options</Text>
-        <View style={{ flexDirection: "row", gap: 10 }}>
-          {more.map((item) => (
-            <PressScale
-              key={item.title}
-              style={{
-                flex: 1,
-                backgroundColor: "#fff",
-                borderRadius: 14,
-                paddingVertical: 12,
-                alignItems: "center",
-                ...shadow.card,
-              }}
-            >
-              <View style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: item.bg, alignItems: "center", justifyContent: "center" }}>
-                <Ionicons name={item.icon} size={20} color={item.color} />
-              </View>
-              <Text style={{ fontSize: 10, fontWeight: "700", marginTop: 6, textAlign: "center", color: "#111827" }}>{item.title}</Text>
-            </PressScale>
-          ))}
-        </View>
-
-        <DataPrivacyActions />
       </ScrollView>
     </View>
   );

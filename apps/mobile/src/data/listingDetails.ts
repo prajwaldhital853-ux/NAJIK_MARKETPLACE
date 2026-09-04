@@ -48,7 +48,19 @@ export type ListingRich = {
   amenities: Amenity[];
   faqs: Faq[];
   reviews: Review[];
-  seller: { name: string; role: string; listed: string; response: string; rating: string; phone: string; ads: number; ownerId?: string; photoUrl?: string | null };
+  seller: {
+    name: string;
+    role: string;
+    listed: string;
+    response: string;
+    rating: string;
+    phone: string;
+    ads: number;
+    ownerId?: string;
+    photoUrl?: string | null;
+    joinedAt?: string | null;
+    email?: string | null;
+  };
   variants?: { label: string; options: string[] };
   cta: string;
 };
@@ -362,6 +374,8 @@ export function richFor(item: CatalogItem, live?: ApiListing | null): ListingRic
         ads: live.review_count || reviews.length || 1,
         ownerId: live.owner_id,
         photoUrl: live.owner_photo_url || null,
+        joinedAt: live.owner_joined_at || live.created_at || null,
+        email: live.owner_email_masked || live.contact_email || null,
       },
       cta: "Contact seller",
     };

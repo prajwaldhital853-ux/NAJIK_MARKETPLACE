@@ -26,8 +26,18 @@ type SortKey = "new" | "popular" | "low" | "high";
 function filterByChip(items: CatalogItem[], filter: string) {
   if (filter === "All") return items;
   const needle = filter.toLowerCase();
+  const aliases: Record<string, string[]> = {
+    cars: ["car", "cars"],
+    bikes: ["bike", "bikes", "scooter", "scooters"],
+    phones: ["phone", "phones", "mobile"],
+    laptops: ["laptop", "laptops", "computer"],
+  };
+  const needles = aliases[needle] || [needle];
   return items.filter((item) =>
-    [...item.tags, ...item.extra, item.badge || ""].some((value) => String(value).toLowerCase() === needle),
+    [...item.tags, ...item.extra, item.badge || "", item.title].some((value) => {
+      const text = String(value).toLowerCase();
+      return needles.some((n) => text === n || text.includes(n));
+    }),
   );
 }
 
@@ -72,15 +82,27 @@ export function CategoryBrowseScreen() {
     let cancelled = false;
     setLoading(true);
     const load = () => {
-      void fetchListingFeed({
-        category,
-        q: query.trim() || undefined,
-        ...feedParams,
-      })
-        .then((rows) => {
+      void Promise.all(
+        key === "vehicles"
+          ? [
+              fetchListingFeed({ category: "vehicles", q: query.trim() || undefined, ...feedParams }),
+              fetchListingFeed({ category: "marketplace", q: query.trim() || undefined, ...feedParams }),
+            ]
+          : [
+              fetchListingFeed({
+                category,
+                q: query.trim() || undefined,
+                ...feedParams,
+              }),
+            ],
+      )
+        .then((batches) => {
           if (cancelled) return;
-          const items = listingsToCatalog(rows);
-          setLive(key === "electronics" ? items.filter((item) => item.key === "electronics") : items);
+          const items = listingsToCatalog(batches.flat());
+          if (key === "vehicles") setLive(items.filter((item) => item.key === "vehicles"));
+          else if (key === "electronics") setLive(items.filter((item) => item.key === "electronics"));
+          else if (key === "used") setLive(items.filter((item) => item.key === "used"));
+          else setLive(items);
         })
         .catch(() => {
           if (!cancelled) setLive([]);

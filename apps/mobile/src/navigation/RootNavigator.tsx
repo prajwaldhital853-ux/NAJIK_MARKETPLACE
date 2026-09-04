@@ -25,6 +25,7 @@ import { PostScreen } from "../screens/PostScreen";
 import { ProfileScreen } from "../screens/ProfileScreen";
 import { RegisterScreen } from "../screens/RegisterScreen";
 import { RoleWelcomeScreen } from "../screens/RoleWelcomeScreen";
+import { AllCategoriesScreen } from "../screens/AllCategoriesScreen";
 import { CategoryBrowseScreen } from "../screens/CategoryBrowseScreen";
 import { ListingDetailScreen } from "../screens/ListingDetailScreen";
 import { VoiceCallScreen } from "../screens/VoiceCallScreen";
@@ -102,6 +103,7 @@ function MainDrawer() {
       }}
     >
       <Drawer.Screen name="Tabs" component={MainTabs} />
+      <Drawer.Screen name="AllCategories" component={AllCategoriesScreen} />
       <Drawer.Screen name="CategoryBrowse" component={CategoryBrowseScreen} />
       <Drawer.Screen name="MapSearch" component={MapSearchScreen} />
       <Drawer.Screen name="ListingDetail" component={ListingDetailScreen} />

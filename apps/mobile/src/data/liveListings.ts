@@ -2,6 +2,12 @@ import type { CatalogItem, CatalogKey } from "./catalog";
 import type { ApiListing } from "../listingsApi";
 import { MARKETPLACE_ELECTRONICS } from "./listingVertical";
 
+const VEHICLE_MARKETPLACE_SUBS = new Set(["bikes", "bike", "cars", "car", "scooter", "scooters"]);
+
+export function isVehicleMarketplaceSub(subcategory?: string) {
+  return VEHICLE_MARKETPLACE_SUBS.has((subcategory || "").trim().toLowerCase());
+}
+
 const CATEGORY_TO_KEY: Record<string, CatalogKey> = {
   property: "property",
   vehicles: "vehicles",
@@ -41,6 +47,7 @@ export function uniqueLabels(values: Array<string | number | null | undefined | 
 
 export function catalogKeyForCategory(category: string, subcategory?: string): CatalogKey {
   if (category === "marketplace") {
+    if (isVehicleMarketplaceSub(subcategory)) return "vehicles";
     if (subcategory && MARKETPLACE_ELECTRONICS.includes(subcategory)) return "electronics";
     return "used";
   }

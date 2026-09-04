@@ -21,8 +21,8 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AppHeader } from "../components/AppHeader";
 import { AuthImage } from "../components/AuthImage";
-import { Avatar } from "../components/Avatar";
-import { classifiedMore, ConditionPill, LINE, ListingGrid, listingTags, postedLabel, SalePrice, SoldCountLabel, splitPrice } from "../components/ClassifiedCard";
+import { classifiedMore, ConditionPill, LINE, ListingGrid, listingTags, postedLabel, SalePrice, splitPrice } from "../components/ClassifiedCard";
+import { SellerDetailCard } from "../components/SellerDetailCard";
 import { OsmWebMap } from "../components/OsmWebMap";
 import { KeyboardScreen, useKeyboardScroll } from "../components/KeyboardScreen";
 import { PressScale } from "../components/PressScale";
@@ -39,7 +39,7 @@ import { normTargetId } from "../inboxBridge";
 import { catalogMeta, listingById, type CatalogItem } from "../data/catalog";
 import { apiCategoryForKey, liveListingById, listingsToCatalog, listingToCatalog } from "../data/liveListings";
 import { rankSimilarListings, relatedKeywordsFor } from "../data/similarListings";
-import { fetchListing, fetchListingFeed, postListingComment, postListingReview, recordListingViewOnServer, toggleListingSave, type ApiListing } from "../listingsApi";
+import { fetchListing, fetchListingFeed, postListingComment, postListingReview, recordListingViewOnServer, type ApiListing } from "../listingsApi";
 import { bumpListingDetailViewCount, peekListingDetail, rememberListingDetail } from "../listingCache";
 import { recordListingView } from "../listingViews";
 import { emitListingsChanged, subscribeListingsChanged } from "../listingsRefresh";
@@ -268,7 +268,6 @@ function ListingBody({
   const [reviewBusy, setReviewBusy] = useState(false);
   const [replyTo, setReplyTo] = useState<{ id: string; name: string } | null>(null);
   const [reportOpen, setReportOpen] = useState(false);
-  const marketplace = item.key === "used" || item.key === "electronics";
   const canReview = !isOwner && Boolean(live);
 
   function refreshListing(row: ApiListing) {
@@ -432,127 +431,43 @@ function ListingBody({
           <SalePrice amount={splitPrice(item.price).amount} unit={splitPrice(item.price).unit} originalPrice={item.originalPrice} discountPercent={item.discountPercent} />
         </View>
         <Text style={{ color: "#6B7280", fontSize: 12, marginTop: 6 }}>{postedLabel(item.time)}</Text>
+        <View style={{ flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 10, marginTop: 8 }}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 4, flex: 1 }}>
+            <Ionicons name="location-outline" size={14} color="#2563EB" />
+            <Text style={{ color: "#2563EB", fontSize: 12, flex: 1 }} numberOfLines={2}>
+              {item.location}
+            </Text>
+          </View>
+          {item.distanceKm != null && item.distanceKm >= 0 ? (
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+              <Ionicons name="navigate-outline" size={14} color="#2563EB" />
+              <Text style={{ color: "#2563EB", fontSize: 12 }}>{item.distanceKm} km away</Text>
+            </View>
+          ) : null}
+        </View>
       </View>
 
-      <View style={{ marginHorizontal: 16, marginTop: 8, borderWidth: 1, borderColor: LINE, padding: 14 }}>
-        <Pressable
-          onPress={() => rich.seller.ownerId && openSellerProfile(navigation, rich.seller.ownerId)}
-          style={{ flexDirection: "row", alignItems: "center" }}
-        >
-          <Avatar name={rich.seller.name} uri={rich.seller.photoUrl} size={44} priority="high" />
-          <View style={{ flex: 1, marginLeft: 10 }}>
-            <Text style={{ fontWeight: "700", fontSize: 14, color: "#111" }}>{rich.seller.name}</Text>
-            <Text style={{ color: "#6B7280", fontSize: 12, marginTop: 2 }}>{rich.seller.role}</Text>
-            <Pressable onPress={callSeller}>
-              <Text style={{ color: GREEN, fontSize: 13, marginTop: 4 }}>{rich.seller.phone}</Text>
-            </Pressable>
-          </View>
-          <View style={{ backgroundColor: "#EFEFEF", paddingHorizontal: 10, paddingVertical: 5, borderRadius: 4 }}>
-            <Text style={{ fontWeight: "700", fontSize: 12, color: "#374151" }}>{live?.review_count || rich.reviewCount} reviews</Text>
-          </View>
-        </Pressable>
-        <View style={{ flexDirection: "row", alignItems: "center", marginTop: 10, gap: 3 }}>
-          {[1, 2, 3, 4, 5].map((n) => (
-            <Ionicons key={n} name={n <= Math.round(Number(rich.seller.rating)) ? "star" : "star-outline"} size={16} color="#F5C518" />
-          ))}
-          <Text style={{ color: "#6B7280", fontSize: 12, marginLeft: 6 }}>
-            {rich.seller.rating} ({rich.reviewCount})
-          </Text>
-          <SoldCountLabel
-            count={
-              Number(live?.extras?.sold_count) > 0
-                ? Math.floor(Number(live?.extras?.sold_count))
-                : item.soldCount
-            }
-          />
-        </View>
+      <SellerDetailCard
+        name={rich.seller.name}
+        photoUrl={rich.seller.photoUrl}
+        verified={Boolean(live?.seller_verified || item.verified)}
+        rating={rich.seller.rating}
+        reviewCount={live?.review_count || rich.reviewCount || 0}
+        soldCount={Number(live?.extras?.sold_count) > 0 ? Math.floor(Number(live?.extras?.sold_count)) : item.soldCount}
+        joinedAt={rich.seller.joinedAt}
+        email={rich.seller.email}
+        phone={rich.seller.phone}
+        isOwner={isOwner}
+        busy={busy}
+        onProfile={() => rich.seller.ownerId && openSellerProfile(navigation, rich.seller.ownerId)}
+        onCall={callSeller}
+        onChat={() => {
+          if (!busy) void chatSeller();
+        }}
+        onEdit={() => navigation.navigate("EditListing", { listingId: item.id })}
+      />
 
-        <View style={{ flexDirection: "row", gap: 10, marginTop: 14 }}>
-          {isOwner ? (
-            <>
-              <PressScale
-                onPress={() => navigation.navigate("EditListing", { listingId: item.id })}
-                style={{
-                  flex: 1,
-                  backgroundColor: GREEN,
-                  borderRadius: 6,
-                  height: 44,
-                  flexDirection: "row",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: 6,
-                }}
-              >
-                <Ionicons name="create-outline" size={16} color="#fff" />
-                <Text style={{ fontWeight: "800", fontSize: 13, color: "#fff" }}>Edit listing</Text>
-              </PressScale>
-            </>
-          ) : (
-            <>
-              <PressScale
-                onPress={() => {
-                  if (!live) return;
-                  void toggleListingSave(live.id)
-                    .then(onSaved)
-                    .catch((err) => Alert.alert("Save", err instanceof Error ? err.message : "Sign in to save listings."));
-                }}
-                style={{
-                  flex: 1,
-                  borderWidth: 1,
-                  borderColor: "#C4C7CC",
-                  borderRadius: 6,
-                  height: 44,
-                  flexDirection: "row",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: 6,
-                }}
-              >
-                <Ionicons name={saved ? "bookmark" : "bookmark-outline"} size={16} color="#111" />
-                <Text style={{ fontWeight: "700", fontSize: 13, color: "#111" }}>{saved ? "Saved" : "Save for later"}</Text>
-              </PressScale>
-              <PressScale
-                onPress={() => {
-                  if (!busy) void chatSeller();
-                }}
-                style={{
-                  flex: 1,
-                  borderWidth: 1,
-                  borderColor: "#C4C7CC",
-                  borderRadius: 6,
-                  height: 44,
-                  flexDirection: "row",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: 6,
-                  opacity: busy ? 0.6 : 1,
-                }}
-              >
-                <Ionicons name="chatbubble-outline" size={16} color="#111" />
-                <Text style={{ fontWeight: "700", fontSize: 13, color: "#111" }}>{busy ? "Starting…" : "Start a chat"}</Text>
-              </PressScale>
-            </>
-          )}
-        </View>
-        {!isOwner && marketplace ? (
-          <PressScale
-            onPress={callSeller}
-            style={{
-              marginTop: 10,
-              borderWidth: 1,
-              borderColor: "#C4C7CC",
-              borderRadius: 6,
-              height: 44,
-              flexDirection: "row",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 6,
-            }}
-          >
-            <Ionicons name="call-outline" size={16} color="#111" />
-            <Text style={{ fontWeight: "700", fontSize: 13, color: "#111" }}>Call</Text>
-          </PressScale>
-        ) : null}
+      <View style={{ marginHorizontal: 16, marginTop: 8 }}>
         {isOwner && live?.status === "pending" ? (
           <Text style={{ marginTop: 10, color: "#F59E0B", fontSize: 12, fontWeight: "700" }}>Pending admin approval. Buyers cannot see this listing yet.</Text>
         ) : null}

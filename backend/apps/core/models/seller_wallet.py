@@ -28,6 +28,7 @@ class SellerPaymentConfig(models.Model):
     audience = models.CharField(max_length=16, choices=AUDIENCE_CHOICES, default=AUDIENCE_PROVIDER)
     listing_fee_rupees = models.PositiveIntegerField(default=10)
     listing_fee_label = models.CharField(max_length=40, default="Rs. 10")
+    listing_fee_tiers = models.JSONField(blank=True, default=list)
     bank_name = models.CharField(max_length=120, blank=True, default="")
     bank_account_name = models.CharField(max_length=120, blank=True, default="")
     bank_account_number = models.CharField(max_length=64, blank=True, default="")

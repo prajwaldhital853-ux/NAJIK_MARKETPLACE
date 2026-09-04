@@ -1,5 +1,7 @@
 """Seller wallet operations — atomic, bypass-resistant."""
 
+from __future__ import annotations
+
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import Sum
@@ -24,11 +26,62 @@ def paisa_to_label(paisa: int) -> str:
     return f"Rs. {paisa // 100:,}"
 
 
-def get_listing_fee_paisa() -> int:
-    cfg = SellerPaymentConfig.get_solo()
+def parse_price_rupees(value) -> int:
+    digits = "".join(ch for ch in str(value or "") if ch.isdigit())
+    if not digits:
+        return 0
+    try:
+        return max(0, int(digits))
+    except ValueError:
+        return 0
+
+
+def normalize_listing_fee_tiers(raw) -> list[dict]:
+    rows = []
+    if not isinstance(raw, list):
+        return rows
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        try:
+            min_rupees = max(0, int(item.get("min_rupees") or 0))
+            max_raw = item.get("max_rupees")
+            if max_raw in (None, "", "unlimited"):
+                max_rupees = None
+            else:
+                max_rupees = int(max_raw)
+                if max_rupees <= 0:
+                    max_rupees = None
+                elif max_rupees < min_rupees:
+                    max_rupees = min_rupees
+            fee_rupees = max(0, int(item.get("fee_rupees") or 0))
+        except (TypeError, ValueError):
+            continue
+        rows.append({"min_rupees": min_rupees, "max_rupees": max_rupees, "fee_rupees": fee_rupees})
+    rows.sort(key=lambda row: (row["min_rupees"], 10**12 if row["max_rupees"] is None else row["max_rupees"]))
+    return rows
+
+
+def listing_fee_rupees_for_price(price_rupees: int, cfg: SellerPaymentConfig | None = None) -> int:
+    cfg = cfg or SellerPaymentConfig.get_solo()
     if not cfg.is_active:
         return 0
-    return rupees_to_paisa(max(0, cfg.listing_fee_rupees))
+    price = max(0, int(price_rupees or 0))
+    for row in normalize_listing_fee_tiers(cfg.listing_fee_tiers):
+        top = row["max_rupees"]
+        if price >= row["min_rupees"] and (top is None or price <= top):
+            return row["fee_rupees"]
+    return max(0, int(cfg.listing_fee_rupees or 0))
+
+
+def listing_price_rupees(listing) -> int:
+    return parse_price_rupees(getattr(listing, "price", None))
+
+
+def get_listing_fee_paisa(price_rupees: int | None = None, listing=None) -> int:
+    if listing is not None and price_rupees is None:
+        price_rupees = listing_price_rupees(listing)
+    return rupees_to_paisa(listing_fee_rupees_for_price(price_rupees or 0))
 
 
 def get_or_create_wallet(provider) -> SellerWallet:
@@ -71,8 +124,8 @@ def wallet_balance_breakdown(wallet: SellerWallet) -> tuple[int, int]:
     return refer_earn_paisa, loaded_paisa
 
 
-def can_afford_listing(provider) -> bool:
-    fee = get_listing_fee_paisa()
+def can_afford_listing(provider, price_rupees: int = 0) -> bool:
+    fee = get_listing_fee_paisa(price_rupees=price_rupees)
     if fee <= 0:
         return True
     wallet = SellerWallet.objects.filter(provider=provider).first()
@@ -80,8 +133,10 @@ def can_afford_listing(provider) -> bool:
     return balance >= fee
 
 
-def seller_publish_blocked_message(provider) -> str | None:
-    fee = get_listing_fee_paisa()
+def seller_publish_blocked_message(provider, price_rupees: int = 0) -> str | None:
+    cfg = SellerPaymentConfig.get_solo()
+    fee_rupees = listing_fee_rupees_for_price(price_rupees, cfg)
+    fee = rupees_to_paisa(fee_rupees)
     if fee <= 0:
         return None
     wallet = SellerWallet.objects.filter(provider=provider).first()
@@ -89,7 +144,7 @@ def seller_publish_blocked_message(provider) -> str | None:
     if balance < fee:
         return (
             f"Insufficient balance ({paisa_to_label(balance)}). "
-            f"Each live listing costs {SellerPaymentConfig.get_solo().listing_fee_label}. "
+            f"Publishing a Rs. {max(0, int(price_rupees)):,} listing costs {paisa_to_label(fee)}. "
             "Add funds in Payments and wait for admin approval."
         )
     return None
@@ -97,14 +152,16 @@ def seller_publish_blocked_message(provider) -> str | None:
 
 @transaction.atomic
 def deduct_listing_fee(provider, listing):
-    fee = get_listing_fee_paisa()
+    fee = get_listing_fee_paisa(listing=listing)
     if fee <= 0:
         return None
     if SellerWalletTransaction.objects.filter(listing=listing, kind=SellerWalletTransaction.KIND_LISTING_FEE).exists():
         return None
     wallet = SellerWallet.objects.select_for_update().get_or_create(provider=provider)[0]
     if wallet.balance_paisa < fee:
-        raise InsufficientBalanceError("Insufficient balance to publish this listing.")
+        raise InsufficientBalanceError(
+            f"Insufficient balance to publish this listing. This listing costs {paisa_to_label(fee)} to post."
+        )
     wallet.balance_paisa -= fee
     wallet.save(update_fields=["balance_paisa", "updated_at"])
     tx = SellerWalletTransaction.objects.create(
@@ -113,7 +170,7 @@ def deduct_listing_fee(provider, listing):
         amount_paisa=-fee,
         balance_after_paisa=wallet.balance_paisa,
         listing=listing,
-        note=f"Listing fee: {listing.title or listing.pk}",
+        note=f"Listing fee {paisa_to_label(fee)} for “{listing.title or listing.pk}” (ad price {paisa_to_label(rupees_to_paisa(listing_price_rupees(listing)))})",
     )
     from apps.notifications.models.inbox import InboxNotice
     from apps.notifications.services import notify_user

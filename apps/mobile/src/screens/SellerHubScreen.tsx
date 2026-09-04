@@ -31,6 +31,7 @@ import type { InboxNotice } from "../inboxApi";
 import { fetchSellerEarningsSummary } from "../earningsApi";
 import { fetchMyListings, fetchMySellerReviews, updateListing, type ApiListing } from "../listingsApi";
 import { createSellerLoadRequest, fetchSellerPaymentsMe, resolvePaymentAssetUrl } from "../paymentsApi";
+import { minListingFeeRupees } from "../listingFee";
 import { colors, shadow } from "../theme";
 
 const GREEN = "#1B7D2C";
@@ -155,7 +156,11 @@ function SearchBox({ value, onChange, placeholder }: { value: string; onChange: 
 
 function Chips({ items, value, onChange }: { items: string[]; value: string; onChange: (v: string) => void }) {
   return (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 12, gap: 8 }}>
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 4, gap: 8, flexGrow: 0 }}
+    >
       {items.map((item) => {
         const on = item === value;
         return (
@@ -169,9 +174,12 @@ function Chips({ items, value, onChange }: { items: string[]; value: string; onC
               backgroundColor: on ? GREEN : "#fff",
               borderWidth: 1,
               borderColor: on ? GREEN : "#E6E8EC",
+              flexShrink: 0,
             }}
           >
-            <Text style={{ fontWeight: "700", fontSize: 12, color: on ? "#fff" : "#374151" }}>{item}</Text>
+            <Text style={{ fontWeight: "700", fontSize: 12, color: on ? "#fff" : "#374151" }} numberOfLines={1}>
+              {item}
+            </Text>
           </PressScale>
         );
       })}
@@ -328,9 +336,9 @@ function EarningsBody() {
         ]}
       />
       <View style={{ marginHorizontal: 16, marginTop: 12, backgroundColor: "#fff", borderRadius: 16, padding: 14, ...shadow.card }}>
-        <Text style={{ fontWeight: "800", fontSize: 14 }}>Listing fee: {summary?.listing_fee_label ?? "—"} per live post</Text>
+        <Text style={{ fontWeight: "800", fontSize: 14 }}>Listing fees follow admin price bands</Text>
         <Text style={{ color: "#6B7280", marginTop: 6, fontSize: 12, lineHeight: 18 }}>
-          Loaded balance pays listing fees. Refer & Earn credits when friends join and publish. Offline payout only.
+          Each live post is charged from the ad price you set (for example a Rs. 1,000 ad vs a Rs. 20,000 ad). Loaded balance pays that fee. Refer & Earn credits when friends join and publish. Offline payout only.
         </Text>
         <View style={{ flexDirection: "row", gap: 8, marginTop: 12 }}>
           <PressScale
@@ -381,7 +389,7 @@ function usePaymentsData() {
 function PaymentsBody() {
   const navigation = useNavigation<any>();
   const { data, loading } = usePaymentsData();
-  const fee = data?.config?.listing_fee_rupees ?? 0;
+  const fee = minListingFeeRupees(data?.config);
   const balanceListings = fee > 0 ? Math.floor((data?.balance_paisa ?? 0) / (fee * 100)) : 0;
   const cfg = data?.config;
   const pending = data?.pending_load;
@@ -447,7 +455,7 @@ function PaymentsBody() {
             </View>
           </View>
           <Text style={{ color: "rgba(255,255,255,0.88)", fontSize: 11, marginTop: 12 }}>
-            {cfg?.listing_fee_label ?? "Per listing"} · ≈ {balanceListings} live post{balanceListings === 1 ? "" : "s"} left
+            Fees vary by ad price · ≈ {balanceListings} posts at the lowest band
           </Text>
         </View>
       </View>
@@ -541,7 +549,7 @@ function AddFundBody() {
   const [submitting, setSubmitting] = useState(false);
   const formRef = useRef<View>(null);
 
-  const fee = data?.config?.listing_fee_rupees ?? 0;
+  const fee = minListingFeeRupees(data?.config);
   const amountNum = Number(amount.replace(/\D/g, "")) || 0;
   const listingsYouGet = fee > 0 && amountNum > 0 ? Math.floor(amountNum / fee) : 0;
   const cfg = data?.config;
@@ -620,7 +628,7 @@ function AddFundBody() {
           {listingsYouGet > 0 ? (
             <View style={{ backgroundColor: "#E7F6EC", borderRadius: 10, padding: 10, marginBottom: 8 }}>
               <Text style={{ fontWeight: "800", color: GREEN, fontSize: 13 }}>
-                ≈ {listingsYouGet} live listing{listingsYouGet === 1 ? "" : "s"} at {cfg?.listing_fee_label} each
+                ≈ {listingsYouGet} listings at the lowest admin band (Rs. {fee.toLocaleString("en-IN")} each). Higher-priced ads cost more to publish.
               </Text>
             </View>
           ) : null}

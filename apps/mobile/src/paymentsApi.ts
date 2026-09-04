@@ -2,10 +2,17 @@ import { api } from "./api";
 import { withAppAuth } from "./authApi";
 import { API_URL } from "./config";
 
+export type ListingFeeTier = {
+  min_rupees: number;
+  max_rupees: number | null;
+  fee_rupees: number;
+};
+
 export type SellerPaymentConfig = {
   is_active: boolean;
   listing_fee_rupees: number;
   listing_fee_label: string;
+  listing_fee_tiers?: ListingFeeTier[];
   min_load_rupees: number;
   max_load_rupees: number;
   bank_name: string;
@@ -45,6 +52,9 @@ export type SellerLoadRequest = {
 export type SellerPaymentsMe = {
   balance_paisa: number;
   balance_label: string;
+  quoted_listing_fee_rupees?: number;
+  quoted_listing_fee_label?: string;
+  quoted_listing_price_rupees?: number;
   loaded_balance_paisa?: number;
   loaded_balance_label?: string;
   refer_earn_total_paisa?: number;
@@ -58,8 +68,12 @@ export type SellerPaymentsMe = {
   recent_load_requests: SellerLoadRequest[];
 };
 
-export async function fetchSellerPaymentsMe() {
-  return withAppAuth((token) => api<SellerPaymentsMe>("/api/auth/payments/me/", { token }));
+export async function fetchSellerPaymentsMe(priceRupees?: number) {
+  const q =
+    priceRupees != null && Number.isFinite(priceRupees)
+      ? `?price=${encodeURIComponent(String(Math.max(0, Math.floor(priceRupees))))}`
+      : "";
+  return withAppAuth((token) => api<SellerPaymentsMe>(`/api/auth/payments/me/${q}`, { token }));
 }
 
 export async function createSellerLoadRequest(payload: {

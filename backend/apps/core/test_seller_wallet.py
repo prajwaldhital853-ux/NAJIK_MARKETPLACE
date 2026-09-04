@@ -58,6 +58,7 @@ class SellerWalletTests(TestCase):
     def setUp(self):
         cfg = SellerPaymentConfig.get_solo()
         cfg.listing_fee_rupees = 10
+        cfg.listing_fee_tiers = []
         cfg.is_active = True
         cfg.save()
 
@@ -113,7 +114,40 @@ class SellerWalletTests(TestCase):
         with self.assertRaises(ValidationError):
             deduct_listing_fee(provider, listing)
 
-    def test_approve_only_pending(self):
+    def test_tiered_listing_fee_uses_listing_price(self):
+        cfg = SellerPaymentConfig.get_solo()
+        cfg.listing_fee_rupees = 10
+        cfg.listing_fee_tiers = [
+            {"min_rupees": 0, "max_rupees": 1000, "fee_rupees": 20},
+            {"min_rupees": 1001, "max_rupees": 20000, "fee_rupees": 100},
+            {"min_rupees": 20001, "max_rupees": None, "fee_rupees": 200},
+        ]
+        cfg.save()
+        provider = _provider()
+        staff = _staff()
+        admin_adjust_wallet(provider, 500, "seed", staff)
+        cheap = Listing.objects.create(
+            owner=provider,
+            title="Cheap",
+            price="1000",
+            location="K",
+            contact_phone=provider.phone,
+            status=Listing.STATUS_APPROVED,
+        )
+        costly = Listing.objects.create(
+            owner=provider,
+            title="Costly",
+            price="20000",
+            location="K",
+            contact_phone=provider.phone,
+            status=Listing.STATUS_APPROVED,
+        )
+        deduct_listing_fee(provider, cheap)
+        deduct_listing_fee(provider, costly)
+        wallet = get_or_create_wallet(provider)
+        self.assertEqual(wallet.balance_paisa, rupees_to_paisa(500 - 20 - 100))
+
+    def test_cannot_approve_load_twice(self):
         provider = _provider()
         staff = _staff()
         load = create_load_request(provider, 100)

@@ -1,25 +1,33 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { useEffect, useState } from "react";
-import { Alert, Dimensions, Modal, Pressable, ScrollView, Text, View } from "react-native";
-import { AppHeader } from "../components/AppHeader";
+import { Alert, Modal, Pressable, ScrollView, Share, Switch, Text, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import Svg, { Path } from "react-native-svg";
+import {
+  ACCOUNT_GREEN as GREEN,
+  ACCOUNT_PAGE_BG as PAGE_BG,
+  AccountMenuRow,
+  AccountQuickAction,
+  AccountQuickDivider,
+  AccountQuickRow,
+  AccountSection,
+} from "../components/AccountProfileParts";
+import { Avatar } from "../components/Avatar";
+import { DataPrivacyActions } from "../components/DataPrivacyActions";
 import { useAppRefreshControl } from "../components/KeyboardScreen";
 import { PressScale } from "../components/PressScale";
-import { SellerHeroBanner } from "../components/SellerHeroBanner";
 import { SellerProfileEditModal } from "../components/SellerProfileEditModal";
 import { AccountStatusCard, ListingAdminNotesCard, StaffWarningCard } from "../components/StaffWarningBanner";
 import { useAuth } from "../context/AuthContext";
 import { isPendingProvider, isProvider, isRejectedProvider, isVerifiedProvider, isAccountRestricted } from "../demo";
+import { fetchSellerEarningsSummary } from "../earningsApi";
+import { infoLinkDocId } from "../legal/types";
 import { fetchMyListings, fetchSellerProfile, type ApiListing } from "../listingsApi";
 import { subscribeListingsChanged } from "../listingsRefresh";
-import { openProviderIdCard, openSellerPage } from "../navigation/browse";
-import { colors, shadow } from "../theme";
+import { openChatInbox, openProviderIdCard, openSellerPage } from "../navigation/browse";
+import { colors } from "../theme";
 import { BuyerProfile } from "./BuyerAccountScreen";
-
-const GAP = 8;
-const PAD = 16;
-const CARD_W = (Dimensions.get("window").width - PAD * 2 - GAP * 3) / 4;
-const GREEN = "#1B7D2C";
 
 function memberSince(iso?: string) {
   if (!iso) return "—";
@@ -45,74 +53,37 @@ function DetailRow({ label, value }: { label: string; value: string }) {
   );
 }
 
-const servicesBase: {
-  icon: keyof typeof Ionicons.glyphMap;
-  color: string;
-  bg: string;
-  title: string;
-  tab?: string;
-  page?: "bookings" | "reviews";
-}[] = [
-  { icon: "home", color: "#1B7D2C", bg: "#E4F6EA", title: "My Listings", tab: "Listings" },
-  { icon: "chatbubbles", color: "#1B7D2C", bg: "#E4F6EA", title: "Inquiries", tab: "Inquiries" },
-  { icon: "calendar", color: "#2563EB", bg: "#E8F1FE", title: "Bookings", page: "bookings" },
-  { icon: "star", color: "#EA580C", bg: "#FFF1E0", title: "Reviews", page: "reviews" },
-];
-
-const actions: {
-  icon: keyof typeof Ionicons.glyphMap;
-  color: string;
-  bg: string;
-  title: string;
-  tab?: string;
-  page?: "promotions" | "services" | "earnings" | "messages" | "kyc" | "settings" | "idcard";
-}[] = [
-  { icon: "add", color: "#fff", bg: "#1B7D2C", title: "Add New Listing", tab: "Post" },
-  { icon: "id-card", color: "#1B7D2C", bg: "#E4F6EA", title: "My ID Card", page: "idcard" },
-  { icon: "settings", color: "#7C3AED", bg: "#F1E9FF", title: "Manage Services", page: "services" },
-  { icon: "megaphone", color: "#EA580C", bg: "#FFF1E0", title: "Promote Listing", page: "promotions" },
-  { icon: "stats-chart", color: "#1B7D2C", bg: "#E4F6EA", title: "Earnings Report", page: "earnings" },
-  { icon: "chatbubble-ellipses", color: "#2563EB", bg: "#E8F1FE", title: "Inbox", page: "messages" },
-  { icon: "wallet", color: "#7C3AED", bg: "#F1E9FF", title: "Wallet", page: "earnings" },
-  { icon: "shield-checkmark", color: "#1B7D2C", bg: "#E4F6EA", title: "Verification & KYC", page: "kyc" },
-  { icon: "settings-outline", color: "#64748B", bg: "#EEF2F6", title: "Settings", page: "settings" },
-];
-
 export function ProfileScreen() {
   const { user, logout } = useAuth();
   const navigation = useNavigation<any>();
+  const insets = useSafeAreaInsets();
   const [editOpen, setEditOpen] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
-  const [activeCount, setActiveCount] = useState(0);
-  const [pendingCount, setPendingCount] = useState(0);
+  const [darkTheme, setDarkTheme] = useState(false);
   const [myListings, setMyListings] = useState<ApiListing[]>([]);
   const [sellerRating, setSellerRating] = useState<{ avg: number; count: number }>({ avg: 0, count: 0 });
+  const [walletLabel, setWalletLabel] = useState("Rs. 0.00");
   const name = user?.full_name || "Account";
+  const email = user?.email || "";
   const pending = isPendingProvider(user);
   const verified = isVerifiedProvider(user);
   const rejected = isRejectedProvider(user);
   const photo = user?.photo_uri || "";
 
   useEffect(() => {
-    if (!isProvider(user)) {
-      setActiveCount(0);
-      setPendingCount(0);
-      setMyListings([]);
-      return;
-    }
+    if (!isProvider(user)) return;
     const load = () => {
       void fetchMyListings()
-        .then((rows) => {
-          setMyListings(rows);
-          setActiveCount(rows.filter((row) => row.status === "approved").length);
-          setPendingCount(rows.filter((row) => row.status === "pending").length);
-        })
-        .catch(() => {});
+        .then(setMyListings)
+        .catch(() => setMyListings([]));
       if (user?.id) {
         void fetchSellerProfile(user.id)
           .then((profile) => setSellerRating({ avg: profile.rating_avg ?? 0, count: profile.review_count ?? 0 }))
           .catch(() => setSellerRating({ avg: 0, count: 0 }));
       }
+      void fetchSellerEarningsSummary()
+        .then((row) => setWalletLabel(row.combined_balance_label || "Rs. 0.00"))
+        .catch(() => setWalletLabel("Rs. 0.00"));
     };
     load();
     return subscribeListingsChanged(load);
@@ -124,17 +95,6 @@ export function ProfileScreen() {
     return <BuyerProfile />;
   }
 
-  const stats = [
-    { icon: "home-outline" as const, value: String(activeCount), label: "Active Listings" },
-    { icon: "star-outline" as const, value: sellerRating.avg > 0 ? sellerRating.avg.toFixed(1) : "—", label: `Rating (${sellerRating.count})` },
-    { icon: "hourglass-outline" as const, value: String(pendingCount), label: "Pending" },
-    { icon: "chatbubble-outline" as const, value: "0", label: "Inquiries" },
-  ];
-  const services = servicesBase.map((item) => ({
-    ...item,
-    count: item.title === "My Listings" ? String(activeCount) : "0",
-  }));
-
   function openEdit() {
     if (verified || rejected) {
       setEditOpen(true);
@@ -143,9 +103,26 @@ export function ProfileScreen() {
     Alert.alert("Wait for verification", "You can edit name, address and documents after admin verifies you, or if your application was rejected.");
   }
 
+  function openLegal(label: string) {
+    const doc = infoLinkDocId(label);
+    if (doc) navigation.navigate("LegalDocument", { doc, role: "seller" });
+  }
+
+  function confirmLogout() {
+    Alert.alert("Log out", "Sign out of this NAJIK account?", [
+      { text: "Cancel", style: "cancel" },
+      { text: "Log out", style: "destructive", onPress: () => void logout() },
+    ]);
+  }
+
+  function goHub(page: Parameters<typeof openSellerPage>[1]) {
+    openSellerPage(navigation, page);
+  }
+
+  const verifyLabel = verified ? "Verified seller" : pending ? "Verification pending" : rejected ? "Resubmit KYC" : "Get Verification Badge";
+
   return (
-    <View style={{ flex: 1, backgroundColor: "#F7F8FA" }}>
-      <AppHeader right="bell" />
+    <View style={{ flex: 1, backgroundColor: PAGE_BG }}>
       <SellerProfileEditModal visible={editOpen} onClose={() => setEditOpen(false)} />
       <Modal visible={detailsOpen} animationType="slide" transparent onRequestClose={() => setDetailsOpen(false)}>
         <Pressable style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.45)", justifyContent: "flex-end" }} onPress={() => setDetailsOpen(false)}>
@@ -165,212 +142,201 @@ export function ProfileScreen() {
               <DetailRow label="Email" value={user?.email || "—"} />
               <DetailRow label="Service" value={String(user?.service_type || "—")} />
               <DetailRow label="Address" value={user?.address || "—"} />
-              <DetailRow label="Contact" value={user?.contact || "—"} />
               <DetailRow label="Member since" value={memberSince(user?.date_joined)} />
-              <DetailRow label="Account status" value={user?.account_status || (verified ? "active" : pending ? "pending" : rejected ? "rejected" : "—")} />
-              <DetailRow label="KYC" value={user?.verification_status || "—"} />
+              <DetailRow label="Rating" value={sellerRating.avg > 0 ? `${sellerRating.avg.toFixed(1)} (${sellerRating.count})` : "—"} />
               {Object.entries(user?.profile_data || {})
                 .filter(([, value]) => String(value || "").trim())
                 .map(([key, value]) => (
                   <DetailRow key={key} label={prettyProfileKey(key)} value={String(value)} />
                 ))}
-              {verified || rejected ? (
-                <PressScale
-                  onPress={() => {
-                    setDetailsOpen(false);
-                    openEdit();
-                  }}
-                  style={{ marginTop: 16, backgroundColor: GREEN, borderRadius: 12, paddingVertical: 12, alignItems: "center" }}
-                >
-                  <Text style={{ color: "#fff", fontWeight: "800" }}>Edit profile</Text>
-                </PressScale>
-              ) : null}
-              <PressScale
-                onPress={() => {
-                  setDetailsOpen(false);
-                  if (isAccountRestricted(user)) {
-                    Alert.alert("Account restricted", "Your account is deactivated or blocked. You cannot open your ID card.");
-                    return;
-                  }
-                  openProviderIdCard(navigation);
-                }}
-                style={{ marginTop: 10, borderWidth: 1.5, borderColor: GREEN, borderRadius: 12, paddingVertical: 12, alignItems: "center" }}
-              >
-                <Text style={{ color: GREEN, fontWeight: "800" }}>Open My ID Card</Text>
-              </PressScale>
             </ScrollView>
           </Pressable>
         </Pressable>
       </Modal>
-      <View style={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 10, backgroundColor: "#F7F8FA", borderBottomWidth: 1, borderBottomColor: "#EEF0F3" }}>
-        <SellerHeroBanner
-          name={name}
-          photo={photo}
-          serviceType={user?.service_type}
-          verified={verified}
-          pending={pending}
-          rejected={rejected}
-          variant="profile"
-          onPress={() => setDetailsOpen(true)}
-          onCamera={openEdit}
-        />
+
+      <View style={{ backgroundColor: GREEN }}>
+        <View style={{ paddingTop: insets.top + 8, paddingHorizontal: 16, paddingBottom: 18 }}>
+          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "flex-end", marginBottom: 14 }}>
+            <PressScale onPress={confirmLogout} hitSlop={10}>
+              <Ionicons name="power" size={22} color="#fff" />
+            </PressScale>
+          </View>
+          <View style={{ flexDirection: "row", alignItems: "center" }}>
+            <Avatar
+              name={name}
+              uri={photo || undefined}
+              size={88}
+              borderColor="#fff"
+              borderWidth={3}
+              editIcon="pencil"
+              onCamera={openEdit}
+            />
+            <View style={{ flex: 1, marginLeft: 14 }}>
+              <PressScale onPress={() => setDetailsOpen(true)}>
+                <Text style={{ color: "#fff", fontWeight: "800", fontSize: 18 }} numberOfLines={1}>
+                  {name}
+                </Text>
+                {email ? (
+                  <Text style={{ color: "rgba(255,255,255,0.88)", fontSize: 13, marginTop: 3 }} numberOfLines={1}>
+                    {email}
+                  </Text>
+                ) : (
+                  <Text style={{ color: "rgba(255,255,255,0.88)", fontSize: 13, marginTop: 3 }} numberOfLines={1}>
+                    {user?.phone || "Add contact"}
+                  </Text>
+                )}
+                {user?.service_type ? (
+                  <Text style={{ color: "rgba(255,255,255,0.8)", fontSize: 12, marginTop: 2 }} numberOfLines={1}>
+                    {String(user.service_type)}
+                  </Text>
+                ) : null}
+              </PressScale>
+              <PressScale
+                onPress={() => goHub("payments")}
+                style={{
+                  marginTop: 10,
+                  alignSelf: "flex-start",
+                  backgroundColor: "rgba(0,0,0,0.28)",
+                  borderRadius: 20,
+                  paddingHorizontal: 12,
+                  paddingVertical: 6,
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 6,
+                }}
+              >
+                <Ionicons name="wallet-outline" size={14} color="#fff" />
+                <Text style={{ color: "#fff", fontWeight: "700", fontSize: 12 }}>{walletLabel}</Text>
+              </PressScale>
+              <PressScale
+                onPress={() => goHub("kyc")}
+                style={{
+                  marginTop: 8,
+                  alignSelf: "flex-start",
+                  borderWidth: 1.5,
+                  borderColor: "#fff",
+                  borderRadius: 20,
+                  paddingHorizontal: 12,
+                  paddingVertical: 6,
+                }}
+              >
+                <Text style={{ color: "#fff", fontWeight: "700", fontSize: 12 }}>{verifyLabel}</Text>
+              </PressScale>
+            </View>
+          </View>
+        </View>
+        <Svg width="100%" height={18} viewBox="0 0 100 18" preserveAspectRatio="none">
+          <Path d="M0 0 Q50 18 100 0 L100 18 L0 18 Z" fill={PAGE_BG} />
+        </Svg>
       </View>
-      <ScrollView refreshControl={refreshControl} contentContainerStyle={{ padding: 16, paddingBottom: 36 }} showsVerticalScrollIndicator={false}>
+
+      <ScrollView
+        refreshControl={refreshControl}
+        contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: 40 }}
+        showsVerticalScrollIndicator={false}
+      >
+        <AccountQuickRow>
+          <AccountQuickAction icon="home-outline" label="My listings" onPress={() => navigation.jumpTo("Listings")} />
+          <AccountQuickDivider />
+          <AccountQuickAction icon="calendar-outline" label="Bookings" onPress={() => goHub("bookings")} />
+          <AccountQuickDivider />
+          <AccountQuickAction icon="wallet-outline" label="Wallet" onPress={() => goHub("payments")} />
+        </AccountQuickRow>
+
         <AccountStatusCard />
         <StaffWarningCard />
         <ListingAdminNotesCard listings={myListings} />
         {pending ? (
-          <View style={{ backgroundColor: colors.orangeSoft, borderRadius: 16, padding: 14, marginBottom: 14, ...shadow.card }}>
+          <View style={{ backgroundColor: colors.orangeSoft, borderRadius: 16, padding: 14, marginTop: 14 }}>
             <Text style={{ fontWeight: "800", color: colors.navy }}>Verification pending</Text>
-            <Text style={{ color: colors.muted, marginTop: 4, fontSize: 13 }}>
-              Admin is reviewing your nagrita, photo and details. You cannot post yet. This screen updates on its own when you are verified.
-            </Text>
+            <Text style={{ color: colors.muted, marginTop: 4, fontSize: 13 }}>Admin is reviewing your details. You cannot post yet.</Text>
           </View>
         ) : null}
         {rejected ? (
-          <View style={{ backgroundColor: colors.redSoft, borderRadius: 16, padding: 14, marginBottom: 14, ...shadow.card }}>
+          <View style={{ backgroundColor: colors.redSoft, borderRadius: 16, padding: 14, marginTop: 14 }}>
             <Text style={{ fontWeight: "800", color: colors.navy }}>Application rejected</Text>
-            <Text style={{ color: colors.muted, marginTop: 4, fontSize: 13 }}>
-              {user?.rejection_note?.trim()
-                ? user.rejection_note
-                : "You cannot post services until a new application is approved."}
-            </Text>
-            <PressScale
-              onPress={openEdit}
-              style={{
-                marginTop: 12,
-                alignSelf: "flex-start",
-                backgroundColor: GREEN,
-                borderRadius: 12,
-                paddingHorizontal: 14,
-                paddingVertical: 10,
-              }}
-            >
-              <Text style={{ color: "#fff", fontWeight: "800" }}>Edit and resubmit</Text>
-            </PressScale>
+            <Text style={{ color: colors.muted, marginTop: 4, fontSize: 13 }}>{user?.rejection_note?.trim() || "Update your KYC and resubmit."}</Text>
           </View>
         ) : null}
 
-        {user?.has_pending_edit ? (
-          <View style={{ backgroundColor: "#FFF7E6", borderRadius: 16, padding: 14, marginBottom: 14, ...shadow.card }}>
-            <Text style={{ fontWeight: "800", color: colors.navy }}>Profile edit in review</Text>
-            <Text style={{ color: colors.muted, marginTop: 4, fontSize: 13 }}>
-              Admin is checking your updated details. Your live profile stays as-is until they approve.
-            </Text>
-          </View>
-        ) : null}
+        <AccountSection title="My Account">
+          <AccountMenuRow icon="gift-outline" label="Invite & Earn" onPress={() => goHub("invite")} />
+          <AccountMenuRow icon="wallet-outline" label="My Wallet" onPress={() => goHub("payments")} />
+          <AccountMenuRow icon="stats-chart-outline" label="Earnings" onPress={() => goHub("earnings")} />
+          <AccountMenuRow icon="bookmark-outline" label="Saved listings" onPress={() => goHub("saved")} last />
+        </AccountSection>
 
-        <View style={{ marginTop: 0, backgroundColor: "#fff", borderRadius: 16, padding: 14, ...shadow.card }}>
-          <Text style={{ fontWeight: "800", color: colors.navy, marginBottom: 10 }}>Profile</Text>
-          <DetailRow label="Name" value={user?.full_name || "—"} />
-          <DetailRow label="Phone" value={user?.phone || "—"} />
-          <DetailRow label="Email" value={user?.email || "—"} />
-          <DetailRow label="Service type" value={String(user?.service_type || "—")} />
-          <PressScale onPress={() => setDetailsOpen(true)} style={{ marginTop: 10 }}>
-            <Text style={{ color: GREEN, fontWeight: "800", fontSize: 12 }}>Tap profile bar for full details ›</Text>
-          </PressScale>
-        </View>
+        <AccountSection title="Seller tools">
+          <AccountMenuRow
+            icon="add-circle-outline"
+            label="Add new listing"
+            onPress={() => {
+              if (isAccountRestricted(user) || !verified) {
+                Alert.alert("Posting", verified ? "Your account is restricted." : "Wait until you are verified to post.");
+                return;
+              }
+              navigation.jumpTo("Post");
+            }}
+          />
+          <AccountMenuRow icon="chatbubbles-outline" label="Inquiries" onPress={() => navigation.jumpTo("Inquiries")} />
+          <AccountMenuRow icon="megaphone-outline" label="Promotions" onPress={() => goHub("promotions")} />
+          <AccountMenuRow icon="briefcase-outline" label="My services" onPress={() => goHub("services")} />
+          <AccountMenuRow
+            icon="id-card-outline"
+            label="My ID card"
+            onPress={() => {
+              if (isAccountRestricted(user)) {
+                Alert.alert("Account restricted", "You cannot open your ID card right now.");
+                return;
+              }
+              openProviderIdCard(navigation);
+            }}
+            last
+          />
+        </AccountSection>
 
-        <View style={{ marginTop: 10, backgroundColor: "#0D4A2A", borderRadius: 14, paddingVertical: 12, flexDirection: "row" }}>
-          {stats.map((item, index) => (
-            <View
-              key={item.label}
-              style={{
-                flex: 1,
-                alignItems: "center",
-                borderRightWidth: index === stats.length - 1 ? 0 : 1,
-                borderRightColor: "rgba(255,255,255,0.16)",
-              }}
-            >
-              <Ionicons name={item.icon as keyof typeof Ionicons.glyphMap} size={15} color="#fff" />
-              <Text style={{ color: "#fff", fontWeight: "800", fontSize: 15, marginTop: 4 }}>{item.value}</Text>
-              <Text style={{ color: "#C9F0D4", fontSize: 8.5, textAlign: "center", marginTop: 2 }}>{item.label}</Text>
-            </View>
-          ))}
-        </View>
+        <AccountSection title="Activity">
+          <AccountMenuRow icon="star-outline" label="Reviews" onPress={() => goHub("reviews")} />
+          <AccountMenuRow icon="notifications-outline" label="Notifications" onPress={() => goHub("notifications")} />
+          <AccountMenuRow icon="chatbubble-ellipses-outline" label="Messages" onPress={() => openChatInbox(navigation)} last />
+        </AccountSection>
 
-        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 18, marginBottom: 10 }}>
-          <Text style={{ fontSize: 15, fontWeight: "800", color: colors.navy }}>Manage Your Services</Text>
-          <Text style={{ color: "#1B7D2C", fontWeight: "700", fontSize: 12 }}>View all</Text>
-        </View>
-        <View style={{ flexDirection: "row", gap: GAP }}>
-          {services.map((item) => (
-            <PressScale
-              key={item.title}
-              onPress={() => {
-                if (item.page) openSellerPage(navigation, item.page);
-                else if (item.tab) navigation.jumpTo(item.tab);
-              }}
-              style={{
-                flex: 1,
-                backgroundColor: "#fff",
-                borderRadius: 12,
-                paddingVertical: 16,
-                paddingHorizontal: 4,
-                alignItems: "center",
-                ...shadow.card,
-              }}
-            >
-              <View>
-                <View style={{ width: 56, height: 56, borderRadius: 14, backgroundColor: item.bg, alignItems: "center", justifyContent: "center" }}>
-                  <Ionicons name={item.icon} size={32} color={item.color} />
-                </View>
-              </View>
-              <Text style={{ fontSize: 11, fontWeight: "700", marginTop: 8, textAlign: "center", color: colors.navy }} numberOfLines={1}>
-                {item.title}
-              </Text>
-              <Text style={{ color: "#1B7D2C", fontWeight: "800", marginTop: 2, fontSize: 13 }}>{item.count}</Text>
-            </PressScale>
-          ))}
-        </View>
+        <AccountSection title="Preferences">
+          <AccountMenuRow icon="settings-outline" label="Settings" onPress={() => goHub("settings")} />
+          <AccountMenuRow icon="shield-checkmark-outline" label="Verification & KYC" onPress={() => goHub("kyc")} />
+          <AccountMenuRow
+            icon="moon-outline"
+            label="Dark Theme"
+            trailing={
+              <Switch
+                value={darkTheme}
+                onValueChange={(on) => {
+                  setDarkTheme(on);
+                  if (on) Alert.alert("Dark theme", "Dark theme is not available yet.");
+                }}
+                trackColor={{ false: "#D1D5DB", true: colors.greenMint }}
+                thumbColor={darkTheme ? GREEN : "#f4f3f4"}
+              />
+            }
+            last
+          />
+        </AccountSection>
 
-        <Text style={{ fontSize: 15, fontWeight: "800", marginTop: 18, marginBottom: 10, color: colors.navy }}>Quick Actions</Text>
-        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: GAP }}>
-          {actions.map((item) => (
-            <PressScale
-              key={item.title}
-              onPress={() => {
-                if (item.page === "idcard") {
-                  if (isAccountRestricted(user)) {
-                    Alert.alert("Account restricted", "Your account is deactivated or blocked. You cannot open your ID card.");
-                    return;
-                  }
-                  openProviderIdCard(navigation);
-                  return;
-                }
-                if (isAccountRestricted(user) && (item.tab === "Post" || item.page === "promotions" || item.page === "services")) {
-                  Alert.alert("Account restricted", "Your account is deactivated or blocked. Contact NAJIK admin.");
-                  return;
-                }
-                if (item.page) openSellerPage(navigation, item.page);
-                else if (item.tab) navigation.jumpTo(item.tab);
-              }}
-              style={{
-                width: CARD_W,
-                backgroundColor: "#fff",
-                borderRadius: 12,
-                paddingVertical: 16,
-                paddingHorizontal: 4,
-                alignItems: "center",
-                opacity: item.title === "Add New Listing" && !verified ? 0.45 : 1,
-                ...shadow.card,
-              }}
-            >
-              <View>
-                <View style={{ width: 56, height: 56, borderRadius: 14, backgroundColor: item.bg, alignItems: "center", justifyContent: "center" }}>
-                  <Ionicons name={item.icon} size={32} color={item.color} />
-                </View>
-              </View>
-              <Text style={{ fontSize: 9.5, fontWeight: "700", marginTop: 7, textAlign: "center", color: colors.navy, lineHeight: 12 }}>
-                {item.title}
-              </Text>
-            </PressScale>
-          ))}
-        </View>
+        <AccountSection title="More">
+          <AccountMenuRow icon="headset-outline" label="Help & Support" onPress={() => goHub("help")} />
+          <AccountMenuRow icon="shield-outline" label="Safety tips" onPress={() => openLegal("Safety Tips")} />
+          <AccountMenuRow icon="help-circle-outline" label="FAQs" onPress={() => openLegal("FAQ")} />
+          <AccountMenuRow
+            icon="share-social-outline"
+            label="Share this app"
+            onPress={() => void Share.share({ message: "Find nearby listings on NAJIK — https://najik.com" })}
+          />
+          <AccountMenuRow icon="document-text-outline" label="Privacy policy" onPress={() => openLegal("Privacy Policy")} last />
+        </AccountSection>
 
-        <PressScale onPress={logout} style={{ marginTop: 22, alignItems: "center", padding: 12 }}>
-          <Text style={{ color: colors.red, fontWeight: "800" }}>Log out</Text>
-        </PressScale>
+        <View style={{ marginHorizontal: -16 }}>
+          <DataPrivacyActions />
+        </View>
       </ScrollView>
     </View>
   );

@@ -1,8 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useNavigation, useRoute } from "@react-navigation/native";
+import { useNavigation, useRoute, useFocusEffect } from "@react-navigation/native";
 import { compressPhotoAsset } from "../pickPhoto";
 import * as ImagePicker from "expo-image-picker";
-import { useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
 import { Alert, ActivityIndicator, Image, Keyboard, Modal, Pressable, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AppHeader } from "../components/AppHeader";
@@ -29,7 +29,9 @@ import {
 } from "../data/listingVertical";
 import { canPostServices, isProvider } from "../demo";
 import { createListing, fetchMyListings, updateListing } from "../listingsApi";
-import { fetchSellerPaymentsMe } from "../paymentsApi";
+import { fetchSellerPaymentsMe, type SellerPaymentConfig } from "../paymentsApi";
+import { formatFeeBand, quoteListingFeeRupees } from "../listingFee";
+import { openSellerPage } from "../navigation/browse";
 import { colors, shadow } from "../theme";
 
 const GREEN = "#1B7D2C";
@@ -114,6 +116,28 @@ export function PostScreen() {
   const fieldRefs = useRef<Partial<Record<FieldKey, View | null>>>({});
   const [busy, setBusy] = useState(false);
   const [keepPhotos, setKeepPhotos] = useState(true);
+  const [payConfig, setPayConfig] = useState<SellerPaymentConfig | null>(null);
+  const [walletPaisa, setWalletPaisa] = useState(0);
+  const [walletLabel, setWalletLabel] = useState("Rs. 0");
+
+  const listingPriceRupees = Number(String(price).replace(/\D/g, "") || 0);
+  const listingFeeRupees = quoteListingFeeRupees(listingPriceRupees, payConfig);
+  const listingFeeLabel = listingFeeRupees > 0 ? `Rs. ${listingFeeRupees.toLocaleString("en-IN")}` : "Free";
+  const listingFeePaisa = listingFeeRupees * 100;
+  const walletShort = isProvider(user) && listingFeeRupees > 0 && walletPaisa < listingFeePaisa;
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!isProvider(user)) return;
+      void fetchSellerPaymentsMe()
+        .then((pay) => {
+          setPayConfig(pay.config);
+          setWalletPaisa(pay.balance_paisa || 0);
+          setWalletLabel(pay.balance_label || "Rs. 0");
+        })
+        .catch(() => {});
+    }, [user?.id]),
+  );
 
   useEffect(() => {
     if (listingId) return;
@@ -396,11 +420,15 @@ export function PostScreen() {
     setErrorField(null);
     try {
       if (publish) {
-        const pay = await fetchSellerPaymentsMe().catch(() => null);
-        const fee = pay?.config?.listing_fee_rupees ?? 0;
-        const balance = pay?.balance_paisa ?? 0;
+        const priceDigits = Number(String(price).replace(/\D/g, "") || 0);
+        const pay = await fetchSellerPaymentsMe(priceDigits).catch(() => null);
+        const fee =
+          typeof pay?.quoted_listing_fee_rupees === "number"
+            ? pay.quoted_listing_fee_rupees
+            : quoteListingFeeRupees(priceDigits, pay?.config);
+        const balance = pay?.balance_paisa ?? walletPaisa;
         if (fee > 0 && balance < fee * 100) {
-          const msg = `Insufficient balance (${pay?.balance_label ?? "Rs. 0"}). Each live listing costs ${pay?.config?.listing_fee_label ?? `Rs. ${fee}`}. Add funds in Payments first, or save as draft.`;
+          const msg = `Insufficient balance (${pay?.balance_label ?? walletLabel}). Publishing this Rs. ${Number(String(price).replace(/\D/g, "") || 0).toLocaleString("en-IN")} listing costs Rs. ${fee.toLocaleString("en-IN")}. Add funds in Payments first, or save as draft.`;
           setError(msg);
           showToast(msg);
           setBusy(false);
@@ -433,6 +461,12 @@ export function PostScreen() {
     }
     setError("");
     setErrorField(null);
+    if (step === 2 && walletShort) {
+      const msg = `Your wallet (${walletLabel}) is less than the listing charge (${listingFeeLabel}). Add balance before continuing.`;
+      setError(msg);
+      showToast(msg);
+      return;
+    }
     if (step < 4) setStep((value) => value + 1);
     else void save(true);
   }
@@ -826,6 +860,50 @@ export function PostScreen() {
         {step === 2 ? (
           <View>
             <Field label={`${copy.priceLabel} (optional)`} value={price} onChangeText={setPrice} onFocus={onInputFocus} placeholder={copy.pricePlaceholder} keyboardType="number-pad" />
+            {isProvider(user) ? (
+              <View
+                style={{
+                  marginTop: 8,
+                  marginBottom: 10,
+                  backgroundColor: walletShort ? "#FEF2F2" : "#E4F6EA",
+                  borderRadius: 14,
+                  padding: 12,
+                  borderWidth: 1,
+                  borderColor: walletShort ? "#FECACA" : "#BBF7D0",
+                }}
+              >
+                <Text style={{ fontWeight: "800", color: walletShort ? "#B91C1C" : GREEN, fontSize: 13 }}>
+                  Listing charge vs wallet
+                </Text>
+                <Text style={{ color: walletShort ? "#7F1D1D" : "#14532D", fontSize: 13, marginTop: 8, lineHeight: 20 }}>
+                  Ad price: Rs. {listingPriceRupees.toLocaleString("en-IN")}
+                  {"\n"}Publish fee: {listingFeeLabel}
+                  {"\n"}Your wallet: {walletLabel}
+                </Text>
+                {walletShort ? (
+                  <>
+                    <Text style={{ color: "#B91C1C", fontSize: 12, marginTop: 8, fontWeight: "700" }}>
+                      Wallet is less than the listing charge. Add balance to continue.
+                    </Text>
+                    <PressScale
+                      onPress={() => openSellerPage(navigation, "add-fund")}
+                      style={{ marginTop: 10, backgroundColor: "#2563EB", borderRadius: 12, paddingVertical: 12, alignItems: "center" }}
+                    >
+                      <Text style={{ color: "#fff", fontWeight: "800" }}>Add balance</Text>
+                    </PressScale>
+                  </>
+                ) : (
+                  <Text style={{ color: "#166534", fontSize: 12, marginTop: 8 }}>
+                    You have enough balance to publish at this price.
+                  </Text>
+                )}
+                {(payConfig?.listing_fee_tiers || []).length ? (
+                  <Text style={{ color: walletShort ? "#991B1B" : "#166534", fontSize: 11, marginTop: 8, lineHeight: 16 }}>
+                    {(payConfig?.listing_fee_tiers || []).map((row) => formatFeeBand(row)).join("\n")}
+                  </Text>
+                ) : null}
+              </View>
+            ) : null}
             <Field
               label="Discount % (optional)"
               value={discountPct}
@@ -917,9 +995,21 @@ export function PostScreen() {
                 </Text>
               ))}
             </View>
-            <Text style={{ marginTop: 12, color: colors.muted, fontSize: 12 }}>
-              Submit publishes this listing live in the buyer feed right away. Admin can still review and deactivate if needed.
-            </Text>
+            {isProvider(user) ? (
+              <View style={{ marginTop: 12, backgroundColor: "#E4F6EA", borderRadius: 14, padding: 12, borderWidth: 1, borderColor: "#BBF7D0" }}>
+                <Text style={{ fontWeight: "800", color: GREEN, fontSize: 13 }}>Publish charge for this listing</Text>
+                <Text style={{ color: "#14532D", fontSize: 13, marginTop: 4, lineHeight: 18 }}>
+                  {listingPriceRupees > 0
+                    ? `Ad price Rs. ${listingPriceRupees.toLocaleString("en-IN")} → listing fee ${listingFeeLabel}. Deducted from your loaded wallet when you publish.`
+                    : `No ad price entered. Default listing fee ${payConfig?.listing_fee_label || listingFeeLabel} applies if admin has not set a matching band.`}
+                </Text>
+                <Text style={{ color: "#166534", fontSize: 12, marginTop: 6 }}>Wallet: {walletLabel}</Text>
+              </View>
+            ) : (
+              <Text style={{ marginTop: 12, color: colors.muted, fontSize: 12 }}>
+                Submit publishes this listing live. Admin can still review and deactivate if needed.
+              </Text>
+            )}
           </View>
         ) : null}
 
@@ -963,9 +1053,9 @@ export function PostScreen() {
           Step {step + 1} of 5 | {STEPS[step].key === "Basic Info" ? "Basic Information" : STEPS[step].key}
         </Text>
         <PressScale
-          onPress={next}
+          onPress={step === 2 && walletShort ? () => openSellerPage(navigation, "add-fund") : next}
           style={{
-            backgroundColor: GREEN,
+            backgroundColor: step === 2 && walletShort ? "#2563EB" : GREEN,
             borderRadius: 12,
             paddingHorizontal: 14,
             paddingVertical: 11,
@@ -976,8 +1066,10 @@ export function PostScreen() {
             flexShrink: 0,
           }}
         >
-          <Text style={{ color: "#fff", fontWeight: "800", fontSize: 12 }}>{busy ? "Saving…" : nextLabel}</Text>
-          <Ionicons name="arrow-forward" size={14} color="#fff" />
+          <Text style={{ color: "#fff", fontWeight: "800", fontSize: 12 }}>
+            {busy ? "Saving…" : step === 2 && walletShort ? "Add balance" : nextLabel}
+          </Text>
+          <Ionicons name={step === 2 && walletShort ? "wallet-outline" : "arrow-forward"} size={14} color="#fff" />
         </PressScale>
       </View>
 

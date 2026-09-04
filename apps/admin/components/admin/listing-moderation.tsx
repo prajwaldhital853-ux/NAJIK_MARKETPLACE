@@ -16,7 +16,7 @@ import { usePageRbac } from "@/lib/use-page-rbac";
 import { useAdmin } from "@/lib/store";
 import { UrgentListingControls } from "./urgent-listing-controls";
 
-const TABS = ["Pending", "All", "Approved", "Rejected", "Deactivated", "Urgent"] as const;
+const TABS = ["Pending", "All", "Approved", "Rejected", "Deactivated", "Urgent", "Sold"] as const;
 
 function tabFromParam(raw: string | null): (typeof TABS)[number] {
   if (!raw) return "All";
@@ -61,6 +61,7 @@ export function ListingModeration({
     approved?: number;
     rejected?: number;
     deactivated?: number;
+    sold?: number;
   } | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
@@ -100,7 +101,9 @@ export function ListingModeration({
               ? "rejected"
               : tab === "Deactivated"
                 ? "deactivated"
-                : undefined;
+                : tab === "Sold"
+                  ? "sold"
+                  : undefined;
       const data = await listStaffListingsPage({
         category,
         status,
@@ -247,7 +250,9 @@ export function ListingModeration({
           ? items.filter((i) => i.status === "pending" || i.has_pending_edit)
           : tab === "Urgent"
             ? items.filter((i) => i.is_urgent)
-            : items.filter((i) => i.status === tab.toLowerCase());
+            : tab === "Sold"
+              ? items
+              : items.filter((i) => i.status === tab.toLowerCase());
     if (featuredOnly) filtered = filtered.filter((i) => i.is_promoted || i.promote_requested);
     const typeFilter = params.get("type");
     if (typeFilter) {
@@ -309,7 +314,10 @@ export function ListingModeration({
     {
       key: "status",
       label: "Status",
-      render: (row) => <StatusBadge status={row.has_pending_edit ? "edit pending" : row.status} />,
+      render: (row) => {
+        const sold = row.extras?.sold === true || String(row.extras?.sold || "").toLowerCase() === "true";
+        return <StatusBadge status={sold ? "sold" : row.has_pending_edit ? "edit pending" : row.status} />;
+      },
     },
     {
       key: "created_at",
@@ -378,6 +386,7 @@ export function ListingModeration({
           { label: "Approved", value: counts?.approved ?? items.filter((i) => i.status === "approved").length, tone: "green" },
           { label: "Rejected", value: counts?.rejected ?? items.filter((i) => i.status === "rejected").length, tone: "red" },
           { label: "Deactivated", value: counts?.deactivated ?? items.filter((i) => i.status === "deactivated").length, tone: "amber" },
+          { label: "Sold", value: counts?.sold ?? items.filter((i) => i.extras?.sold === true || String(i.extras?.sold || "").toLowerCase() === "true").length, tone: "brand" },
         ]}
       />
       <div className="mb-3 flex justify-end">
@@ -443,7 +452,7 @@ export function ListingModeration({
               {extras.experience ? <DetailKv label="Experience" value={String(extras.experience)} /> : null}
               {extras.make ? <DetailKv label="Vehicle" value={`${extras.make} ${extras.model || ""}`.trim()} /> : null}
               {extras.condition ? <DetailKv label="Condition" value={String(extras.condition)} /> : null}
-              <DetailKv label="Promote requested" value={open.promote_requested ? "Yes" : "No"} />
+              <DetailKv label="Marked sold by seller" value={extras.sold === true || String(extras.sold || "").toLowerCase() === "true" ? "Yes" : "No"} />
               <DetailKv label="Submitted" value={formatNptDateTime(open.created_at)} />
               <DetailKv label="Views" value={String(open.view_count || 0)} />
               <div className="mt-3">

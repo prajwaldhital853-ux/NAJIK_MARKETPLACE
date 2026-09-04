@@ -39,10 +39,10 @@ def seller_can_post(user) -> bool:
     )
 
 
-def seller_publish_balance_message(user) -> str | None:
-    from apps.core.seller_wallet_service import seller_publish_blocked_message
+def seller_publish_balance_message(user, price=None) -> str | None:
+    from apps.core.seller_wallet_service import parse_price_rupees, seller_publish_blocked_message
 
-    return seller_publish_blocked_message(user)
+    return seller_publish_blocked_message(user, price_rupees=parse_price_rupees(price))
 
 
 def listing_queryset():
@@ -415,7 +415,7 @@ class ListingMineView(APIView):
             )
         publish = request.data.get("publish", True)
         if publish in (True, "true", "1", 1):
-            blocked = seller_publish_balance_message(request.user)
+            blocked = seller_publish_balance_message(request.user, request.data.get("price"))
             if blocked:
                 return Response({"detail": blocked}, status=status.HTTP_403_FORBIDDEN)
         serializer = ListingWriteSerializer(data=request.data)
@@ -433,7 +433,7 @@ class ListingMineDetailView(APIView):
         listing = get_object_or_404(Listing, pk=pk, owner=request.user)
         publish = request.data.get("publish")
         if publish in (True, "true", "1", 1) and listing.status != Listing.STATUS_APPROVED:
-            blocked = seller_publish_balance_message(request.user)
+            blocked = seller_publish_balance_message(request.user, request.data.get("price"))
             if blocked:
                 return Response({"detail": blocked}, status=status.HTTP_403_FORBIDDEN)
         serializer = ListingWriteSerializer(listing, data=request.data, partial=True)
@@ -707,7 +707,11 @@ class StaffListingListView(APIView):
             items = items.filter(active_urgent_filter())
         counts = listing_counts(items)
         status_filter = request.query_params.get("status")
-        if status_filter:
+        if status_filter == "sold":
+            from apps.listings.urgent import sold_listings_q
+
+            items = items.filter(sold_listings_q())
+        elif status_filter:
             items = items.filter(status=status_filter)
         page, page_size = parse_page(request, default_size=20, max_size=50)
         page_items, meta = paginate_queryset(items, page, page_size)

@@ -46,7 +46,7 @@ export function StatusBadge({ status }: { status: string }) {
     under_review: "bg-brand-soft text-brand",
     open: "bg-brand-soft text-brand",
     flagged: "bg-brand-soft text-brand",
-    urgent: "bg-amber-soft text-amber",
+    sold: "bg-brand-soft text-brand",
     ended: "text-muted bg-elevated",
     none: "text-muted bg-elevated",
     resolved: "bg-green-soft text-green",

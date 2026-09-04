@@ -131,7 +131,7 @@ export function SavedScreen() {
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{ paddingHorizontal: 4, minWidth: "100%" }}
+          contentContainerStyle={{ paddingRight: 12, flexGrow: 0 }}
           style={{
             marginTop: 16,
             backgroundColor: "#fff",
@@ -146,15 +146,15 @@ export function SavedScreen() {
               <PressScale
                 key={item.key}
                 onPress={() => setTab(item.key)}
-                style={{ alignItems: "center", paddingTop: 13, paddingHorizontal: 12, minWidth: 88 }}
+                style={{ alignItems: "center", paddingTop: 13, paddingHorizontal: 14, flexShrink: 0 }}
               >
                 <View style={{ flexDirection: "row", alignItems: "center", gap: 5, paddingBottom: 10 }}>
-                  <Ionicons name={item.icon} size={16} color={on ? GREEN : "#111827"} />
+                  <Ionicons name={on ? item.activeIcon : item.icon} size={16} color={on ? GREEN : "#111827"} />
                   <Text style={{ fontWeight: "700", fontSize: 12, color: on ? GREEN : "#111827" }} numberOfLines={1}>
                     {item.key}
                   </Text>
                 </View>
-                <View style={{ height: 3.5, width: "86%", borderRadius: 2, backgroundColor: on ? GREEN : "transparent" }} />
+                <View style={{ height: 3.5, alignSelf: "stretch", borderRadius: 2, backgroundColor: on ? GREEN : "transparent" }} />
               </PressScale>
             );
           })}

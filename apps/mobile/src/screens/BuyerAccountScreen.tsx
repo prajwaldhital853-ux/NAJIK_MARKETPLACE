@@ -1,7 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useFocusEffect, useNavigation } from "@react-navigation/native";
-import type { ComponentProps } from "react";
-import { useCallback, useState, type ReactNode } from "react";
+import { useNavigation } from "@react-navigation/native";
+import { useState } from "react";
 import { Alert, ScrollView, Share, Switch, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AccountStatusCard, StaffWarningCard } from "../components/StaffWarningBanner";
@@ -13,27 +12,25 @@ import { useAuth } from "../context/AuthContext";
 import { infoLinkDocId } from "../legal/types";
 import {
   openBookings,
-  openBuyerCoins,
-  openBuyerCoupons,
   openBuyerInviteEarn,
   openBuyerRecentViews,
   openBuyerReviewsGiven,
   openBuyerTransactions,
-  openBuyerWallet,
   openChatInbox,
   openMapSearch,
 } from "../navigation/browse";
-import { fetchSellerPaymentsMe } from "../paymentsApi";
 import { choosePhoto } from "../pickPhoto";
-import { colors, shadow } from "../theme";
+import { colors } from "../theme";
 import Svg, { Path } from "react-native-svg";
-
-type Ion = ComponentProps<typeof Ionicons>["name"];
-
-const GREEN = colors.greenDeep;
-const HEADER = colors.greenDeep;
-const ICON_BG = colors.greenSoft;
-const PAGE_BG = "#F3F4F6";
+import {
+  ACCOUNT_GREEN as GREEN,
+  ACCOUNT_PAGE_BG as PAGE_BG,
+  AccountMenuRow as MenuRow,
+  AccountQuickAction as QuickAction,
+  AccountQuickDivider,
+  AccountQuickRow,
+  AccountSection as Section,
+} from "../components/AccountProfileParts";
 
 function memberSince(iso?: string) {
   if (!iso) return "—";
@@ -50,22 +47,9 @@ export function BuyerProfile() {
   const email = user?.email || "";
   const photo = user?.photo_uri || "";
   const phoneVerified = Boolean(user?.phone_verified);
-  const [walletLabel, setWalletLabel] = useState("Rs. 0.00");
   const [darkTheme, setDarkTheme] = useState(false);
 
-  const loadCounts = useCallback(() => {
-    void fetchSellerPaymentsMe()
-      .then((pay) => setWalletLabel(pay.balance_label || pay.refer_earn_remaining_label || "Rs. 0.00"))
-      .catch(() => setWalletLabel("Rs. 0.00"));
-  }, []);
-
-  useFocusEffect(
-    useCallback(() => {
-      loadCounts();
-    }, [loadCounts]),
-  );
-
-  const refreshControl = useAppRefreshControl(loadCounts);
+  const refreshControl = useAppRefreshControl();
 
   function pickPhoto() {
     choosePhoto((uri) => {
@@ -97,7 +81,7 @@ export function BuyerProfile() {
 
   return (
     <View style={{ flex: 1, backgroundColor: PAGE_BG }}>
-      <View style={{ backgroundColor: HEADER }}>
+      <View style={{ backgroundColor: GREEN }}>
         <View style={{ paddingTop: insets.top + 8, paddingHorizontal: 16, paddingBottom: 18 }}>
           <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "flex-end", marginBottom: 14 }}>
             <PressScale onPress={confirmLogout} hitSlop={10}>
@@ -128,23 +112,6 @@ export function BuyerProfile() {
                   {user?.phone || "Add your email"}
                 </Text>
               )}
-              <PressScale
-                onPress={() => openBuyerWallet(navigation)}
-                style={{
-                  marginTop: 10,
-                  alignSelf: "flex-start",
-                  backgroundColor: "rgba(0,0,0,0.28)",
-                  borderRadius: 20,
-                  paddingHorizontal: 12,
-                  paddingVertical: 6,
-                  flexDirection: "row",
-                  alignItems: "center",
-                  gap: 6,
-                }}
-              >
-                <Ionicons name="wallet-outline" size={14} color="#fff" />
-                <Text style={{ color: "#fff", fontWeight: "700", fontSize: 12 }}>{walletLabel}</Text>
-              </PressScale>
               <PressScale
                 onPress={() => {
                   if (phoneVerified) {
@@ -180,38 +147,30 @@ export function BuyerProfile() {
         contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: 40 }}
         showsVerticalScrollIndicator={false}
       >
-        <View
-          style={{
-            backgroundColor: "#fff",
-            borderRadius: 18,
-            paddingVertical: 14,
-            flexDirection: "row",
-            ...shadow.card,
-          }}
-        >
+        <AccountQuickRow>
           <QuickAction
-            icon="storefront-outline"
-            label="My Featured Ads"
+            icon="bookmark-outline"
+            label="Saved"
             onPress={() => navigation.jumpTo("Saved")}
           />
-          <View style={{ width: 1, backgroundColor: "#EEF0F3" }} />
-          <QuickAction icon="bag-handle-outline" label="My Orders" onPress={() => openBookings(navigation)} />
-          <View style={{ width: 1, backgroundColor: "#EEF0F3" }} />
+          <AccountQuickDivider />
+          <QuickAction icon="calendar-outline" label="Bookings" onPress={() => openBookings(navigation)} />
+          <AccountQuickDivider />
           <QuickAction
-            icon="receipt-outline"
-            label="Transaction History"
-            onPress={() => openBuyerTransactions(navigation)}
+            icon="map-outline"
+            label="Map search"
+            onPress={() => openMapSearch(navigation)}
           />
-        </View>
+        </AccountQuickRow>
 
         <AccountStatusCard />
         <StaffWarningCard />
 
         <Section title="My Account">
-          <MenuRow icon="wallet-outline" label="My Wallet" onPress={() => openBuyerWallet(navigation)} />
-          <MenuRow icon="cash-outline" label="NAJIK Coins" onPress={() => openBuyerCoins(navigation)} />
-          <MenuRow icon="pricetag-outline" label="My Coupons" onPress={() => openBuyerCoupons(navigation)} />
-          <MenuRow icon="return-down-back-outline" label="Returns & Refunds" onPress={() => openBookings(navigation)} last />
+          <MenuRow icon="gift-outline" label="Invite & Earn" onPress={() => openBuyerInviteEarn(navigation)} />
+          <MenuRow icon="bookmark-outline" label="Saved listings" onPress={() => navigation.jumpTo("Saved")} />
+          <MenuRow icon="eye-outline" label="Recently viewed" onPress={() => openBuyerRecentViews(navigation)} />
+          <MenuRow icon="notifications-outline" label="Notifications" onPress={() => openChatInbox(navigation)} last />
         </Section>
 
         <Section title="Orders & Delivery">
@@ -221,9 +180,8 @@ export function BuyerProfile() {
         </Section>
 
         <Section title="Activity">
-          <MenuRow icon="eye-outline" label="Recently viewed" onPress={() => openBuyerRecentViews(navigation)} />
           <MenuRow icon="star-outline" label="My reviews" onPress={() => openBuyerReviewsGiven(navigation)} />
-          <MenuRow icon="notifications-outline" label="Notifications" onPress={() => openChatInbox(navigation)} last />
+          <MenuRow icon="receipt-outline" label="Transaction history" onPress={() => openBuyerTransactions(navigation)} last />
         </Section>
 
         <Section title="Preferences">
@@ -263,7 +221,8 @@ export function BuyerProfile() {
         </Section>
 
         <Section title="More">
-          <MenuRow icon="gift-outline" label="Invite & Earn" onPress={() => openBuyerInviteEarn(navigation)} />
+          <MenuRow icon="shield-outline" label="Safety tips" onPress={() => openLegal("Safety Tips")} />
+          <MenuRow icon="document-text-outline" label="Terms of use" onPress={() => openLegal("Terms of Use")} />
           <MenuRow icon="help-circle-outline" label="FAQs" onPress={() => openLegal("FAQ")} />
           <MenuRow icon="share-social-outline" label="Share this app" onPress={() => void shareApp()} />
           <MenuRow
@@ -285,79 +244,5 @@ export function BuyerProfile() {
         </View>
       </ScrollView>
     </View>
-  );
-}
-
-function QuickAction({ icon, label, onPress }: { icon: Ion; label: string; onPress: () => void }) {
-  return (
-    <PressScale onPress={onPress} style={{ flex: 1, alignItems: "center", paddingHorizontal: 8 }}>
-      <View
-        style={{
-          width: 44,
-          height: 44,
-          borderRadius: 12,
-          backgroundColor: ICON_BG,
-          alignItems: "center",
-          justifyContent: "center",
-        }}
-      >
-        <Ionicons name={icon} size={22} color={GREEN} />
-      </View>
-      <Text style={{ marginTop: 8, fontWeight: "700", fontSize: 11, color: "#111827", textAlign: "center" }} numberOfLines={2}>
-        {label}
-      </Text>
-    </PressScale>
-  );
-}
-
-function Section({ title, children }: { title: string; children: ReactNode }) {
-  return (
-    <View style={{ marginTop: 22 }}>
-      <Text style={{ color: "#6B7280", fontWeight: "700", fontSize: 13, marginBottom: 10 }}>{title}</Text>
-      <View style={{ backgroundColor: "#fff", borderRadius: 18, overflow: "hidden", ...shadow.card }}>{children}</View>
-    </View>
-  );
-}
-
-function MenuRow({
-  icon,
-  label,
-  onPress,
-  trailing,
-  last,
-}: {
-  icon: Ion;
-  label: string;
-  onPress?: () => void;
-  trailing?: ReactNode;
-  last?: boolean;
-}) {
-  return (
-    <PressScale
-      onPress={onPress}
-      style={{
-        flexDirection: "row",
-        alignItems: "center",
-        paddingHorizontal: 14,
-        paddingVertical: 14,
-        borderBottomWidth: last ? 0 : 1,
-        borderBottomColor: "#F3F4F6",
-      }}
-    >
-      <View
-        style={{
-          width: 36,
-          height: 36,
-          borderRadius: 10,
-          backgroundColor: ICON_BG,
-          alignItems: "center",
-          justifyContent: "center",
-        }}
-      >
-        <Ionicons name={icon} size={18} color={GREEN} />
-      </View>
-      <Text style={{ flex: 1, marginLeft: 12, fontWeight: "600", fontSize: 15, color: "#111827" }}>{label}</Text>
-      {trailing ?? <Ionicons name="chevron-forward" size={18} color="#C4C7CC" />}
-    </PressScale>
   );
 }

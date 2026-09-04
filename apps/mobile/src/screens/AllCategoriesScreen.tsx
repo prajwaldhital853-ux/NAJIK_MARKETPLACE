@@ -1,7 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
-import { Image } from "expo-image";
-import { Dimensions, ScrollView, Text, View } from "react-native";
+import { Dimensions, Image, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { PressScale } from "../components/PressScale";
 import { ALL_CATEGORY_TILES, type BrowseCategoryTile } from "../data/allCategories";
@@ -87,7 +86,7 @@ function Section({
               overflow: "hidden",
             }}
           >
-            <Image source={tile.image} style={{ width: ICON, height: ICON }} contentFit="contain" />
+            <Image source={tile.image} style={{ width: ICON, height: ICON }} resizeMode="contain" fadeDuration={0} />
           </View>
           <Text
             style={{

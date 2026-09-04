@@ -117,7 +117,7 @@ export function PaymentsHub() {
             tone: "brand",
           },
           { label: `${audienceLabel} referral earned`, value: referralEarned, tone: "green" },
-          { label: isBuyer ? "Buyer wallet fee" : "Listing fee", value: listingFee, tone: "brand" },
+          { label: isBuyer ? "Buyer wallet fee" : "Listing fee (bands)", value: listingFee, tone: "brand" },
         ]}
       />
 

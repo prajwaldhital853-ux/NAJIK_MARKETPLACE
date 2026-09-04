@@ -54,7 +54,7 @@ class ListingModerationTests(TestCase):
         addr = email("prov")
         res = self.client.post(
             "/api/auth/register/",
-            {"full_name": "Seller One", "password": PASS, "account_type": "provider", "phone": p, "email": addr},
+            {"full_name": "Seller One", "password": PASS, "account_type": "provider", "phone": p, "email": addr, "legal_accepted": True},
             format="json",
         )
         self.assertEqual(res.status_code, 201, res.data)
@@ -117,7 +117,7 @@ class ListingModerationTests(TestCase):
     def test_unverified_seller_cannot_post(self):
         res = self.client.post(
             "/api/auth/register/",
-            {"full_name": "Seller", "password": PASS, "account_type": "provider", "phone": phone()},
+            {"full_name": "Seller", "password": PASS, "account_type": "provider", "phone": phone(), "legal_accepted": True},
             format="json",
         )
         self.auth(res.data["access"])
@@ -308,6 +308,20 @@ class ListingModerationTests(TestCase):
         self.assertFalse(Listing.objects.filter(pk=listing_id).exists())
         feed = APIClient().get("/api/listings/feed/")
         self.assertEqual(listing_rows(feed.data), [])
+
+    def test_staff_can_list_seller_marked_sold(self):
+        _, p, _ = self.verified_provider()
+        posted = self.client.post("/api/listings/me/", self.payload(p), format="json")
+        self.assertEqual(posted.status_code, 201, posted.data)
+        listing_id = posted.data["id"]
+        sold = self.client.post(f"/api/listings/me/{listing_id}/sold/", {"sold": True}, format="json")
+        self.assertEqual(sold.status_code, 200, sold.data)
+        staff = self.staff_client()
+        listed = staff.get("/api/admin/listings/?status=sold")
+        self.assertEqual(listed.status_code, 200)
+        ids = {row["id"] for row in listing_rows(listed.data)}
+        self.assertIn(listing_id, ids)
+        self.assertGreaterEqual((listed.data.get("counts") or {}).get("sold") or 0, 1)
 
     def test_job_listing_can_omit_photos(self):
         _, p, _ = self.verified_provider()

@@ -17,9 +17,9 @@ export const OSM_MAP_HTML = `<!DOCTYPE html>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
 var map = L.map('map', { zoomControl: true, attributionControl: true }).setView([28.3949, 84.1240], 7);
-L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-  maxZoom: 20,
-  attribution: '&copy; OpenStreetMap &copy; CARTO'
+L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {
+  maxZoom: 19,
+  attribution: 'Tiles &copy; Esri'
 }).addTo(map);
 var layer = L.layerGroup().addTo(map);
 var userMarker = null;

@@ -87,12 +87,15 @@ def listing_counts(qs):
     rows = qs.values("category").annotate(n=Count("id"))
     by_category = {row["category"]: row["n"] for row in rows}
     by_status = {row["status"]: row["n"] for row in qs.values("status").annotate(n=Count("id"))}
+    from apps.listings.urgent import sold_listings_q
+
     return {
         "total": sum(by_category.values()),
         "pending": by_status.get(Listing.STATUS_PENDING, 0),
         "approved": by_status.get(Listing.STATUS_APPROVED, 0),
         "rejected": by_status.get(Listing.STATUS_REJECTED, 0),
         "deactivated": by_status.get(Listing.STATUS_DEACTIVATED, 0),
+        "sold": qs.filter(sold_listings_q()).count(),
         "by_category": by_category,
     }
 

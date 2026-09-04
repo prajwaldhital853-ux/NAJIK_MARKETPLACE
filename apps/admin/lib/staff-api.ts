@@ -599,10 +599,17 @@ export async function listStaffReferrals(status?: "joined" | "earned", audience:
   return staffRequest<StaffReferralRow[]>(`/api/admin/app-control/referrals?${q}`);
 }
 
+export type ListingFeeTier = {
+  min_rupees: number;
+  max_rupees: number | null;
+  fee_rupees: number;
+};
+
 export type SellerPaymentConfig = {
   is_active: boolean;
   listing_fee_rupees: number;
   listing_fee_label: string;
+  listing_fee_tiers?: ListingFeeTier[];
   min_load_rupees: number;
   max_load_rupees: number;
   bank_name: string;

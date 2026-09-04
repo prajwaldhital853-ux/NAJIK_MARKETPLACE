@@ -77,6 +77,11 @@ export function SellerPaymentsConfigPanel({
   const [cfg, setCfg] = useState<SellerPaymentConfig | null>(null);
   const [fee, setFee] = useState("10");
   const [feeLabel, setFeeLabel] = useState("Rs. 10");
+  const [tiers, setTiers] = useState<{ min_rupees: string; max_rupees: string; fee_rupees: string }[]>([
+    { min_rupees: "0", max_rupees: "1000", fee_rupees: "20" },
+    { min_rupees: "1001", max_rupees: "20000", fee_rupees: "100" },
+    { min_rupees: "20001", max_rupees: "", fee_rupees: "200" },
+  ]);
   const [minLoad, setMinLoad] = useState("100");
   const [maxLoad, setMaxLoad] = useState("50000");
   const [bankName, setBankName] = useState("");
@@ -93,6 +98,15 @@ export function SellerPaymentsConfigPanel({
         setCfg(c);
         setFee(String(c.listing_fee_rupees));
         setFeeLabel(c.listing_fee_label);
+        setTiers(
+          (c.listing_fee_tiers || []).length
+            ? c.listing_fee_tiers!.map((row) => ({
+                min_rupees: String(row.min_rupees ?? 0),
+                max_rupees: row.max_rupees == null ? "" : String(row.max_rupees),
+                fee_rupees: String(row.fee_rupees ?? 0),
+              }))
+            : [{ min_rupees: "0", max_rupees: "", fee_rupees: String(c.listing_fee_rupees || 0) }],
+        );
         setMinLoad(String(c.min_load_rupees));
         setMaxLoad(String(c.max_load_rupees));
         setBankName(c.bank_name);
@@ -112,6 +126,11 @@ export function SellerPaymentsConfigPanel({
       const payload: Record<string, unknown> = {
         listing_fee_rupees: Number(fee) || 0,
         listing_fee_label: feeLabel.trim(),
+        listing_fee_tiers: tiers.map((row) => ({
+          min_rupees: Number(row.min_rupees) || 0,
+          max_rupees: row.max_rupees.trim() === "" ? null : Number(row.max_rupees) || 0,
+          fee_rupees: Number(row.fee_rupees) || 0,
+        })),
         min_load_rupees: Number(minLoad) || 100,
         max_load_rupees: Number(maxLoad) || 50000,
         bank_name: bankName.trim(),
@@ -137,16 +156,77 @@ export function SellerPaymentsConfigPanel({
     <section className={`${embedded ? "mt-0" : "mt-4"} rounded border border-line bg-card p-4`}>
       <h2 className="text-[13px] font-semibold text-ink">Seller listing payments</h2>
       <p className="mt-1 text-[12px] text-muted">
-        Per-listing fee deducted when a seller publishes live. Offline bank top-ups — approve load requests below.
+        Listing post fee is based on the seller&apos;s ad price. Add bands below (example: Rs. 0–1,000 → Rs. 20; Rs. 1,001–20,000 → Rs. 100). Leave max blank for “and above”. Default fee is used only if no band matches.
       </p>
       {readOnly ? <div className="mt-3"><ReadOnlyBanner label="Seller Payments" /></div> : null}
       <div className="mt-3 grid gap-3 md:grid-cols-2">
-        <Field label="Listing fee (Rs.)">
+        <Field label="Default listing fee (Rs.)">
           <input className={inputClass} value={fee} onChange={(e) => setFee(e.target.value)} disabled={readOnly} />
         </Field>
-        <Field label="Fee label">
+        <Field label="Default fee label">
           <input className={inputClass} value={feeLabel} onChange={(e) => setFeeLabel(e.target.value)} disabled={readOnly} />
         </Field>
+        <div className="md:col-span-2 rounded-lg border border-line p-3">
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <p className="text-[12px] font-semibold text-ink">Price bands (ad price → post fee)</p>
+            {!readOnly ? (
+              <Btn
+                kind="ghost"
+                onClick={() =>
+                  setTiers((rows) => [...rows, { min_rupees: "", max_rupees: "", fee_rupees: "" }])
+                }
+              >
+                Add band
+              </Btn>
+            ) : null}
+          </div>
+          <div className="grid gap-2">
+            {tiers.map((row, index) => (
+              <div key={index} className="grid grid-cols-3 gap-2 md:grid-cols-7">
+                <Field label={index === 0 ? "Min Rs." : ""}>
+                  <input
+                    className={inputClass}
+                    value={row.min_rupees}
+                    placeholder="0"
+                    disabled={readOnly}
+                    onChange={(e) =>
+                      setTiers((rows) => rows.map((item, i) => (i === index ? { ...item, min_rupees: e.target.value } : item)))
+                    }
+                  />
+                </Field>
+                <Field label={index === 0 ? "Max Rs. (blank = above)" : ""}>
+                  <input
+                    className={inputClass}
+                    value={row.max_rupees}
+                    placeholder="unlimited"
+                    disabled={readOnly}
+                    onChange={(e) =>
+                      setTiers((rows) => rows.map((item, i) => (i === index ? { ...item, max_rupees: e.target.value } : item)))
+                    }
+                  />
+                </Field>
+                <Field label={index === 0 ? "Fee Rs." : ""}>
+                  <input
+                    className={inputClass}
+                    value={row.fee_rupees}
+                    placeholder="20"
+                    disabled={readOnly}
+                    onChange={(e) =>
+                      setTiers((rows) => rows.map((item, i) => (i === index ? { ...item, fee_rupees: e.target.value } : item)))
+                    }
+                  />
+                </Field>
+                <div className="flex items-end pb-1 md:col-span-1">
+                  {!readOnly && tiers.length > 1 ? (
+                    <Btn kind="ghost" onClick={() => setTiers((rows) => rows.filter((_, i) => i !== index))}>
+                      Remove
+                    </Btn>
+                  ) : null}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
         <Field label="Min load (Rs.)">
           <input className={inputClass} value={minLoad} onChange={(e) => setMinLoad(e.target.value)} disabled={readOnly} />
         </Field>

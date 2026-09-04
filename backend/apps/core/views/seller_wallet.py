@@ -26,6 +26,9 @@ from apps.core.seller_wallet_service import (
     refund_listing_fee,
     rupees_to_paisa,
     wallet_balance_breakdown,
+    normalize_listing_fee_tiers,
+    listing_fee_rupees_for_price,
+    parse_price_rupees,
 )
 from apps.listings.models import Listing
 from apps.staff.authentication import StaffJWTAuthentication
@@ -50,6 +53,7 @@ def payment_config_payload(request, cfg: SellerPaymentConfig) -> dict:
         "is_active": cfg.is_active,
         "listing_fee_rupees": cfg.listing_fee_rupees,
         "listing_fee_label": cfg.listing_fee_label,
+        "listing_fee_tiers": normalize_listing_fee_tiers(cfg.listing_fee_tiers),
         "min_load_rupees": cfg.min_load_rupees,
         "max_load_rupees": cfg.max_load_rupees,
         "bank_name": cfg.bank_name,
@@ -169,6 +173,8 @@ class SellerPaymentsMeView(APIView):
         )
         recent_loads = SellerLoadRequest.objects.filter(provider=user).order_by("-created_at")[:10]
         refer_earn_paisa, loaded_paisa = wallet_balance_breakdown(wallet)
+        quote_price = parse_price_rupees(request.query_params.get("price"))
+        quote_fee = listing_fee_rupees_for_price(quote_price, cfg)
         return Response(
             {
                 "balance_paisa": wallet.balance_paisa,
@@ -180,6 +186,10 @@ class SellerPaymentsMeView(APIView):
                 "refer_earn_remaining_paisa": refer_earn_paisa,
                 "refer_earn_remaining_label": paisa_to_label(refer_earn_paisa),
                 "config": payment_config_payload(request, cfg),
+                "quoted_listing_price_rupees": quote_price,
+                "quoted_listing_fee_rupees": quote_fee,
+                "quoted_listing_fee_label": paisa_to_label(quote_fee * 100),
+                "quoted_listing_fee_paisa": quote_fee * 100,
                 "pending_load": load_request_payload(request, pending) if pending else None,
                 "can_request_load": pending is None and cfg.is_active,
                 "transactions": [transaction_payload(tx) for tx in txs],
@@ -246,6 +256,8 @@ class StaffSellerPaymentConfigView(APIView):
                 return Response({"detail": "Invalid listing_fee_rupees."}, status=status.HTTP_400_BAD_REQUEST)
         if "listing_fee_label" in request.data:
             cfg.listing_fee_label = (request.data.get("listing_fee_label") or cfg.listing_fee_label).strip()[:40]
+        if "listing_fee_tiers" in request.data:
+            cfg.listing_fee_tiers = normalize_listing_fee_tiers(request.data.get("listing_fee_tiers"))
         if "min_load_rupees" in request.data:
             try:
                 cfg.min_load_rupees = max(1, int(request.data.get("min_load_rupees")))

@@ -18,7 +18,6 @@ import {
   View,
 } from "react-native";
 import { Audio, InterruptionModeAndroid, InterruptionModeIOS } from "expo-av";
-import * as FileSystemLegacy from "expo-file-system/legacy";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { friendlyError } from "../api";
 import { AuthImage } from "../components/AuthImage";
@@ -42,6 +41,7 @@ import { mapsDirectionsUrl, requestUserPoint, reverseGeocode, searchPlaces, type
 import { subscribeAppRefresh } from "../listingsRefresh";
 import { openBookings, openListing, openSellerPage, openSellerProfile, openVoiceCall } from "../navigation/browse";
 import { choosePhoto } from "../pickPhoto";
+import { guessAudioMime, voiceUriToDataUri } from "../voiceNote";
 import { colors } from "../theme";
 
 const GREEN = colors.greenDeep;
@@ -70,17 +70,6 @@ const VOICE_RECORD_OPTIONS: Audio.RecordingOptions = {
   },
   web: Audio.RecordingOptionsPresets.HIGH_QUALITY.web,
 };
-
-function guessAudioMime(uri: string) {
-  const lower = uri.toLowerCase();
-  if (lower.endsWith(".caf")) return "audio/x-caf";
-  if (lower.endsWith(".3gp") || lower.endsWith(".3gpp")) return "audio/3gpp";
-  if (lower.endsWith(".mp3")) return "audio/mpeg";
-  if (lower.endsWith(".wav")) return "audio/wav";
-  if (lower.endsWith(".webm")) return "audio/webm";
-  if (lower.endsWith(".mp4")) return "audio/mp4";
-  return "audio/m4a";
-}
 
 function lastSeenLabel(iso?: string | null, online?: boolean) {
   if (online) return "Online";
@@ -250,10 +239,13 @@ export function ChatThreadScreen() {
   }
 
   async function finishRecording(rec: Audio.Recording) {
-    await rec.stopAndUnloadAsync();
+    const status = await rec.getStatusAsync();
+    if (status.isRecording) {
+      await rec.stopAndUnloadAsync();
+    }
     const uri = rec.getURI();
     if (!uri) throw new Error("Could not read the voice note.");
-    return uriToData(uri, guessAudioMime(uri));
+    return voiceUriToDataUri(uri, guessAudioMime(uri));
   }
 
   async function sendVoiceNote(voice: string) {
@@ -299,34 +291,6 @@ export function ChatThreadScreen() {
     if (draft.trim()) await send({ kind: "text", text: draft.trim() });
   }
 
-  async function uriToData(uri: string, fallbackType = "audio/m4a") {
-    const normalized = uri.startsWith("file://") ? uri : uri.startsWith("/") ? `file://${uri}` : uri;
-    try {
-      const base64 = await FileSystemLegacy.readAsStringAsync(normalized, {
-        encoding: FileSystemLegacy.EncodingType.Base64,
-      });
-      if (base64?.trim()) {
-        return `data:${fallbackType};base64,${base64.replace(/\s+/g, "")}`;
-      }
-    } catch {
-      /* fall through to fetch */
-    }
-    const res = await fetch(normalized);
-    const blob = await res.blob();
-    const dataUri = await new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onloadend = () => resolve(String(reader.result || ""));
-      reader.onerror = () => reject(new Error("Could not read file."));
-      reader.readAsDataURL(blob);
-    });
-    if (!dataUri.startsWith("data:")) throw new Error("Could not encode audio.");
-    if (dataUri.startsWith("data:;base64,") || dataUri.startsWith("data:application/octet-stream")) {
-      return dataUri.replace(/^data:[^;]*;base64,/, `data:${fallbackType};base64,`);
-    }
-    if (dataUri.startsWith("data:audio/")) return dataUri.replace(/\s+/g, "");
-    return `data:${fallbackType};base64,${dataUri.split(",")[1] || ""}`;
-  }
-
   async function toggleRecord() {
     try {
       if (recording) {
@@ -335,7 +299,7 @@ export function ChatThreadScreen() {
         await rec.stopAndUnloadAsync();
         const uri = rec.getURI();
         if (!uri) return;
-        setPendingVoice(await uriToData(uri, guessAudioMime(uri)));
+        setPendingVoice(await voiceUriToDataUri(uri, guessAudioMime(uri)));
         setPendingImage(null);
         return;
       }

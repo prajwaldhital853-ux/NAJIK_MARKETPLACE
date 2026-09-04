@@ -1,3 +1,4 @@
+import base64
 import tempfile
 import uuid
 
@@ -227,3 +228,20 @@ class ChatPrivacyTests(TestCase):
         message_rows = [row for row in inbox.data["items"] if row["kind"] == "message"]
         self.assertEqual(len(message_rows), 1)
         self.assertEqual(message_rows[0]["body"], "Can we visit tomorrow morning?")
+
+    def test_voice_message_upload(self):
+        seller_tokens, listing_id, _staff = self.approved_listing()
+        buyer, _ = self.buyer()
+        started = buyer.post("/api/chat/threads/", {"listing_id": listing_id}, format="json")
+        self.assertEqual(started.status_code, 201, started.data)
+        thread_id = started.data["id"]
+        payload = base64.b64encode(b"\x00" * 128).decode()
+        voice = f"data:audio/m4a;base64,{payload}"
+        sent = buyer.post(
+            f"/api/chat/threads/{thread_id}/messages/",
+            {"kind": "voice", "voice": voice, "text": "Voice message"},
+            format="json",
+        )
+        self.assertEqual(sent.status_code, 201, sent.data)
+        self.assertEqual(sent.data["kind"], "voice")
+        self.assertTrue(sent.data["voice_url"])

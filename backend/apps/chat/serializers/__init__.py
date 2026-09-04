@@ -14,12 +14,6 @@ from apps.listings.serializers import file_from_data_uri
 
 ONLINE_WINDOW = timedelta(seconds=45)
 MAX_VOICE_BYTES = 4 * 1024 * 1024
-AUDIO_URI = re.compile(
-    r"^data:(?:audio/(?:mpeg|mp4|m4a|aac|webm|wav|x-m4a|mp3|3gpp|3gp|amr|ogg|opus|x-caf|caf)|application/octet-stream);base64,([A-Za-z0-9+/=\s]+)$",
-    re.I,
-)
-AUDIO_URI_LOOSE = re.compile(r"^data:audio/[^;]+;base64,([A-Za-z0-9+/=\s]+)$", re.I)
-AUDIO_URI_BARE = re.compile(r"^data:(?:application/octet-stream)?;base64,([A-Za-z0-9+/=\s]+)$", re.I)
 
 QUICK_REPLIES = [
     "Is this still available?",
@@ -66,33 +60,25 @@ def listing_photo_url(listing, request):
     return request.build_absolute_uri(f"/api/listings/{listing.id}/photos/{photo.id}/")
 
 
-def file_from_audio_uri(value: str) -> ContentFile:
-    raw_value = (value or "").strip()
-    match = AUDIO_URI.match(raw_value)
-    ext = "m4a"
-    if match:
-        try:
-            raw = base64.b64decode(re.sub(r"\s+", "", match.group(2)), validate=True)
-        except Exception as exc:
-            raise serializers.ValidationError("Invalid audio data.") from exc
-        ext = (match.group(1) or "m4a").lower()
+def _decode_base64_payload(payload: str) -> bytes:
+    cleaned = re.sub(r"\s+", "", payload or "")
+    if not cleaned:
+        raise serializers.ValidationError("Upload an audio voice note.")
+    cleaned += "=" * (-len(cleaned) % 4)
+    try:
+        return base64.b64decode(cleaned, validate=False)
+    except Exception as exc:
+        raise serializers.ValidationError("Invalid audio data.") from exc
+
+
+def _audio_ext_from_header(header: str) -> str:
+    mime = header[5:].split(";", 1)[0].strip().lower()
+    if mime.startswith("audio/"):
+        ext = mime.split("/", 1)[1]
+    elif mime == "application/octet-stream" or not mime:
+        ext = "m4a"
     else:
-        loose = AUDIO_URI_LOOSE.match(raw_value)
-        bare = AUDIO_URI_BARE.match(raw_value)
-        if loose:
-            try:
-                raw = base64.b64decode(re.sub(r"\s+", "", loose.group(1)), validate=True)
-            except Exception as exc:
-                raise serializers.ValidationError("Invalid audio data.") from exc
-        elif bare:
-            try:
-                raw = base64.b64decode(re.sub(r"\s+", "", bare.group(1)), validate=True)
-            except Exception as exc:
-                raise serializers.ValidationError("Invalid audio data.") from exc
-        else:
-            raise serializers.ValidationError("Upload an audio voice note.")
-    if len(raw) > MAX_VOICE_BYTES:
-        raise serializers.ValidationError("Voice notes must be 4 MB or smaller.")
+        ext = "m4a"
     ext = (
         ext.replace("x-m4a", "m4a")
         .replace("mpeg", "mp3")
@@ -103,6 +89,22 @@ def file_from_audio_uri(value: str) -> ContentFile:
     )
     if ext not in {"mp3", "m4a", "aac", "webm", "wav", "3gp", "amr", "ogg", "opus", "caf"}:
         ext = "m4a"
+    return ext
+
+
+def file_from_audio_uri(value: str) -> ContentFile:
+    raw_value = (value or "").strip()
+    if not raw_value.lower().startswith("data:"):
+        raise serializers.ValidationError("Upload an audio voice note.")
+    if "," not in raw_value:
+        raise serializers.ValidationError("Upload an audio voice note.")
+    header, payload = raw_value.split(",", 1)
+    ext = _audio_ext_from_header(header)
+    raw = _decode_base64_payload(payload)
+    if len(raw) < 48:
+        raise serializers.ValidationError("Voice note is empty or too short.")
+    if len(raw) > MAX_VOICE_BYTES:
+        raise serializers.ValidationError("Voice notes must be 4 MB or smaller.")
     return ContentFile(raw, name=f"voice_{uuid.uuid4().hex[:8]}.{ext}")
 
 

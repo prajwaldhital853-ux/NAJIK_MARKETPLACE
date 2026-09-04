@@ -77,11 +77,7 @@ export function SellerPaymentsConfigPanel({
   const [cfg, setCfg] = useState<SellerPaymentConfig | null>(null);
   const [fee, setFee] = useState("10");
   const [feeLabel, setFeeLabel] = useState("Rs. 10");
-  const [tiers, setTiers] = useState<{ min_rupees: string; max_rupees: string; fee_rupees: string }[]>([
-    { min_rupees: "0", max_rupees: "1000", fee_rupees: "20" },
-    { min_rupees: "1001", max_rupees: "20000", fee_rupees: "100" },
-    { min_rupees: "20001", max_rupees: "", fee_rupees: "200" },
-  ]);
+  const [tiers, setTiers] = useState<{ min_rupees: string; max_rupees: string; fee_rupees: string }[]>([]);
   const [minLoad, setMinLoad] = useState("100");
   const [maxLoad, setMaxLoad] = useState("50000");
   const [bankName, setBankName] = useState("");
@@ -105,7 +101,7 @@ export function SellerPaymentsConfigPanel({
                 max_rupees: row.max_rupees == null ? "" : String(row.max_rupees),
                 fee_rupees: String(row.fee_rupees ?? 0),
               }))
-            : [{ min_rupees: "0", max_rupees: "", fee_rupees: String(c.listing_fee_rupees || 0) }],
+            : [],
         );
         setMinLoad(String(c.min_load_rupees));
         setMaxLoad(String(c.max_load_rupees));
@@ -126,11 +122,13 @@ export function SellerPaymentsConfigPanel({
       const payload: Record<string, unknown> = {
         listing_fee_rupees: Number(fee) || 0,
         listing_fee_label: feeLabel.trim(),
-        listing_fee_tiers: tiers.map((row) => ({
-          min_rupees: Number(row.min_rupees) || 0,
-          max_rupees: row.max_rupees.trim() === "" ? null : Number(row.max_rupees) || 0,
-          fee_rupees: Number(row.fee_rupees) || 0,
-        })),
+        listing_fee_tiers: tiers
+          .map((row) => ({
+            min_rupees: Number(row.min_rupees) || 0,
+            max_rupees: row.max_rupees.trim() === "" ? null : Number(row.max_rupees) || 0,
+            fee_rupees: Number(row.fee_rupees) || 0,
+          }))
+          .filter((row) => !(row.min_rupees === 0 && row.max_rupees == null && row.fee_rupees === 0)),
         min_load_rupees: Number(minLoad) || 100,
         max_load_rupees: Number(maxLoad) || 50000,
         bank_name: bankName.trim(),
@@ -181,6 +179,9 @@ export function SellerPaymentsConfigPanel({
             ) : null}
           </div>
           <div className="grid gap-2">
+            {!tiers.length ? (
+              <p className="text-[12px] text-muted">No price bands yet. Click Add band, or only the default listing fee above will apply.</p>
+            ) : null}
             {tiers.map((row, index) => (
               <div key={index} className="grid grid-cols-3 gap-2 md:grid-cols-7">
                 <Field label={index === 0 ? "Min Rs." : ""}>

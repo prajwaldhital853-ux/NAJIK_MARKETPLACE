@@ -59,6 +59,9 @@ def normalize_listing_fee_tiers(raw) -> list[dict]:
             continue
         rows.append({"min_rupees": min_rupees, "max_rupees": max_rupees, "fee_rupees": fee_rupees})
     rows.sort(key=lambda row: (row["min_rupees"], 10**12 if row["max_rupees"] is None else row["max_rupees"]))
+    # Ignore admin UI placeholder: 0 and above with Rs. 0 fee (not a real band).
+    if len(rows) == 1 and rows[0]["min_rupees"] == 0 and rows[0]["max_rupees"] is None and rows[0]["fee_rupees"] == 0:
+        return []
     return rows
 
 

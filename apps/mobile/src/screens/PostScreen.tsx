@@ -30,7 +30,7 @@ import {
 import { canPostServices, isProvider } from "../demo";
 import { createListing, fetchMyListings, updateListing } from "../listingsApi";
 import { fetchSellerPaymentsMe, type SellerPaymentConfig } from "../paymentsApi";
-import { formatFeeBand, quoteListingFeeRupees } from "../listingFee";
+import { quoteListingFeeRupees } from "../listingFee";
 import { openSellerPage } from "../navigation/browse";
 import { colors, shadow } from "../theme";
 
@@ -119,43 +119,40 @@ export function PostScreen() {
   const [payConfig, setPayConfig] = useState<SellerPaymentConfig | null>(null);
   const [walletPaisa, setWalletPaisa] = useState(0);
   const [walletLabel, setWalletLabel] = useState("Rs. 0");
-  const [quotedFeeRupees, setQuotedFeeRupees] = useState<number | null>(null);
 
   const listingPriceRupees = Number(String(price).replace(/\D/g, "") || 0);
-  const listingFeeRupees =
-    quotedFeeRupees != null ? quotedFeeRupees : quoteListingFeeRupees(listingPriceRupees, payConfig);
-  const listingFeeLabel = listingFeeRupees > 0 ? `Rs. ${listingFeeRupees.toLocaleString("en-IN")}` : "Free";
+  const listingFeeRupees = quoteListingFeeRupees(listingPriceRupees, payConfig);
+  const listingFeeLabel =
+    !payConfig || payConfig.is_active === false
+      ? "—"
+      : listingPriceRupees <= 0
+        ? "Set ad price"
+        : listingFeeRupees > 0
+          ? `Rs. ${listingFeeRupees.toLocaleString("en-IN")}`
+          : "Free";
   const listingFeePaisa = listingFeeRupees * 100;
   const walletShort = isProvider(user) && listingFeeRupees > 0 && walletPaisa < listingFeePaisa;
 
-  const loadPayments = useCallback(
-    (priceHint?: number) => {
-      if (!isProvider(user)) return;
-      void fetchSellerPaymentsMe(priceHint)
-        .then((pay) => {
-          setPayConfig(pay.config);
-          setWalletPaisa(pay.balance_paisa || 0);
-          setWalletLabel(pay.balance_label || "Rs. 0");
-          if (typeof pay.quoted_listing_fee_rupees === "number") {
-            setQuotedFeeRupees(pay.quoted_listing_fee_rupees);
-          } else {
-            setQuotedFeeRupees(quoteListingFeeRupees(priceHint ?? listingPriceRupees, pay.config));
-          }
-        })
-        .catch(() => {});
-    },
-    [user?.id, listingPriceRupees],
-  );
+  const loadPayments = useCallback(() => {
+    if (!isProvider(user)) return;
+    void fetchSellerPaymentsMe(listingPriceRupees)
+      .then((pay) => {
+        setPayConfig(pay.config);
+        setWalletPaisa(pay.balance_paisa || 0);
+        setWalletLabel(pay.balance_label || "Rs. 0");
+      })
+      .catch(() => {});
+  }, [user?.id, listingPriceRupees]);
 
   useFocusEffect(
     useCallback(() => {
-      loadPayments(listingPriceRupees);
-    }, [loadPayments, listingPriceRupees]),
+      loadPayments();
+    }, [loadPayments]),
   );
 
   useEffect(() => {
     if (!isProvider(user)) return;
-    const timer = setTimeout(() => loadPayments(listingPriceRupees), 300);
+    const timer = setTimeout(() => loadPayments(), 300);
     return () => clearTimeout(timer);
   }, [listingPriceRupees, loadPayments, user?.id]);
 
@@ -912,14 +909,9 @@ export function PostScreen() {
                       <Text style={{ color: "#fff", fontWeight: "800" }}>Add balance</Text>
                     </PressScale>
                   </>
-                ) : (
+                ) : listingPriceRupees > 0 ? (
                   <Text style={{ color: "#166534", fontSize: 12, marginTop: 8 }}>
                     You have enough balance to publish at this price.
-                  </Text>
-                )}
-                {(payConfig?.listing_fee_tiers || []).length ? (
-                  <Text style={{ color: walletShort ? "#991B1B" : "#166534", fontSize: 11, marginTop: 8, lineHeight: 16 }}>
-                    {(payConfig?.listing_fee_tiers || []).map((row) => formatFeeBand(row)).join("\n")}
                   </Text>
                 ) : null}
               </View>
@@ -1020,8 +1012,8 @@ export function PostScreen() {
                 <Text style={{ fontWeight: "800", color: GREEN, fontSize: 13 }}>Publish charge for this listing</Text>
                 <Text style={{ color: "#14532D", fontSize: 13, marginTop: 4, lineHeight: 18 }}>
                   {listingPriceRupees > 0
-                    ? `Ad price Rs. ${listingPriceRupees.toLocaleString("en-IN")} → listing fee ${listingFeeLabel}. Deducted from your loaded wallet when you publish.`
-                    : `No ad price entered. Default listing fee ${payConfig?.listing_fee_label || listingFeeLabel} applies if admin has not set a matching band.`}
+                    ? `Ad price Rs. ${listingPriceRupees.toLocaleString("en-IN")} → listing fee ${listingFeeLabel}. Deducted from your wallet when you publish.`
+                    : "Enter an ad price on the Pricing step to see the publish fee."}
                 </Text>
                 <Text style={{ color: "#166534", fontSize: 12, marginTop: 6 }}>Wallet: {walletLabel}</Text>
               </View>

@@ -128,30 +128,29 @@ export function SavedScreen() {
           </View>
         </View>
 
-        <View
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={{ paddingHorizontal: 4, minWidth: "100%" }}
           style={{
-            flexDirection: "row",
             marginTop: 16,
             backgroundColor: "#fff",
             borderWidth: 1,
             borderColor: "#E6E8EC",
             borderRadius: 16,
-            overflow: "hidden",
-            paddingHorizontal: 4,
           }}
         >
           {tabs.map((item) => {
             const on = item.key === tab;
             return (
-              <PressScale key={item.key} onPress={() => setTab(item.key)} style={{ flex: 1, alignItems: "center", paddingTop: 13 }}>
+              <PressScale
+                key={item.key}
+                onPress={() => setTab(item.key)}
+                style={{ alignItems: "center", paddingTop: 13, paddingHorizontal: 12, minWidth: 88 }}
+              >
                 <View style={{ flexDirection: "row", alignItems: "center", gap: 5, paddingBottom: 10 }}>
-                  <Ionicons name={item.icon} size={17} color={on ? GREEN : "#111827"} />
-                  <Text
-                    style={{ fontWeight: "700", fontSize: 12, color: on ? GREEN : "#111827" }}
-                    numberOfLines={1}
-                    adjustsFontSizeToFit
-                    minimumFontScale={0.7}
-                  >
+                  <Ionicons name={item.icon} size={16} color={on ? GREEN : "#111827"} />
+                  <Text style={{ fontWeight: "700", fontSize: 12, color: on ? GREEN : "#111827" }} numberOfLines={1}>
                     {item.key}
                   </Text>
                 </View>
@@ -159,7 +158,7 @@ export function SavedScreen() {
               </PressScale>
             );
           })}
-        </View>
+        </ScrollView>
       </View>
 
       <ScrollView refreshControl={refreshControl} contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 36 }} showsVerticalScrollIndicator={false}>

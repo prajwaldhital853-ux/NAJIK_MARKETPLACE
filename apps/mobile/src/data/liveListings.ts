@@ -106,6 +106,7 @@ export function listingToCatalog(row: ApiListing): CatalogItem {
     verified: Boolean(row.seller_verified),
     available: Boolean(extras.availability),
     sold: extras.sold === true || String(extras.sold || "") === "true",
+    soldCount: Number(extras.sold_count) > 0 ? Math.floor(Number(extras.sold_count)) : undefined,
     urgent: Boolean(row.is_urgent),
     urgentEndsAt: row.urgent_ends_at || undefined,
     apiCategory: row.category,

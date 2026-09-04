@@ -304,6 +304,19 @@ export async function setListingSold(id: string, sold: boolean) {
   return row;
 }
 
+export async function setListingSoldCount(id: string, soldCount: number | null) {
+  const row = await withAppAuth((token) =>
+    api<ApiListing>(`/api/listings/me/${id}/sold/`, {
+      method: "POST",
+      token,
+      body: JSON.stringify({ sold_count: soldCount }),
+    }),
+  );
+  emitListingsChanged();
+  clearHomeCache();
+  return row;
+}
+
 export async function fetchSavedListings() {
   return withAppAuth((token) => api<ApiListing[]>("/api/listings/saved/", { token }));
 }

@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, Alert, Image, Modal, ScrollView, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Alert, Image, Modal, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { AppHeader } from "../components/AppHeader";
 import { AuthImage } from "../components/AuthImage";
 import { SalePrice } from "../components/ClassifiedCard";
@@ -10,7 +10,7 @@ import { PressScale } from "../components/PressScale";
 import { useAuth } from "../context/AuthContext";
 import { canPostServices, isPendingProvider } from "../demo";
 import { discountedAmount, listingDiscountPercent, uniqueLabels } from "../data/liveListings";
-import { fetchMyListings, deleteMyListing, setListingSold, type ApiListing } from "../listingsApi";
+import { fetchMyListings, deleteMyListing, setListingSold, setListingSoldCount, type ApiListing } from "../listingsApi";
 import { subscribeListingsChanged } from "../listingsRefresh";
 import { openListing, openSellerPage } from "../navigation/browse";
 import { colors, shadow } from "../theme";
@@ -554,6 +554,10 @@ function ListingManageCard({
   const pending = item.status === "pending" || item.status === "draft";
   const rejected = item.status === "rejected";
   const sold = isSold(item);
+  const soldCount = extraNum(item, "sold_count");
+  const [soldCountOpen, setSoldCountOpen] = useState(false);
+  const [soldCountInput, setSoldCountInput] = useState(soldCount > 0 ? String(soldCount) : "");
+  const [soldCountBusy, setSoldCountBusy] = useState(false);
   const status = statusLabel(item);
   const statusColor = sold ? "#DC2626" : pending ? "#F59E0B" : rejected ? colors.red : GREEN;
   const deal = dealTypeOf(item);
@@ -582,6 +586,7 @@ function ListingManageCard({
 
   const photoUrl = item.photos[0]?.url;
   return (
+    <>
     <PressScale
       onPress={onOpen}
       style={{ backgroundColor: "#fff", borderRadius: 16, padding: 10, marginBottom: 12, flexDirection: compact || !photoUrl ? "column" : "row", ...shadow.card }}
@@ -684,6 +689,9 @@ function ListingManageCard({
               {sold ? "Sold" : deal}
             </Text>
           </View>
+          {soldCount > 0 ? (
+            <Text style={{ color: "#6B7280", fontSize: 10, fontWeight: "700" }}>{soldCount.toLocaleString("en-IN")} sold</Text>
+          ) : null}
         </View>
         {metaItems.length ? (
           <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 7, flexWrap: "wrap" }}>
@@ -707,6 +715,13 @@ function ListingManageCard({
               onPress={() =>
                 Alert.alert(item.title, undefined, [
                   { text: isSold(item) ? "Mark as active" : "Mark as sold", onPress: onSold },
+                  {
+                    text: "Add sold number",
+                    onPress: () => {
+                      setSoldCountInput(soldCount > 0 ? String(soldCount) : "");
+                      setSoldCountOpen(true);
+                    },
+                  },
                   { text: "Promote", onPress: onPromote },
                   { text: "Delete listing", style: "destructive", onPress: onDelete },
                   { text: "Cancel", style: "cancel" },
@@ -719,6 +734,69 @@ function ListingManageCard({
         </View>
       </View>
     </PressScale>
+    <Modal visible={soldCountOpen} transparent animationType="fade" onRequestClose={() => setSoldCountOpen(false)}>
+      <Pressable
+        style={{ flex: 1, backgroundColor: "rgba(15,23,42,0.4)", justifyContent: "center", padding: 24 }}
+        onPress={() => setSoldCountOpen(false)}
+      >
+        <Pressable
+          onPress={() => undefined}
+          style={{ backgroundColor: "#fff", borderRadius: 16, padding: 16 }}
+        >
+          <Text style={{ fontWeight: "800", fontSize: 16, color: "#111827" }}>Sold number</Text>
+          <Text style={{ color: "#6B7280", fontSize: 12, marginTop: 4 }}>
+            Shown next to reviews, like “100 sold”. Leave blank to hide it.
+          </Text>
+          <TextInput
+            value={soldCountInput}
+            onChangeText={(v) => setSoldCountInput(v.replace(/[^\d]/g, ""))}
+            keyboardType="number-pad"
+            placeholder="e.g. 50"
+            placeholderTextColor="#9AA0A6"
+            style={{
+              marginTop: 12,
+              borderWidth: 1,
+              borderColor: "#E5E7EB",
+              borderRadius: 10,
+              paddingHorizontal: 12,
+              height: 44,
+              fontWeight: "700",
+              color: "#111827",
+            }}
+          />
+          <View style={{ flexDirection: "row", gap: 8, marginTop: 14 }}>
+            <PressScale
+              onPress={() => setSoldCountOpen(false)}
+              style={{ flex: 1, borderWidth: 1, borderColor: "#E5E7EB", borderRadius: 10, height: 42, alignItems: "center", justifyContent: "center" }}
+            >
+              <Text style={{ fontWeight: "800", color: "#374151" }}>Cancel</Text>
+            </PressScale>
+            <PressScale
+              onPress={() => {
+                const n = soldCountInput.trim() ? Number(soldCountInput) : 0;
+                setSoldCountBusy(true);
+                void setListingSoldCount(item.id, n > 0 ? n : null)
+                  .then(() => setSoldCountOpen(false))
+                  .catch((err) => Alert.alert("Update failed", err instanceof Error ? err.message : "Could not save sold number."))
+                  .finally(() => setSoldCountBusy(false));
+              }}
+              style={{
+                flex: 1,
+                backgroundColor: GREEN,
+                borderRadius: 10,
+                height: 42,
+                alignItems: "center",
+                justifyContent: "center",
+                opacity: soldCountBusy ? 0.6 : 1,
+              }}
+            >
+              <Text style={{ fontWeight: "800", color: "#fff" }}>{soldCountBusy ? "Saving…" : "Save"}</Text>
+            </PressScale>
+          </View>
+        </Pressable>
+      </Pressable>
+    </Modal>
+    </>
   );
 }
 

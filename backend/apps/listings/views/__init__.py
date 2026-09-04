@@ -480,9 +480,26 @@ class ListingSoldView(APIView):
 
     def post(self, request, pk):
         listing = get_object_or_404(Listing, pk=pk, owner=request.user)
-        sold = bool(request.data.get("sold"))
         extras = dict(listing.extras or {})
-        extras["sold"] = sold
+        sold = extras.get("sold") is True or str(extras.get("sold") or "").lower() in {"true", "1", "yes"}
+
+        if "sold_count" in request.data:
+            raw = request.data.get("sold_count")
+            if raw in (None, "", "null"):
+                extras.pop("sold_count", None)
+            else:
+                try:
+                    count = int(str(raw).replace(",", "").strip())
+                except (TypeError, ValueError):
+                    return Response({"sold_count": ["Enter a whole number."]}, status=status.HTTP_400_BAD_REQUEST)
+                if count <= 0:
+                    extras.pop("sold_count", None)
+                else:
+                    extras["sold_count"] = min(count, 999_999)
+
+        if "sold" in request.data:
+            sold = bool(request.data.get("sold"))
+            extras["sold"] = sold
         listing.extras = extras
         if sold:
             listing.is_urgent = False

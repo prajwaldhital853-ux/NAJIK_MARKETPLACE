@@ -22,7 +22,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AppHeader } from "../components/AppHeader";
 import { AuthImage } from "../components/AuthImage";
 import { Avatar } from "../components/Avatar";
-import { classifiedMore, ConditionPill, LINE, ListingGrid, listingTags, postedLabel, SalePrice, splitPrice } from "../components/ClassifiedCard";
+import { classifiedMore, ConditionPill, LINE, ListingGrid, listingTags, postedLabel, SalePrice, SoldCountLabel, splitPrice } from "../components/ClassifiedCard";
 import { OsmWebMap } from "../components/OsmWebMap";
 import { KeyboardScreen, useKeyboardScroll } from "../components/KeyboardScreen";
 import { PressScale } from "../components/PressScale";
@@ -458,6 +458,13 @@ function ListingBody({
           <Text style={{ color: "#6B7280", fontSize: 12, marginLeft: 6 }}>
             {rich.seller.rating} ({rich.reviewCount})
           </Text>
+          <SoldCountLabel
+            count={
+              Number(live?.extras?.sold_count) > 0
+                ? Math.floor(Number(live?.extras?.sold_count))
+                : item.soldCount
+            }
+          />
         </View>
 
         <View style={{ flexDirection: "row", gap: 10, marginTop: 14 }}>

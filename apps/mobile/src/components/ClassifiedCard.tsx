@@ -101,6 +101,18 @@ export function StarsCount({ rating, count, compact }: { rating: number; count: 
   );
 }
 
+export function SoldCountLabel({ count, compact }: { count?: number; compact?: boolean }) {
+  if (!count || count <= 0) return null;
+  return (
+    <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+      <View style={{ width: 1, height: compact ? 10 : 12, backgroundColor: "#D1D5DB" }} />
+      <Text style={{ color: "#6B7280", fontSize: compact ? 10 : 12, fontWeight: "600" }}>
+        {count.toLocaleString("en-IN")} sold
+      </Text>
+    </View>
+  );
+}
+
 export function SalePrice({
   amount,
   unit,
@@ -297,6 +309,7 @@ export function ListingListRow({ item }: { item: CatalogItem }) {
         </Text>
         <View style={{ flexDirection: "row", alignItems: "center", marginTop: 6, gap: 8 }}>
           <StarsCount rating={item.rating || 0} count={item.reviewCount || 0} compact />
+          <SoldCountLabel count={item.soldCount} compact />
           {item.verified ? <Text style={{ fontSize: 11, color: GREEN, fontWeight: "800" }}>Verified</Text> : null}
           <View style={{ flex: 1 }} />
           <BookmarkBtn id={item.id} />
@@ -397,6 +410,7 @@ function ListingAdCard({
                   </Text>
                 </>
               )}
+              <SoldCountLabel count={item.soldCount} compact={compact} />
               {item.verified ? <Text style={{ color: GREEN, fontSize: compact ? 10 : 12, fontWeight: "800", marginLeft: 4 }}>Verified</Text> : null}
             </View>
           </View>

@@ -31,6 +31,7 @@ export type CatalogItem = {
   verified?: boolean;
   available?: boolean;
   sold?: boolean;
+  soldCount?: number;
   urgent?: boolean;
   urgentEndsAt?: string;
   distanceKm?: number;

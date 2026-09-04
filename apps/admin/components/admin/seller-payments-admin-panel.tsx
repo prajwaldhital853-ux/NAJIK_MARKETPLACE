@@ -96,6 +96,7 @@ export function SellerPaymentsConfigPanel({
   const [instructions, setInstructions] = useState("");
   const [active, setActive] = useState(true);
   const [busy, setBusy] = useState(false);
+  const isBuyer = audience === "user";
 
   useEffect(() => {
     void getSellerPaymentConfig(audience)
@@ -131,13 +132,6 @@ export function SellerPaymentsConfigPanel({
       const payload: Record<string, unknown> = {
         listing_fee_rupees: Number(fee) || 0,
         listing_fee_label: feeLabel.trim(),
-        listing_fee_tiers: tiers
-          .map((row) => ({
-            min_rupees: Number(row.min_rupees) || 0,
-            max_rupees: parseBandMaxRupees(row.max_rupees),
-            fee_rupees: Number(row.fee_rupees) || 0,
-          }))
-          .filter((row) => !(row.min_rupees === 0 && row.max_rupees == null && row.fee_rupees === 0)),
         min_load_rupees: Number(minLoad) || 100,
         max_load_rupees: Number(maxLoad) || 50000,
         bank_name: bankName.trim(),
@@ -147,10 +141,19 @@ export function SellerPaymentsConfigPanel({
         payment_instructions: instructions.trim(),
         is_active: active,
       };
+      if (!isBuyer) {
+        payload.listing_fee_tiers = tiers
+          .map((row) => ({
+            min_rupees: Number(row.min_rupees) || 0,
+            max_rupees: parseBandMaxRupees(row.max_rupees),
+            fee_rupees: Number(row.fee_rupees) || 0,
+          }))
+          .filter((row) => !(row.min_rupees === 0 && row.max_rupees == null && row.fee_rupees === 0));
+      }
       if (qrFile) payload.qr_code_uri = await fileToDataUri(qrFile);
       const next = await patchSellerPaymentConfig(payload, audience);
       setCfg(next);
-      toast("Seller payment settings saved.");
+      toast(isBuyer ? "Buyer payment settings saved." : "Seller payment settings saved.");
       onChanged?.();
     } catch (err) {
       toastAdminError(toast, err, "Could not save settings.");
@@ -161,18 +164,21 @@ export function SellerPaymentsConfigPanel({
 
   return (
     <section className={`${embedded ? "mt-0" : "mt-4"} rounded border border-line bg-card p-4`}>
-      <h2 className="text-[13px] font-semibold text-ink">Seller listing payments</h2>
+      <h2 className="text-[13px] font-semibold text-ink">{isBuyer ? "Buyer wallet payments" : "Seller listing payments"}</h2>
       <p className="mt-1 text-[12px] text-muted">
-        Listing post fee is based on the seller&apos;s ad price. Add bands below (example: Rs. 0–1,000 → Rs. 20; Rs. 1,001–20,000 → Rs. 100). Leave max blank for “and above”. Default fee is used only if no band matches.
+        {isBuyer
+          ? "Set the buyer wallet fee and bank details for offline top-ups. Price bands apply to seller listings only."
+          : "Listing post fee is based on the seller's ad price. Add bands below (example: Rs. 0–1,000 → Rs. 20; Rs. 1,001–20,000 → Rs. 100). Leave max blank for “and above”. Default fee is used only if no band matches."}
       </p>
       {readOnly ? <div className="mt-3"><ReadOnlyBanner label="Seller Payments" /></div> : null}
       <div className="mt-3 grid gap-3 md:grid-cols-2">
-        <Field label="Default listing fee (Rs.)">
+        <Field label={isBuyer ? "Buyer wallet fee (Rs.)" : "Default listing fee (Rs.)"}>
           <input className={inputClass} value={fee} onChange={(e) => setFee(e.target.value)} disabled={readOnly} />
         </Field>
-        <Field label="Default fee label">
+        <Field label={isBuyer ? "Fee label" : "Default fee label"}>
           <input className={inputClass} value={feeLabel} onChange={(e) => setFeeLabel(e.target.value)} disabled={readOnly} />
         </Field>
+        {!isBuyer ? (
         <div className="md:col-span-2 rounded-lg border border-line p-3">
           <div className="mb-2 flex items-center justify-between gap-2">
             <p className="text-[12px] font-semibold text-ink">Price bands (ad price → post fee)</p>
@@ -237,6 +243,7 @@ export function SellerPaymentsConfigPanel({
             ))}
           </div>
         </div>
+        ) : null}
         <Field label="Min load (Rs.)">
           <input className={inputClass} value={minLoad} onChange={(e) => setMinLoad(e.target.value)} disabled={readOnly} />
         </Field>

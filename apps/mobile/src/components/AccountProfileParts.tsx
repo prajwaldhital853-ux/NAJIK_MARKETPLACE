@@ -103,3 +103,64 @@ export function AccountQuickRow({ children }: { children: ReactNode }) {
 export function AccountQuickDivider() {
   return <View style={{ width: 1, backgroundColor: "#EEF0F3" }} />;
 }
+
+export function SellerServicesHeader({ onViewAll }: { onViewAll?: () => void }) {
+  return (
+    <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+      <Text style={{ fontWeight: "800", fontSize: 16, color: "#111827" }}>Manage Your Services</Text>
+      {onViewAll ? (
+        <PressScale onPress={onViewAll}>
+          <Text style={{ color: ACCOUNT_GREEN, fontWeight: "700", fontSize: 13 }}>View all</Text>
+        </PressScale>
+      ) : null}
+    </View>
+  );
+}
+
+export function SellerServiceCard({
+  icon,
+  label,
+  count,
+  onPress,
+  iconColor = ACCOUNT_GREEN,
+  iconBg = ACCOUNT_ICON_BG,
+}: {
+  icon: Ion;
+  label: string;
+  count: number | string;
+  onPress: () => void;
+  iconColor?: string;
+  iconBg?: string;
+}) {
+  return (
+    <PressScale
+      onPress={onPress}
+      style={{
+        flex: 1,
+        backgroundColor: "#fff",
+        borderRadius: 16,
+        paddingVertical: 14,
+        paddingHorizontal: 6,
+        alignItems: "center",
+        ...shadow.card,
+      }}
+    >
+      <View
+        style={{
+          width: 42,
+          height: 42,
+          borderRadius: 12,
+          backgroundColor: iconBg,
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <Ionicons name={icon} size={20} color={iconColor} />
+      </View>
+      <Text style={{ marginTop: 8, fontWeight: "700", fontSize: 11, color: "#111827", textAlign: "center" }} numberOfLines={2}>
+        {label}
+      </Text>
+      <Text style={{ marginTop: 5, fontWeight: "800", fontSize: 16, color: ACCOUNT_GREEN }}>{count}</Text>
+    </PressScale>
+  );
+}

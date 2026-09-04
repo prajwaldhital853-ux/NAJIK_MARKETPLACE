@@ -11,6 +11,7 @@ import { lookupPlace, useBuyerLocation } from "../context/BuyerLocationContext";
 import { searchPlaces } from "../geo";
 import { colors, shadow } from "../theme";
 import { KeyboardScreen, useKeyboardScroll } from "./KeyboardScreen";
+import { CartButton } from "./CartButton";
 import { NajikLogo } from "./NajikLogo";
 import { PressScale } from "./PressScale";
 
@@ -37,6 +38,7 @@ type Props = {
   onDraft?: () => void;
   bellCount?: number;
   pinColor?: string;
+  showCart?: boolean;
 };
 
 export function AppHeader({
@@ -48,6 +50,7 @@ export function AppHeader({
   onDraft,
   bellCount,
   pinColor = "#111827",
+  showCart,
 }: Props) {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
@@ -56,6 +59,7 @@ export function AppHeader({
   const [picker, setPicker] = useState(false);
   const pro = showPro ?? isProvider(user);
   const pending = isPendingProvider(user);
+  const showCartBtn = showCart ?? !isProvider(user);
   const label = place.source === "all" ? "All Nepal" : location || place.label || "All Nepal";
 
   function openDrawer() {
@@ -98,6 +102,7 @@ export function AppHeader({
         ) : null}
 
         <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+          {showCartBtn ? <CartButton /> : null}
           {right === "draft" ? (
             <PressScale onPress={onDraft} style={{ flexDirection: "row", alignItems: "center", gap: 5, borderWidth: 1, borderColor: colors.green, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10 }}>
               <Ionicons name="save-outline" size={14} color={colors.green} />

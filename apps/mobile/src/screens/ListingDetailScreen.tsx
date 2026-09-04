@@ -27,7 +27,11 @@ import { OsmWebMap } from "../components/OsmWebMap";
 import { KeyboardScreen, useKeyboardScroll } from "../components/KeyboardScreen";
 import { PressScale } from "../components/PressScale";
 import { ReportComplaintModal } from "../components/ReportComplaintModal";
+import { BookingFormModal } from "../components/BookingFormModal";
+import { FormToast } from "../components/FormToast";
+import { ListingDetailFooter, listingDetailFooterHeight } from "../components/ListingDetailFooter";
 import { useAuth } from "../context/AuthContext";
+import { useCart } from "../context/CartContext";
 import { isProvider } from "../demo";
 import { infoLinkDocId } from "../legal/types";
 import { useInbox } from "../context/InboxContext";
@@ -74,6 +78,11 @@ export function ListingDetailScreen() {
   }
 
   const displayItem = item?.id === id ? item : cached;
+  const insets = useSafeAreaInsets();
+  const { has: inCart, add: addToCart } = useCart();
+  const [bookOpen, setBookOpen] = useState(false);
+  const [cartToast, setCartToast] = useState("");
+  const [bookingToast, setBookingToast] = useState("");
 
   useFocusEffect(
     useCallback(() => {
@@ -135,13 +144,43 @@ export function ListingDetailScreen() {
   }
 
   const isOwner = Boolean(live && user?.id && live.owner_id === user.id) || (manage && isProvider(user));
+  const showBuyerFooter = !isOwner && Boolean(displayItem);
+  const footerHeight = showBuyerFooter ? listingDetailFooterHeight(insets.bottom) : 0;
+
+  function handleBookNow() {
+    if (!user) {
+      Alert.alert("Sign in", "Sign in to book a visit for this listing.");
+      return;
+    }
+    if (!/^[0-9a-f-]{36}$/i.test(id)) {
+      Alert.alert("Booking", "Booking is available on live listings.");
+      return;
+    }
+    setBookOpen(true);
+  }
+
+  function handleAddToCart() {
+    if (!user) {
+      Alert.alert("Sign in", "Sign in to add listings to your cart.");
+      return;
+    }
+    if (!displayItem) return;
+    if (inCart(id)) {
+      setCartToast("Already in your cart.");
+      setTimeout(() => setCartToast(""), 2800);
+      return;
+    }
+    const added = addToCart(displayItem);
+    setCartToast(added ? "Added to cart." : "Could not add to cart.");
+    setTimeout(() => setCartToast(""), 2800);
+  }
 
   return (
     <View style={{ flex: 1, backgroundColor: "#fff" }}>
-      <AppHeader onClose={() => navigation.goBack()} showPro={isOwner} />
+      <AppHeader onClose={() => navigation.goBack()} showPro={isOwner} showCart={!isOwner} />
       <KeyboardScreen
         adjustKeyboardInsets={true}
-        contentStyle={{ paddingBottom: 28 }}
+        contentStyle={{ paddingBottom: footerHeight + 20 }}
         style={{ backgroundColor: "#fff" }}
         onRefresh={async () => {
           if (!/^[0-9a-f-]{36}$/i.test(id)) {
@@ -167,6 +206,27 @@ export function ListingDetailScreen() {
           onSaved={setLive}
         />
       </KeyboardScreen>
+
+      {showBuyerFooter ? (
+        <ListingDetailFooter inCart={inCart(id)} onBookNow={handleBookNow} onAddToCart={handleAddToCart} />
+      ) : null}
+
+      {showBuyerFooter && /^[0-9a-f-]{36}$/i.test(id) ? (
+        <BookingFormModal
+          visible={bookOpen}
+          onClose={() => setBookOpen(false)}
+          listingId={id}
+          listingTitle={displayItem.title}
+          listingLocation={displayItem.location}
+          onSent={() => {
+            setBookingToast("Booking sent.");
+            setTimeout(() => setBookingToast(""), 3200);
+          }}
+        />
+      ) : null}
+
+      {cartToast ? <FormToast message={cartToast} variant="success" /> : null}
+      {bookingToast ? <FormToast message={bookingToast} variant="success" /> : null}
     </View>
   );
 }

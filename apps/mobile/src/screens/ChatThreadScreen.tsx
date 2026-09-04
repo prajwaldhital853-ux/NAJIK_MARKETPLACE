@@ -17,13 +17,12 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { Audio } from "expo-av";
+import { Audio, InterruptionModeAndroid, InterruptionModeIOS } from "expo-av";
 import * as FileSystemLegacy from "expo-file-system/legacy";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { friendlyError } from "../api";
 import { AuthImage } from "../components/AuthImage";
 import { PressScale } from "../components/PressScale";
-import { BookingFormModal } from "../components/BookingFormModal";
 import { ReportComplaintModal } from "../components/ReportComplaintModal";
 import {
   blockChatThread,
@@ -41,13 +40,47 @@ import { isProvider } from "../demo";
 import { bookingAction } from "../bookingsApi";
 import { mapsDirectionsUrl, requestUserPoint, reverseGeocode, searchPlaces, type PlaceHit } from "../geo";
 import { subscribeAppRefresh } from "../listingsRefresh";
-import { openBookings, openListing, openSellerPage, openSellerProfile } from "../navigation/browse";
+import { openBookings, openListing, openSellerPage, openSellerProfile, openVoiceCall } from "../navigation/browse";
 import { choosePhoto } from "../pickPhoto";
 import { colors } from "../theme";
 
 const GREEN = colors.greenDeep;
 const BG = colors.bg;
 let lastKeyboardCover = 280;
+
+const VOICE_RECORD_OPTIONS: Audio.RecordingOptions = {
+  isMeteringEnabled: false,
+  android: {
+    extension: ".m4a",
+    outputFormat: Audio.AndroidOutputFormat.MPEG_4,
+    audioEncoder: Audio.AndroidAudioEncoder.AAC,
+    sampleRate: 44100,
+    numberOfChannels: 1,
+    bitRate: 96000,
+  },
+  ios: {
+    extension: ".m4a",
+    audioQuality: Audio.IOSAudioQuality.MEDIUM,
+    sampleRate: 44100,
+    numberOfChannels: 1,
+    bitRate: 96000,
+    linearPCMBitDepth: 16,
+    linearPCMIsBigEndian: false,
+    linearPCMIsFloat: false,
+  },
+  web: Audio.RecordingOptionsPresets.HIGH_QUALITY.web,
+};
+
+function guessAudioMime(uri: string) {
+  const lower = uri.toLowerCase();
+  if (lower.endsWith(".caf")) return "audio/x-caf";
+  if (lower.endsWith(".3gp") || lower.endsWith(".3gpp")) return "audio/3gpp";
+  if (lower.endsWith(".mp3")) return "audio/mpeg";
+  if (lower.endsWith(".wav")) return "audio/wav";
+  if (lower.endsWith(".webm")) return "audio/webm";
+  if (lower.endsWith(".mp4")) return "audio/mp4";
+  return "audio/m4a";
+}
 
 function lastSeenLabel(iso?: string | null, online?: boolean) {
   if (online) return "Online";
@@ -75,7 +108,6 @@ export function ChatThreadScreen() {
   const [loading, setLoading] = useState(true);
   const [draft, setDraft] = useState("");
   const [placeOpen, setPlaceOpen] = useState(false);
-  const [bookOpen, setBookOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
   const [placeQ, setPlaceQ] = useState("");
   const [hits, setHits] = useState<PlaceHit[]>([]);
@@ -190,13 +222,42 @@ export function ChatThreadScreen() {
 
   async function callListing() {
     const number = thread?.contact_phone;
-    if (!number) {
-      Alert.alert("Call", "This listing has no published phone number.");
-      return;
-    }
-    const url = `tel:${number}`;
-    if (await Linking.canOpenURL(url)) await Linking.openURL(url);
-    else Alert.alert("Call", number);
+    Alert.alert("Call", "Choose how you want to call.", [
+      {
+        text: "Call offline",
+        onPress: () => {
+          if (!number) {
+            Alert.alert("Call", "This listing has no published phone number.");
+            return;
+          }
+          const url = `tel:${number.replace(/\s/g, "")}`;
+          void Linking.openURL(url).catch(() => Alert.alert("Call", number));
+        },
+      },
+      {
+        text: "Call online",
+        onPress: () => {
+          if (!thread?.id) return;
+          void send({
+            kind: "text",
+            text: "Started an online voice call. Tap Call → Call online to join.",
+          }).catch(() => undefined);
+          openVoiceCall(navigation, thread.id, thread.other.full_name || "Contact");
+        },
+      },
+      { text: "Cancel", style: "cancel" },
+    ]);
+  }
+
+  async function finishRecording(rec: Audio.Recording) {
+    await rec.stopAndUnloadAsync();
+    const uri = rec.getURI();
+    if (!uri) throw new Error("Could not read the voice note.");
+    return uriToData(uri, guessAudioMime(uri));
+  }
+
+  async function sendVoiceNote(voice: string) {
+    await send({ kind: "voice", voice, text: "Voice message" });
   }
 
   async function shareGps() {
@@ -216,8 +277,19 @@ export function ChatThreadScreen() {
   }
 
   async function sendComposer() {
+    if (recording) {
+      const rec = recording;
+      setRecording(null);
+      try {
+        const voice = await finishRecording(rec);
+        await sendVoiceNote(voice);
+      } catch (err) {
+        Alert.alert("Voice", friendlyError(err, "Could not send voice note."));
+      }
+      return;
+    }
     if (pendingVoice) {
-      await send({ kind: "voice", voice: pendingVoice, text: "Voice message" });
+      await sendVoiceNote(pendingVoice);
       return;
     }
     if (pendingImage) {
@@ -228,17 +300,18 @@ export function ChatThreadScreen() {
   }
 
   async function uriToData(uri: string, fallbackType = "audio/m4a") {
+    const normalized = uri.startsWith("file://") ? uri : uri.startsWith("/") ? `file://${uri}` : uri;
     try {
-      const base64 = await FileSystemLegacy.readAsStringAsync(uri, {
+      const base64 = await FileSystemLegacy.readAsStringAsync(normalized, {
         encoding: FileSystemLegacy.EncodingType.Base64,
       });
       if (base64?.trim()) {
-        return `data:${fallbackType};base64,${base64.trim()}`;
+        return `data:${fallbackType};base64,${base64.replace(/\s+/g, "")}`;
       }
     } catch {
       /* fall through to fetch */
     }
-    const res = await fetch(uri);
+    const res = await fetch(normalized);
     const blob = await res.blob();
     const dataUri = await new Promise<string>((resolve, reject) => {
       const reader = new FileReader();
@@ -250,17 +323,19 @@ export function ChatThreadScreen() {
     if (dataUri.startsWith("data:;base64,") || dataUri.startsWith("data:application/octet-stream")) {
       return dataUri.replace(/^data:[^;]*;base64,/, `data:${fallbackType};base64,`);
     }
-    return dataUri;
+    if (dataUri.startsWith("data:audio/")) return dataUri.replace(/\s+/g, "");
+    return `data:${fallbackType};base64,${dataUri.split(",")[1] || ""}`;
   }
 
   async function toggleRecord() {
     try {
       if (recording) {
-        await recording.stopAndUnloadAsync();
-        const uri = recording.getURI();
+        const rec = recording;
         setRecording(null);
+        await rec.stopAndUnloadAsync();
+        const uri = rec.getURI();
         if (!uri) return;
-        setPendingVoice(await uriToData(uri, "audio/m4a"));
+        setPendingVoice(await uriToData(uri, guessAudioMime(uri)));
         setPendingImage(null);
         return;
       }
@@ -269,19 +344,26 @@ export function ChatThreadScreen() {
         Alert.alert("Microphone", "Allow the microphone to send a voice message.");
         return;
       }
-      await Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true });
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+        interruptionModeIOS: InterruptionModeIOS.DoNotMix,
+        interruptionModeAndroid: InterruptionModeAndroid.DoNotMix,
+        shouldDuckAndroid: true,
+        playThroughEarpieceAndroid: false,
+      });
       const rec = new Audio.Recording();
-      await rec.prepareToRecordAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
+      await rec.prepareToRecordAsync(VOICE_RECORD_OPTIONS);
       await rec.startAsync();
       setRecording(rec);
-    } catch {
-      Alert.alert("Voice", "Could not record a voice note on this device.");
+    } catch (err) {
+      Alert.alert("Voice", friendlyError(err, "Could not record a voice note on this device."));
       setRecording(null);
     }
   }
 
   const blocked = Boolean(thread?.blocked_by_me || thread?.blocked_me);
-  const canSend = Boolean(draft.trim() || pendingImage || pendingVoice);
+  const canSend = Boolean(draft.trim() || pendingImage || pendingVoice || recording);
   const [openingProfile, setOpeningProfile] = useState(false);
 
   function openOtherProfile() {
@@ -448,7 +530,6 @@ export function ChatThreadScreen() {
           onOpenPendingPhoto={() => pendingImage && setPhotoUri(pendingImage)}
           onVoice={() => void toggleRecord()}
           onPlace={() => setPlaceOpen(true)}
-          onBook={() => setBookOpen(true)}
           onClearAttach={() => {
             setPendingImage(null);
             setPendingVoice(null);
@@ -471,18 +552,6 @@ export function ChatThreadScreen() {
           </Pressable>
         </Pressable>
       </Modal>
-
-      {thread?.listing_id ? (
-        <BookingFormModal
-          visible={bookOpen}
-          onClose={() => setBookOpen(false)}
-          listingId={thread.listing_id}
-          listingTitle={thread.listing_title}
-          listingLocation={thread.listing_location}
-          buyerId={thread.i_am_buyer ? undefined : thread.other.id}
-          onSent={() => void load(false)}
-        />
-      ) : null}
 
       <ReportComplaintModal
         visible={reportOpen}
@@ -563,7 +632,6 @@ function ComposerBar({
   onOpenPendingPhoto,
   onVoice,
   onPlace,
-  onBook,
   onClearAttach,
   onFocusInput,
 }: {
@@ -581,7 +649,6 @@ function ComposerBar({
   onOpenPendingPhoto: () => void;
   onVoice: () => void;
   onPlace: () => void;
-  onBook: () => void;
   onClearAttach: () => void;
   onFocusInput: () => void;
 }) {
@@ -637,9 +704,6 @@ function ComposerBar({
         </PressScale>
         <PressScale onPress={onPlace} style={{ padding: 8 }}>
           <Ionicons name="location-outline" size={22} color={GREEN} />
-        </PressScale>
-        <PressScale onPress={onBook} style={{ padding: 8 }}>
-          <Ionicons name="calendar-outline" size={22} color={GREEN} />
         </PressScale>
         <PressScale onPress={onVoice} style={{ padding: 8 }}>
           <Ionicons name={recording ? "stop-circle" : "mic-outline"} size={22} color={recording ? "#E53935" : GREEN} />

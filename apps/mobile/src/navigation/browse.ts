@@ -67,6 +67,14 @@ export function openChatThread(navigation: { navigate: (...args: any[]) => void 
   navigateNamed(navigation, "ChatThread", { id: threadId });
 }
 
+export function openVoiceCall(
+  navigation: { navigate: (...args: any[]) => void },
+  threadId: string,
+  otherName: string,
+) {
+  navigateNamed(navigation, "VoiceCall", { threadId: uuidFromNorm(threadId), otherName });
+}
+
 export function openHomeSection(
   navigation: { navigate: (...args: any[]) => void },
   section: "recommended" | "trending" | "verified" | "latest",

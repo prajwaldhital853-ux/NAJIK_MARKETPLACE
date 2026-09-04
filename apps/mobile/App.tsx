@@ -4,6 +4,7 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { AuthProvider } from "./src/context/AuthContext";
 import { BuyerLocationProvider } from "./src/context/BuyerLocationContext";
+import { CartProvider } from "./src/context/CartContext";
 import { SavedListingsProvider } from "./src/context/SavedListings";
 import { InboxProvider } from "./src/context/InboxContext";
 import { forceLightMode, subscribeForceLightMode } from "./src/forceLightMode";
@@ -26,12 +27,14 @@ export default function App() {
         <AuthProvider>
           <BuyerLocationProvider>
           <SavedListingsProvider>
+            <CartProvider>
             <InboxProvider>
             <PushNotificationsBridge />
             <StatusBar style="dark" />
             <RootNavigator />
             <StaffWarningBanner />
             </InboxProvider>
+            </CartProvider>
           </SavedListingsProvider>
           </BuyerLocationProvider>
         </AuthProvider>

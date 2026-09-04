@@ -29,6 +29,14 @@ from apps.staff.authentication import StaffJWTAuthentication
 from apps.staff.permissions import IsStaffUser
 
 
+def _form_text(value, default=""):
+    if value is None:
+        return default
+    if isinstance(value, (list, tuple)):
+        value = value[0] if value else default
+    return str(value or default).strip()
+
+
 def touch_presence(user):
     AppUser.objects.filter(pk=user.pk).update(last_seen=timezone.now())
     user.last_seen = timezone.now()
@@ -161,17 +169,20 @@ class ChatMessageCreateView(APIView):
 
         voice_upload = request.FILES.get("voice_file") or request.FILES.get("voice")
         if voice_upload:
-            if voice_upload.size > MAX_VOICE_BYTES:
+            if getattr(voice_upload, "size", 0) and voice_upload.size > MAX_VOICE_BYTES:
                 return Response(
                     {"voice_file": ["Voice notes must be 4 MB or smaller."]},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
-            kind = (request.data.get("kind") or ChatMessage.KIND_VOICE).strip()
+            kind = _form_text(request.data.get("kind"), ChatMessage.KIND_VOICE)
             if kind != ChatMessage.KIND_VOICE:
                 return Response({"kind": ["Voice uploads must use kind=voice."]}, status=status.HTTP_400_BAD_REQUEST)
+            name = getattr(voice_upload, "name", "") or "voice.m4a"
+            if "." not in name:
+                voice_upload.name = f"{name}.m4a"
             data = {
                 "kind": ChatMessage.KIND_VOICE,
-                "text": (request.data.get("text") or "Voice message").strip(),
+                "text": _form_text(request.data.get("text"), "Voice message"),
                 "voice_file": voice_upload,
             }
         else:
@@ -192,7 +203,13 @@ class ChatMessageCreateView(APIView):
             msg.image = data["image_file"]
         if data["kind"] == ChatMessage.KIND_VOICE:
             msg.voice = data["voice_file"]
-        msg.save()
+        try:
+            msg.save()
+        except Exception:
+            return Response(
+                {"detail": "Could not save the voice note. Try recording again."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         thread.save(update_fields=["updated_at"])
         preview = (data.get("text") or "").strip() or "New message"
         if data["kind"] == ChatMessage.KIND_IMAGE:

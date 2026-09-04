@@ -13,6 +13,20 @@ def chat_voice_path(instance, filename):
     return f"chat/{instance.thread_id}/voice_{filename[-50:]}"
 
 
+def voice_file_storage():
+    """Cloudinary image storage rejects .m4a; use raw storage for voice notes."""
+    if getattr(settings, "CLOUDINARY_URL", ""):
+        try:
+            from cloudinary_storage.storage import RawMediaCloudinaryStorage
+
+            return RawMediaCloudinaryStorage()
+        except Exception:
+            pass
+    from django.core.files.storage import default_storage
+
+    return default_storage
+
+
 class ChatThread(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     listing = models.ForeignKey(
@@ -69,7 +83,7 @@ class ChatMessage(models.Model):
     kind = models.CharField(max_length=12, choices=KIND_CHOICES, default=KIND_TEXT)
     text = models.TextField(blank=True)
     image = models.FileField(upload_to=chat_image_path, blank=True)
-    voice = models.FileField(upload_to=chat_voice_path, blank=True)
+    voice = models.FileField(upload_to=chat_voice_path, blank=True, storage=voice_file_storage)
     lat = models.FloatField(null=True, blank=True)
     lng = models.FloatField(null=True, blank=True)
     location_label = models.CharField(max_length=200, blank=True)

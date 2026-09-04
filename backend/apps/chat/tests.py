@@ -27,6 +27,16 @@ def phone():
     return f"98{uuid.uuid4().int % 10**8:08d}"
 
 
+class ChatVoiceSerializerTests(TestCase):
+    def test_decodes_voice_data_uri(self):
+        from apps.chat.serializers import file_from_audio_uri
+
+        payload = base64.b64encode(b"\x00" * 128).decode()
+        uploaded = file_from_audio_uri(f"data:audio/m4a;base64,{payload}")
+        self.assertGreater(uploaded.size, 0)
+        self.assertTrue(uploaded.name.endswith(".m4a"))
+
+
 def email(prefix="s"):
     return f"{prefix}{uuid.uuid4().hex[:10]}@example.com"
 

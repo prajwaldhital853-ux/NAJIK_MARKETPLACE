@@ -1,4 +1,5 @@
-import { api } from "./api";
+import { api, ApiError, firstError } from "./api";
+import { API_URL } from "./config";
 import { withAppAuth } from "./authApi";
 import { uuidFromNorm } from "./inboxBridge";
 
@@ -75,6 +76,37 @@ export async function fetchChatThread(id: string, since?: string) {
   const threadId = uuidFromNorm(id);
   const qs = since ? `?since=${encodeURIComponent(since)}` : "";
   return withAppAuth((token) => api<ChatThread>(`/api/chat/threads/${threadId}/${qs}`, { token }));
+}
+
+export async function sendChatVoiceFile(threadId: string, fileUri: string, mime = "audio/m4a") {
+  const id = uuidFromNorm(threadId);
+  return withAppAuth(async (token) => {
+    const form = new FormData();
+    form.append("kind", "voice");
+    form.append("text", "Voice message");
+    form.append("voice_file", {
+      uri: fileUri,
+      name: `voice-${Date.now()}.m4a`,
+      type: mime,
+    } as unknown as Blob);
+
+    let response: Response;
+    try {
+      response = await fetch(`${API_URL}/api/chat/threads/${id}/messages/`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: form,
+      });
+    } catch {
+      throw new ApiError("Cannot reach NAJIK. Check your internet connection and that the server is running.", 0);
+    }
+
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new ApiError(firstError(data), response.status);
+    }
+    return data as ChatMessage;
+  });
 }
 
 export async function sendChatMessage(

@@ -28,7 +28,7 @@ function fromValue(value: unknown, depth = 0): string | null {
       const nested = fromValue(obj.detail, depth + 1);
       if (nested) return nested;
     }
-    for (const key of ["non_field_errors", "identifier", "password", "email", "phone", "code", "reason"]) {
+    for (const key of ["non_field_errors", "voice", "voice_file", "image", "identifier", "password", "email", "phone", "code", "reason"]) {
       const nested = fromValue(obj[key], depth + 1);
       if (nested) return nested;
     }
@@ -46,7 +46,12 @@ export function firstError(data: unknown) {
 }
 
 export function friendlyError(err: unknown, fallback = "Something went wrong. Please try again.") {
-  if (err instanceof ApiError) return err.message || fallback;
+  if (err instanceof ApiError) {
+    if (err.message && err.message !== "Something went wrong. Please try again.") {
+      return err.status ? `${err.message} (${err.status})` : err.message;
+    }
+    return err.status ? `${fallback} (${err.status})` : fallback;
+  }
   if (err instanceof TypeError || (err instanceof Error && /network request failed|failed to fetch|networkerror/i.test(err.message))) {
     return "Cannot reach NAJIK. Check your internet connection and that the server is running.";
   }

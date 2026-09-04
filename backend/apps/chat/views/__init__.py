@@ -6,6 +6,7 @@ from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from rest_framework import status
+from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -19,6 +20,7 @@ from apps.chat.serializers import (
     ChatReportWriteSerializer,
     ChatStartSerializer,
     ChatThreadSerializer,
+    MAX_VOICE_BYTES,
     admin_party,
     pair_blocked,
 )
@@ -148,6 +150,7 @@ class ChatThreadDetailView(APIView):
 class ChatMessageCreateView(APIView):
     authentication_classes = [AppJWTAuthentication]
     permission_classes = [IsAppUser]
+    parser_classes = [JSONParser, MultiPartParser, FormParser]
 
     def post(self, request, pk):
         touch_presence(request.user)
@@ -155,9 +158,27 @@ class ChatMessageCreateView(APIView):
         other = thread.other_user(request.user)
         if pair_blocked(request.user, other):
             return Response({"detail": "This conversation is blocked."}, status=status.HTTP_403_FORBIDDEN)
-        serializer = ChatMessageWriteSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        data = serializer.validated_data
+
+        voice_upload = request.FILES.get("voice_file") or request.FILES.get("voice")
+        if voice_upload:
+            if voice_upload.size > MAX_VOICE_BYTES:
+                return Response(
+                    {"voice_file": ["Voice notes must be 4 MB or smaller."]},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            kind = (request.data.get("kind") or ChatMessage.KIND_VOICE).strip()
+            if kind != ChatMessage.KIND_VOICE:
+                return Response({"kind": ["Voice uploads must use kind=voice."]}, status=status.HTTP_400_BAD_REQUEST)
+            data = {
+                "kind": ChatMessage.KIND_VOICE,
+                "text": (request.data.get("text") or "Voice message").strip(),
+                "voice_file": voice_upload,
+            }
+        else:
+            serializer = ChatMessageWriteSerializer(data=request.data)
+            serializer.is_valid(raise_exception=True)
+            data = serializer.validated_data
+
         msg = ChatMessage(
             thread=thread,
             sender=request.user,

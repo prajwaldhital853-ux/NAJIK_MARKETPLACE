@@ -29,6 +29,7 @@ import {
   fetchChatThread,
   pingChatPresence,
   sendChatMessage,
+  sendChatVoiceFile,
   type ChatMessage,
   type ChatThread,
 } from "../chatApi";
@@ -41,7 +42,7 @@ import { mapsDirectionsUrl, requestUserPoint, reverseGeocode, searchPlaces, type
 import { subscribeAppRefresh } from "../listingsRefresh";
 import { openBookings, openListing, openSellerPage, openSellerProfile, openVoiceCall } from "../navigation/browse";
 import { choosePhoto } from "../pickPhoto";
-import { guessAudioMime, voiceUriToDataUri } from "../voiceNote";
+import { guessAudioMime, normalizeVoiceFileUri } from "../voiceNote";
 import { colors } from "../theme";
 
 const GREEN = colors.greenDeep;
@@ -245,11 +246,20 @@ export function ChatThreadScreen() {
     }
     const uri = rec.getURI();
     if (!uri) throw new Error("Could not read the voice note.");
-    return voiceUriToDataUri(uri, guessAudioMime(uri));
+    const normalized = normalizeVoiceFileUri(uri);
+    return { uri: normalized, mime: guessAudioMime(normalized) };
   }
 
-  async function sendVoiceNote(voice: string) {
-    await send({ kind: "voice", voice, text: "Voice message" });
+  async function sendVoiceNote(fileUri: string, mime: string) {
+    try {
+      const msg = await sendChatVoiceFile(id, fileUri, mime);
+      setMessages((prev) => (prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]));
+      stickToBottom.current = true;
+      requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true }));
+      setPendingVoice(null);
+    } catch (err) {
+      Alert.alert("Voice message", friendlyError(err, "Could not send voice note."));
+    }
   }
 
   async function shareGps() {
@@ -273,15 +283,15 @@ export function ChatThreadScreen() {
       const rec = recording;
       setRecording(null);
       try {
-        const voice = await finishRecording(rec);
-        await sendVoiceNote(voice);
+        const { uri, mime } = await finishRecording(rec);
+        await sendVoiceNote(uri, mime);
       } catch (err) {
-        Alert.alert("Voice", friendlyError(err, "Could not send voice note."));
+        Alert.alert("Voice message", friendlyError(err, "Could not send voice note."));
       }
       return;
     }
     if (pendingVoice) {
-      await sendVoiceNote(pendingVoice);
+      await sendVoiceNote(pendingVoice, guessAudioMime(pendingVoice));
       return;
     }
     if (pendingImage) {
@@ -299,7 +309,7 @@ export function ChatThreadScreen() {
         await rec.stopAndUnloadAsync();
         const uri = rec.getURI();
         if (!uri) return;
-        setPendingVoice(await voiceUriToDataUri(uri, guessAudioMime(uri)));
+        setPendingVoice(normalizeVoiceFileUri(uri));
         setPendingImage(null);
         return;
       }

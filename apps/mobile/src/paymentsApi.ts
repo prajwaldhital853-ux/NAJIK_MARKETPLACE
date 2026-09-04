@@ -69,10 +69,11 @@ export type SellerPaymentsMe = {
 };
 
 export async function fetchSellerPaymentsMe(priceRupees?: number) {
-  const q =
-    priceRupees != null && Number.isFinite(priceRupees)
-      ? `?price=${encodeURIComponent(String(Math.max(0, Math.floor(priceRupees))))}`
-      : "";
+  const params = new URLSearchParams();
+  if (priceRupees != null && Number.isFinite(priceRupees)) {
+    params.set("price", String(Math.max(0, Math.floor(priceRupees))));
+  }
+  const q = params.toString() ? `?${params.toString()}` : "";
   return withAppAuth((token) => api<SellerPaymentsMe>(`/api/auth/payments/me/${q}`, { token }));
 }
 

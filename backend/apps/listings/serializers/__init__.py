@@ -522,14 +522,6 @@ class ListingWriteSerializer(serializers.Serializer):
             reviewed_at=timezone.now() if publish else None,
             is_promoted=False,
         )
-        from apps.listings.listing_cards import bump_listing_feed_cache
-
-        bump_listing_feed_cache()
-        from apps.listings.listing_cards import sync_listing_search_index
-
-        sync_listing_search_index(listing)
-        for index, photo in enumerate(photos):
-            ListingPhoto.objects.create(listing=listing, image=photo, sort_order=index)
         if publish and listing.status == Listing.STATUS_APPROVED:
             from apps.accounts.models.referral import qualify_referral_for_listing
             from apps.core.seller_wallet_service import deduct_listing_fee, InsufficientBalanceError
@@ -552,6 +544,14 @@ class ListingWriteSerializer(serializers.Serializer):
                 target_id=str(listing.id),
                 sender_name="NAJIK",
             )
+        from apps.listings.listing_cards import bump_listing_feed_cache
+
+        bump_listing_feed_cache()
+        from apps.listings.listing_cards import sync_listing_search_index
+
+        sync_listing_search_index(listing)
+        for index, photo in enumerate(photos):
+            ListingPhoto.objects.create(listing=listing, image=photo, sort_order=index)
         return listing
 
     @transaction.atomic

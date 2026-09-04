@@ -585,12 +585,16 @@ function ListingManageCard({
   ).slice(0, 3);
 
   const photoUrl = item.photos[0]?.url;
+  const cardLayout = compact || !photoUrl ? "column" : "row";
   return (
     <>
-    <PressScale
-      onPress={onOpen}
-      style={{ backgroundColor: "#fff", borderRadius: 16, padding: 10, marginBottom: 12, flexDirection: compact || !photoUrl ? "column" : "row", ...shadow.card }}
+    <View
+      style={{ backgroundColor: "#fff", borderRadius: 16, padding: 10, marginBottom: 12, ...shadow.card }}
     >
+      <PressScale
+        onPress={onOpen}
+        style={{ flexDirection: cardLayout as "column" | "row" }}
+      >
       {photoUrl ? (
       <View>
         <AuthImage uri={photoUrl} style={{ width: compact ? "100%" : 104, height: compact ? 96 : 112, borderRadius: 12 } as any} />
@@ -705,6 +709,8 @@ function ListingManageCard({
             {item.admin_reason}
           </Text>
         ) : null}
+      </View>
+      </PressScale>
         <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 10 }}>
           <Text style={{ color: "#9AA0A6", fontSize: 10 }}>Posted on {postedOn(item.created_at)}</Text>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
@@ -712,6 +718,7 @@ function ListingManageCard({
               <Text style={{ color: GREEN, fontWeight: "800", fontSize: 10.5 }}>Manage</Text>
             </PressScale>
             <PressScale
+              hitSlop={10}
               onPress={() =>
                 Alert.alert(item.title, undefined, [
                   { text: isSold(item) ? "Mark as active" : "Mark as sold", onPress: onSold },
@@ -727,13 +734,13 @@ function ListingManageCard({
                   { text: "Cancel", style: "cancel" },
                 ])
               }
+              style={{ padding: 8, borderRadius: 20 }}
             >
-              <Ionicons name="ellipsis-vertical" size={14} color="#1B7D2C" />
+              <Ionicons name="ellipsis-vertical" size={16} color="#1B7D2C" />
             </PressScale>
           </View>
         </View>
-      </View>
-    </PressScale>
+    </View>
     <Modal visible={soldCountOpen} transparent animationType="fade" onRequestClose={() => setSoldCountOpen(false)}>
       <Pressable
         style={{ flex: 1, backgroundColor: "rgba(15,23,42,0.4)", justifyContent: "center", padding: 24 }}

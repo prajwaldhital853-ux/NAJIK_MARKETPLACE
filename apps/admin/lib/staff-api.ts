@@ -654,13 +654,15 @@ export async function getStaffPaymentsSummary(revenuePeriod?: string, audience: 
 }
 
 export async function getSellerPaymentConfig(audience: "provider" | "user" = "provider") {
-  const q = audience === "user" ? "?audience=buyer" : "?audience=seller";
-  return staffRequest<SellerPaymentConfig>(`/api/admin/app-control/seller-payments/${q}`);
+  const params = new URLSearchParams();
+  params.set("audience", audience === "user" ? "buyer" : "seller");
+  return staffRequest<SellerPaymentConfig>(`/api/admin/app-control/seller-payments/?${params.toString()}`);
 }
 
 export async function patchSellerPaymentConfig(payload: Record<string, unknown>, audience: "provider" | "user" = "provider") {
-  const q = audience === "user" ? "?audience=buyer" : "?audience=seller";
-  return staffRequest<SellerPaymentConfig>(`/api/admin/app-control/seller-payments/${q}`, {
+  const params = new URLSearchParams();
+  params.set("audience", audience === "user" ? "buyer" : "seller");
+  return staffRequest<SellerPaymentConfig>(`/api/admin/app-control/seller-payments/?${params.toString()}`, {
     method: "PATCH",
     body: JSON.stringify(payload),
   });

@@ -119,25 +119,45 @@ export function PostScreen() {
   const [payConfig, setPayConfig] = useState<SellerPaymentConfig | null>(null);
   const [walletPaisa, setWalletPaisa] = useState(0);
   const [walletLabel, setWalletLabel] = useState("Rs. 0");
+  const [quotedFeeRupees, setQuotedFeeRupees] = useState<number | null>(null);
 
   const listingPriceRupees = Number(String(price).replace(/\D/g, "") || 0);
-  const listingFeeRupees = quoteListingFeeRupees(listingPriceRupees, payConfig);
+  const listingFeeRupees =
+    quotedFeeRupees != null ? quotedFeeRupees : quoteListingFeeRupees(listingPriceRupees, payConfig);
   const listingFeeLabel = listingFeeRupees > 0 ? `Rs. ${listingFeeRupees.toLocaleString("en-IN")}` : "Free";
   const listingFeePaisa = listingFeeRupees * 100;
   const walletShort = isProvider(user) && listingFeeRupees > 0 && walletPaisa < listingFeePaisa;
 
-  useFocusEffect(
-    useCallback(() => {
+  const loadPayments = useCallback(
+    (priceHint?: number) => {
       if (!isProvider(user)) return;
-      void fetchSellerPaymentsMe()
+      void fetchSellerPaymentsMe(priceHint)
         .then((pay) => {
           setPayConfig(pay.config);
           setWalletPaisa(pay.balance_paisa || 0);
           setWalletLabel(pay.balance_label || "Rs. 0");
+          if (typeof pay.quoted_listing_fee_rupees === "number") {
+            setQuotedFeeRupees(pay.quoted_listing_fee_rupees);
+          } else {
+            setQuotedFeeRupees(quoteListingFeeRupees(priceHint ?? listingPriceRupees, pay.config));
+          }
         })
         .catch(() => {});
-    }, [user?.id]),
+    },
+    [user?.id, listingPriceRupees],
   );
+
+  useFocusEffect(
+    useCallback(() => {
+      loadPayments(listingPriceRupees);
+    }, [loadPayments, listingPriceRupees]),
+  );
+
+  useEffect(() => {
+    if (!isProvider(user)) return;
+    const timer = setTimeout(() => loadPayments(listingPriceRupees), 300);
+    return () => clearTimeout(timer);
+  }, [listingPriceRupees, loadPayments, user?.id]);
 
   useEffect(() => {
     if (listingId) return;

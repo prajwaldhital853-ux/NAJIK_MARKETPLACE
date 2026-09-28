@@ -9,6 +9,8 @@ import { ReadOnlyBanner, usePageRbac } from "@/lib/use-page-rbac";
 import { useSession } from "@/lib/session";
 import { DemoSeedPanel } from "@/components/admin/demo-seed-panel";
 import { fetchBranding, fetchStaffImage, uploadSignatory } from "@/lib/staff-api";
+import { api } from "@/lib/api";
+import { getStaffAccessToken } from "@/lib/auth";
 
 async function fileToDataUri(file: File) {
   const buffer = await file.arrayBuffer();
@@ -18,6 +20,32 @@ async function fileToDataUri(file: File) {
   const base64 = btoa(binary);
   const type = file.type || "image/png";
   return `data:${type};base64,${base64}`;
+}
+
+function TwoFactorStatus() {
+  const [text, setText] = useState("");
+  useEffect(() => {
+    const token = getStaffAccessToken() || undefined;
+    void api<{ totpEnabled: boolean; totpRequired: boolean; backupCodesRemaining: number }>(
+      "/api/admin/auth/2fa/status/",
+      { token },
+    )
+      .then((data) => {
+        setText(
+          data.totpEnabled
+            ? `Authenticator is on. ${data.backupCodesRemaining} backup code${data.backupCodesRemaining === 1 ? "" : "s"} remaining.`
+            : "Authenticator is not set up yet. The next login will show a QR code.",
+        );
+      })
+      .catch(() => setText(""));
+  }, []);
+  if (!text) return null;
+  return (
+    <section className="rounded-2xl border border-line bg-card p-4">
+      <h2 className="text-sm font-semibold text-ink">Two-factor authentication</h2>
+      <p className="mt-1 text-[13px] text-muted">{text}</p>
+    </section>
+  );
 }
 
 export default function SettingsPage() {
@@ -164,6 +192,7 @@ export default function SettingsPage() {
           ) : null}
         </section>
 
+        <TwoFactorStatus />
         <DemoSeedPanel />
 
         <section className="card-glow space-y-3 rounded-2xl border border-line bg-card p-5 lg:col-span-2">

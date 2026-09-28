@@ -11,6 +11,7 @@ from apps.accounts.demo_seed_service import (
     purge_demo_sellers,
     run_demo_seed,
 )
+from apps.listings.models import Listing
 from apps.staff.authentication import StaffJWTAuthentication
 from apps.staff.permissions import IsStaffUser
 
@@ -22,15 +23,22 @@ class StaffDemoSeedView(APIView):
     def get(self, request):
         if not getattr(request.user, "is_super_admin", False):
             return Response({"detail": "Super admin only."}, status=status.HTTP_403_FORBIDDEN)
+        from apps.accounts.demo_catalog import PHONE_BASE
+
+        demo_listings = Listing.objects.filter(extras__demo_seed=True, status=Listing.STATUS_APPROVED).count()
         return Response(
             {
                 "enabled": bool(getattr(settings, "DEMO_SEED_ENABLED", False)),
                 "max_sellers_per_request": API_MAX_SELLERS_PER_REQUEST,
                 "default_sellers": DEFAULT_SELLERS,
                 "default_listings_per_seller": DEFAULT_LISTINGS_PER_SELLER,
+                "total_approved_listings": Listing.objects.filter(status=Listing.STATUS_APPROVED).count(),
+                "total_demo_listings": demo_listings,
+                "auto_seed_on_deploy": bool(getattr(settings, "DEMO_SEED_ENABLED", False)),
+                "sample_seller_phone": f"+{PHONE_BASE}",
                 "hint": (
-                    "POST to seed in batches (no shell). Set DEMO_SEED_ENABLED=true on Render "
-                    "if seeding production."
+                    "Set DEMO_SEED_ENABLED=true on Render and redeploy to auto-seed 1000 listings, "
+                    "or POST here to seed manually."
                 ),
             }
         )

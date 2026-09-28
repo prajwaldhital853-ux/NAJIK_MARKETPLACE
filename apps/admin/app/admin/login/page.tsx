@@ -176,6 +176,14 @@ export default function StaffLoginPage() {
 
       const result = await login(nextEmail, nextPassword);
       clearStoredLockout();
+      if (result.twoFactor === "setup") {
+        router.replace("/admin/setup-2fa");
+        return;
+      }
+      if (result.twoFactor === "verify") {
+        router.replace("/admin/verify-2fa");
+        return;
+      }
       if (result.verify) {
         setVerifyStep(result.verify);
         setVerificationCode(result.verify.debugCode || "1234");

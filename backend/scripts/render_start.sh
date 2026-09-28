@@ -29,8 +29,14 @@ if [[ -n "${STAFF_BOOTSTRAP_EMAIL:-}" && -n "${STAFF_BOOTSTRAP_PASSWORD:-}" ]]; 
     --skip-default-staff
 fi
 
-# Remove demo sellers on deploy unless demo seeding is intentionally enabled.
-if [[ "${DEMO_SEED_ENABLED:-false}" != "true" ]]; then
+# Demo marketplace: keep data when enabled; auto-seed empty DB on first deploy (no photos = fast).
+if [[ "${DEMO_SEED_ENABLED:-false}" == "true" ]]; then
+  echo "[najik] DEMO_SEED_ENABLED=true — ensuring demo listings exist..."
+  python manage.py seed_demo_if_empty \
+    --count "${DEMO_SEED_COUNT:-200}" \
+    --listings-per-seller "${DEMO_LISTINGS_PER_SELLER:-5}" \
+    || echo "[najik] WARNING: demo seed failed — use Admin Settings to retry"
+else
   python manage.py purge_demo_sellers
 fi
 

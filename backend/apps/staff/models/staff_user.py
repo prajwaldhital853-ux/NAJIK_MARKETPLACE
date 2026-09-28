@@ -48,6 +48,10 @@ class StaffUser(models.Model):
     # Audit trail
     date_joined = models.DateTimeField(auto_now_add=True)
     last_login = models.DateTimeField(null=True, blank=True)
+    totp_secret_encrypted = models.TextField(blank=True, default="")
+    totp_enabled = models.BooleanField(default=False)
+    totp_confirmed_at = models.DateTimeField(null=True, blank=True)
+    totp_backup_issued = models.BooleanField(default=False)
     created_by = models.ForeignKey(
         "self", on_delete=models.SET_NULL, null=True, blank=True, related_name="+"
     )
@@ -327,3 +331,16 @@ class EmailVerificationCode(models.Model):
         self.is_used = True
         self.used_at = timezone.now()
         self.save(update_fields=["is_used", "used_at"])
+
+
+class StaffTotpBackupCode(models.Model):
+    """One-time recovery codes for staff authenticator reset."""
+
+    staff = models.ForeignKey(StaffUser, on_delete=models.CASCADE, related_name="totp_backup_codes")
+    code_hash = models.CharField(max_length=128)
+    used_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "staff_totp_backup_codes"
+        indexes = [models.Index(fields=["staff", "used_at"], name="staff_totp_backup_used_idx")]

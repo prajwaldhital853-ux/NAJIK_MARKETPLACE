@@ -11,7 +11,7 @@ export function DemoSeedPanel() {
   const [enabled, setEnabled] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState("");
-  const [totals, setTotals] = useState<{ sellers: number; listings: number } | null>(null);
+  const [totals, setTotals] = useState<{ sellers: number; listings: number; approved: number } | null>(null);
 
   const isSuperAdmin = Boolean(staff?.isSuperAdmin);
 
@@ -20,6 +20,11 @@ export function DemoSeedPanel() {
     try {
       const info = await fetchDemoSeedInfo();
       setEnabled(info.enabled);
+      setTotals({
+        sellers: 0,
+        listings: info.total_demo_listings ?? 0,
+        approved: info.total_approved_listings ?? 0,
+      });
     } catch {
       setEnabled(false);
     }
@@ -44,7 +49,11 @@ export function DemoSeedPanel() {
         { totalSellers: 200, listingsPerSeller: 5, skipPhotos: true },
       );
       if (result) {
-        setTotals({ sellers: result.total_demo_sellers, listings: result.total_demo_listings });
+        setTotals({
+          sellers: result.total_demo_sellers,
+          listings: result.total_demo_listings,
+          approved: result.total_demo_listings,
+        });
         setProgress(
           `Done. ${result.total_demo_listings} demo listings, ${result.total_demo_sellers} sellers. ` +
             `Sample seller login: +9779841234501 / demo123`,
@@ -67,7 +76,7 @@ export function DemoSeedPanel() {
     setProgress("Removing demo data…");
     try {
       const result = await purgeDemoSeedData();
-      setTotals({ sellers: 0, listings: 0 });
+      setTotals({ sellers: 0, listings: 0, approved: 0 });
       setProgress(`Removed ${result.removed_sellers} demo seller account(s).`);
     } catch (err) {
       setProgress(err instanceof Error ? err.message : "Purge failed.");
@@ -92,9 +101,18 @@ export function DemoSeedPanel() {
       </div>
 
       {enabled === false ? (
-        <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] text-amber-900">
-          API has demo seed <strong>disabled</strong>. On Render → Environment add{" "}
-          <code className="rounded bg-white px-1">DEMO_SEED_ENABLED=true</code>, save, and redeploy.
+        <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] leading-relaxed text-amber-900">
+          Demo seed is <strong>disabled</strong> on the API (your deploy log shows purge ran, not seed).
+          <br />
+          On Render → <strong>Environment</strong> add{" "}
+          <code className="rounded bg-white px-1">DEMO_SEED_ENABLED=true</code>, save, and{" "}
+          <strong>Manual Deploy</strong>. Next deploy auto-creates 1000 listings.
+        </p>
+      ) : null}
+
+      {totals && totals.approved === 0 && enabled ? (
+        <p className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-[12px] text-blue-900">
+          No listings in production yet. Click seed below or redeploy with DEMO_SEED_ENABLED=true.
         </p>
       ) : null}
 
@@ -111,7 +129,7 @@ export function DemoSeedPanel() {
       {progress ? <p className="text-[12px] leading-relaxed text-muted">{progress}</p> : null}
       {totals ? (
         <p className="text-[11px] text-faint">
-          Current totals: {totals.listings} listings · {totals.sellers} demo sellers
+          Production: {totals.approved} approved listings · {totals.listings} demo-tagged
         </p>
       ) : null}
     </section>

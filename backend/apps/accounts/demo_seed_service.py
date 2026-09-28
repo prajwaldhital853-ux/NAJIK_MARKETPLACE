@@ -123,6 +123,7 @@ def _seed_one_seller(
     listings_per: int,
     password: str,
     use_network: bool,
+    attach_photos: bool,
     result: DemoSeedResult,
 ) -> None:
     seller_data = seller_profile(idx)
@@ -209,14 +210,15 @@ def _seed_one_seller(
             listing.lng = lng
             listing.save(update_fields=["lat", "lng", "updated_at"])
 
-        try:
-            result.photos_added += _attach_listing_photos(
-                listing,
-                listing_data["image_seed"],
-                use_network=use_network,
-            )
-        except Exception as exc:
-            result.errors.append(f"Photos skipped for {listing.title}: {exc}")
+        if attach_photos:
+            try:
+                result.photos_added += _attach_listing_photos(
+                    listing,
+                    listing_data["image_seed"],
+                    use_network=use_network,
+                )
+            except Exception as exc:
+                result.errors.append(f"Photos skipped for {listing.title}: {exc}")
 
 
 def run_demo_seed(
@@ -238,7 +240,7 @@ def run_demo_seed(
 
     for idx in range(seller_offset, end_index):
         with transaction.atomic():
-            _seed_one_seller(idx, listings_per, password, use_network, result)
+            _seed_one_seller(idx, listings_per, password, use_network, attach_photos, result)
         result.sellers_processed += 1
 
     demo_phones = [f"+{PHONE_BASE + i}" for i in range(PHONE_MAX_SELLERS)]

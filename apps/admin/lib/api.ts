@@ -64,7 +64,9 @@ export async function api<T>(
     const detail =
       typeof payload.detail === "string"
         ? payload.detail
-        : (payload.detail as { detail?: string } | undefined)?.detail ||
+        : typeof payload.error === "string"
+          ? payload.error
+          : (payload.detail as { detail?: string } | undefined)?.detail ||
           (payload.reason as string[] | undefined)?.[0] ||
           (payload.non_field_errors as string[] | undefined)?.[0] ||
           (payload.phone as string[] | undefined)?.[0] ||

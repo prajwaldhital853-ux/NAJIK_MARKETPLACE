@@ -14,6 +14,10 @@ env = environ.Env(
 environ.Env.read_env(BASE_DIR / ".env")
 
 DEBUG = env("DEBUG")
+# Admin TOTP (Google Authenticator). Set ADMIN_REQUIRE_TOTP=false only for local dev.
+ADMIN_REQUIRE_TOTP = env.bool("ADMIN_REQUIRE_TOTP", default=True)
+ADMIN_TOTP_ISSUER = env("ADMIN_TOTP_ISSUER", default="NAJIK Admin")
+TOTP_ENCRYPTION_KEY = env("TOTP_ENCRYPTION_KEY", default="")
 # Allow super-admin demo seed API (admin panel button). Enable on Render when needed.
 DEMO_SEED_ENABLED = env.bool("DEMO_SEED_ENABLED", default=DEBUG)
 SECRET_KEY = env("DJANGO_SECRET_KEY")

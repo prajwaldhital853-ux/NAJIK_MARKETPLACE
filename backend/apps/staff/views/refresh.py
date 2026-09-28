@@ -24,6 +24,14 @@ class StaffRefreshView(APIView):
             user = StaffUser.objects.filter(pk=token["user_id"], is_active=True).first()
             if user is None:
                 return Response({"detail": "Invalid token."}, status=status.HTTP_401_UNAUTHORIZED)
-            return Response(StaffTokenSerializer.for_user(user))
+            from apps.staff.totp import admin_totp_required
+
+            verified = bool(token.get("totp_verified"))
+            if (user.totp_enabled or admin_totp_required(user)) and not verified:
+                return Response(
+                    {"detail": "Sign in again with your authenticator code.", "code": "requires_2fa"},
+                    status=status.HTTP_401_UNAUTHORIZED,
+                )
+            return Response(StaffTokenSerializer.for_user(user, totp_verified=verified))
         except TokenError:
             return Response({"detail": "Invalid token."}, status=status.HTTP_401_UNAUTHORIZED)

@@ -12,12 +12,21 @@ class IsStaffUser(BasePermission):
     Allows access only to authenticated staff users.
     """
     def has_permission(self, request, view):
-        return bool(
+        allowed = bool(
             request.user and
             hasattr(request.user, 'is_authenticated') and
             request.user.is_authenticated and
             getattr(request.user, 'is_active', False)
         )
+        if not allowed or getattr(view, "allow_without_totp", False):
+            return allowed
+        from apps.staff.totp import evaluate_totp_access
+
+        code, message = evaluate_totp_access(request.user, request)
+        if code:
+            self.message = message
+            return False
+        return True
 
 
 def require_permission(permission_code: str):

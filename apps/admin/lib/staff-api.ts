@@ -1,5 +1,6 @@
 import { api, ApiError, getApiBaseUrl } from "./api";
 import { getStaffAccessToken, getStaffRefreshToken, saveStaffTokens } from "./auth";
+import { storePreAuthToken } from "./twoFactorSession";
 import { getDeviceFingerprint } from "./device";
 import type { Staff } from "./demo-data";
 import { accessTokenFresh } from "./jwt";
@@ -53,7 +54,7 @@ async function staffRequest<T>(path: string, init: RequestInit = {}): Promise<T>
   }
 }
 
-type StaffApiUser = {
+export type StaffApiUser = {
   id: string;
   email: string;
   full_name: string;
@@ -75,11 +76,20 @@ type StaffLoginApiResponse =
       email: string;
       message: string;
       debug_code?: string;
+    }
+  | {
+      requires2FA: true;
+      preAuthToken: string;
+    }
+  | {
+      requires2FASetup: true;
+      preAuthToken: string;
     };
 
 export type StaffLoginResult =
   | { status: "authenticated"; staff: Staff }
-  | { status: "verify"; staffId: string; email: string; message: string; debugCode?: string };
+  | { status: "verify"; staffId: string; email: string; message: string; debugCode?: string }
+  | { status: "2fa"; mode: "verify" | "setup" };
 
 export function mapApiStaff(user: StaffApiUser): Staff {
   return {
@@ -107,6 +117,15 @@ export async function staffApiLogin(email: string, password: string): Promise<St
       device_fingerprint: getDeviceFingerprint(),
     }),
   });
+
+  if ("requires2FASetup" in data && data.requires2FASetup) {
+    storePreAuthToken(data.preAuthToken);
+    return { status: "2fa", mode: "setup" };
+  }
+  if ("requires2FA" in data && data.requires2FA) {
+    storePreAuthToken(data.preAuthToken);
+    return { status: "2fa", mode: "verify" };
+  }
 
   if ("requires_verification" in data && data.requires_verification) {
     return {
@@ -1539,6 +1558,10 @@ export type DemoSeedInfo = {
   max_sellers_per_request: number;
   default_sellers: number;
   default_listings_per_seller: number;
+  total_approved_listings?: number;
+  total_demo_listings?: number;
+  auto_seed_on_deploy?: boolean;
+  sample_seller_phone?: string;
   hint?: string;
 };
 

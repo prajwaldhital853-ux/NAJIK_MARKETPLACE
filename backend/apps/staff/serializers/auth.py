@@ -72,13 +72,15 @@ def get_client_ip(request) -> str:
 
 class StaffTokenSerializer:
     @staticmethod
-    def for_user(user: StaffUser) -> dict:
+    def for_user(user: StaffUser, *, totp_verified: bool = False) -> dict:
         refresh = RefreshToken()
         refresh["user_id"] = str(user.id)
         refresh["kind"] = "staff"
+        refresh["totp_verified"] = totp_verified
         access = refresh.access_token
         access["kind"] = "staff"
         access["user_id"] = str(user.id)
+        access["totp_verified"] = totp_verified
         user.record_successful_login()
         return {
             "access": str(access),

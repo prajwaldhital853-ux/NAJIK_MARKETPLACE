@@ -2,11 +2,12 @@ import { Ionicons } from "@expo/vector-icons";
 import type { BottomTabBarProps } from "@react-navigation/bottom-tabs";
 import { TabActions } from "@react-navigation/native";
 import { useEffect, useState } from "react";
-import { Pressable, Text, useWindowDimensions, View, Platform } from "react-native";
+import { Pressable, Text, useWindowDimensions, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Circle, Path } from "react-native-svg";
 import { useAuth } from "../context/AuthContext";
 import { isProvider } from "../demo";
+import { bottomSafeInset } from "../safeInsets";
 
 type Ion = keyof typeof Ionicons.glyphMap;
 
@@ -143,12 +144,11 @@ function CurvedTabBar({ state, navigation, config }: BottomTabBarProps & { confi
   const { width } = useWindowDimensions();
   const routeName = state.routes[state.index]?.name;
   const [active, setActive] = useState(routeName);
-  const bottomPad = Math.max(insets.bottom, Platform.OS === "android" ? 12 : 10);
-  const androidNavGuard = Platform.OS === "android" && insets.bottom < 12 ? 10 : 0;
-  const barContentHeight = BAR_BODY + bottomPad + androidNavGuard;
+  const bottomPad = bottomSafeInset(insets.bottom, 4);
+  const barContentHeight = BAR_BODY + bottomPad;
   const totalHeight = SIDE_TOP + barContentHeight;
   const centerWidth = 108;
-  const centerBottom = bottomPad + androidNavGuard + 10;
+  const centerBottom = bottomPad + 10;
 
   useEffect(() => {
     setActive(routeName);
@@ -167,7 +167,7 @@ function CurvedTabBar({ state, navigation, config }: BottomTabBarProps & { confi
       <Pressable
         key={tab.key}
         onPress={() => go(tab.key)}
-        style={{ flex: 1, alignItems: "center", justifyContent: "flex-end", paddingBottom: bottomPad + androidNavGuard + 2 }}
+        style={{ flex: 1, alignItems: "center", justifyContent: "flex-end", paddingBottom: bottomPad + 2 }}
       >
         <Ionicons name={focused ? tab.activeIcon : tab.icon} size={23} color={focused ? config.activeColor : config.inactiveColor} />
         <Text

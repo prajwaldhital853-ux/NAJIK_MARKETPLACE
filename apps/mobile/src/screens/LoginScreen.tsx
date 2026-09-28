@@ -25,6 +25,7 @@ import { ApiError, friendlyError } from "../api";
 import { GOOGLE_CLIENT_ID, GOOGLE_REDIRECT_URI } from "../config";
 import { useAuth } from "../context/AuthContext";
 import { takeLoginHint } from "../loginHint";
+import { bottomSafeInset } from "../safeInsets";
 import { colors } from "../theme";
 
 const GREEN = "#1B7D2C";
@@ -125,8 +126,8 @@ function loginMetrics(insetsTop: number, insetsBottom: number) {
       btnH +
       8 +
       btnH +
-      (compact ? 8 : 10) +
-      14 +
+      (compact ? 10 : 14) +
+      16 +
       12,
   );
   let sellerHeroH = Math.round(contentH - sellerBrandH - sellerBottomH - sectionGap * 2);

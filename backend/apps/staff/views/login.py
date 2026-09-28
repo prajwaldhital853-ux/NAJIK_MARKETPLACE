@@ -41,6 +41,17 @@ class StaffLoginView(APIView):
         serializer.is_valid(raise_exception=True)
         
         user = serializer.validated_data["user"]
+        from apps.staff.totp import admin_totp_required, decrypt_totp_secret
+        from apps.staff.totp_auth import build_pre_auth_login_response, build_pre_auth_setup_response
+
+        if user.totp_enabled and decrypt_totp_secret(user.totp_secret_encrypted):
+            return Response(build_pre_auth_login_response(user), status=status.HTTP_200_OK)
+        if user.totp_enabled and not decrypt_totp_secret(user.totp_secret_encrypted):
+            user.totp_enabled = False
+            user.save(update_fields=["totp_enabled"])
+        if admin_totp_required(user) and not user.totp_enabled:
+            return Response(build_pre_auth_setup_response(user), status=status.HTTP_200_OK)
+
         requires_verification = serializer.validated_data.get("requires_verification", False)
         device_fingerprint = serializer.validated_data.get("device_fingerprint", "")
 

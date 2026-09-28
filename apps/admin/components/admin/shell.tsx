@@ -22,7 +22,12 @@ export function AdminProviders({ children }: { children: React.ReactNode }) {
 
 export function AdminShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  if (pathname.startsWith("/admin/login") || pathname.startsWith("/admin/change-password")) {
+  if (
+    pathname.startsWith("/admin/login") ||
+    pathname.startsWith("/admin/change-password") ||
+    pathname.startsWith("/admin/setup-2fa") ||
+    pathname.startsWith("/admin/verify-2fa")
+  ) {
     return <>{children}</>;
   }
   return (

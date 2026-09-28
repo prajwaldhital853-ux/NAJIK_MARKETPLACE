@@ -16,6 +16,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { pullAppRefresh } from "../listingsRefresh";
+import { bottomSafeInset } from "../safeInsets";
 
 type KeyboardScroll = {
   onInputFocus: (event?: NativeSyntheticEvent<TextInputFocusEventData>) => void;
@@ -220,7 +221,7 @@ export function KeyboardScreen({
       ? flat.paddingBottom
       : typeof flat.padding === "number"
         ? flat.padding
-        : Math.max(insets.bottom, 16);
+        : bottomSafeInset(insets.bottom, 12);
 
   // Extra room so focused fields near the end can scroll above keyboard + sticky footer.
   const extraPad =

@@ -24,12 +24,26 @@ from apps.staff.views.role_management import (
     RoleListCreateView,
     RoleDetailView,
 )
+from apps.staff.totp_auth import (
+    TotpConfirmView,
+    TotpDisableView,
+    TotpRecoverView,
+    TotpSetupView,
+    TotpStatusView,
+    TotpVerifyLoginView,
+)
 
 app_name = "staff"
 
 urlpatterns = [
     # Authentication
     path("login/", StaffLoginView.as_view(), name="login"),
+    path("2fa/setup/", TotpSetupView.as_view(), name="2fa-setup"),
+    path("2fa/confirm/", TotpConfirmView.as_view(), name="2fa-confirm"),
+    path("2fa/verify/", TotpVerifyLoginView.as_view(), name="2fa-verify"),
+    path("2fa/recover/", TotpRecoverView.as_view(), name="2fa-recover"),
+    path("2fa/status/", TotpStatusView.as_view(), name="2fa-status"),
+    path("2fa/disable/", TotpDisableView.as_view(), name="2fa-disable"),
     path("login/lockout/", StaffLockoutStatusView.as_view(), name="login-lockout"),
     path("verify-email/", EmailVerificationView.as_view(), name="verify-email"),
     path("resend-verification/", ResendVerificationView.as_view(), name="resend-verification"),

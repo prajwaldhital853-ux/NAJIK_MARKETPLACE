@@ -14,7 +14,14 @@ const SessionCtx = createContext<{
   staff: Staff | null;
   ready: boolean;
   apiSession: boolean;
-  login: (email: string, password: string) => Promise<{ staff?: Staff; verify?: { staffId: string; email: string; message: string; debugCode?: string } }>;
+  login: (
+    email: string,
+    password: string,
+  ) => Promise<{
+    staff?: Staff;
+    verify?: { staffId: string; email: string; message: string; debugCode?: string };
+    twoFactor?: "verify" | "setup";
+  }>;
   verifyLogin: (staffId: string, code: string) => Promise<Staff>;
   logout: () => void;
   refreshStaff: () => Promise<Staff | null>;
@@ -84,7 +91,13 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!ready) return;
-    if (pathname.startsWith("/admin/login")) return;
+    if (
+      pathname.startsWith("/admin/login") ||
+      pathname.startsWith("/admin/setup-2fa") ||
+      pathname.startsWith("/admin/verify-2fa")
+    ) {
+      return;
+    }
     if (!pathname.startsWith("/admin")) return;
     if (!staff) router.replace("/admin/login");
   }, [ready, staff, pathname, router]);
@@ -92,6 +105,9 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   const login = useCallback(async (email: string, password: string) => {
     try {
       const result = await staffApiLogin(email, password);
+      if (result.status === "2fa") {
+        return { twoFactor: result.mode };
+      }
       if (result.status === "verify") {
         return {
           verify: {

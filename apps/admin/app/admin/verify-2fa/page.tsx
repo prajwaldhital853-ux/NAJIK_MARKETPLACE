@@ -5,15 +5,17 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { api, ApiError } from "@/lib/api";
 import { firstAllowedPath } from "@/lib/rbac";
-import { mapApiStaff, type StaffApiUser } from "@/lib/staff-api";
-import { saveStaffTokens } from "@/lib/auth";
+import { type StaffApiUser } from "@/lib/staff-api";
 import { useSession } from "@/lib/session";
 import { clearPreAuthToken, readPreAuthToken, storePreAuthToken } from "@/lib/twoFactorSession";
 import { storeRecoverSetup } from "@/lib/twoFactorRecovery";
 
+const inputClass =
+  "w-full rounded-full border border-line bg-elevated px-4 py-3 text-center font-mono text-ink outline-none placeholder:text-faint focus:border-brand focus:ring-[3px] focus:ring-brand/15";
+
 export default function VerifyTwoFactorPage() {
   const router = useRouter();
-  const { refreshStaff } = useSession();
+  const { completeStaffLogin } = useSession();
   const [code, setCode] = useState("");
   const [backup, setBackup] = useState("");
   const [error, setError] = useState("");
@@ -46,10 +48,8 @@ export default function VerifyTwoFactorPage() {
         { method: "POST", body: JSON.stringify({ preAuthToken, code: normalized }) },
       );
       clearPreAuthToken();
-      saveStaffTokens(data.access, data.refresh);
-      const staff = mapApiStaff(data.user);
+      const staff = completeStaffLogin(data.access, data.refresh, data.user);
       router.replace(staff.mustChangePassword ? "/admin/change-password" : firstAllowedPath(staff));
-      await refreshStaff();
     } catch (err) {
       if (err instanceof ApiError && err.code === "totp_locked") {
         clearPreAuthToken();
@@ -63,10 +63,13 @@ export default function VerifyTwoFactorPage() {
   }
 
   return (
-    <main className="flex min-h-dvh items-center justify-center bg-[#f4f7f5] px-4 py-8">
-      <form onSubmit={onSubmit} className="w-full max-w-md space-y-4 rounded-2xl bg-white p-6 shadow-lg">
-        <h1 className="text-xl font-bold text-[#111827]">{recover ? "Use a backup code" : "Authenticator code"}</h1>
-        <p className="text-[13px] text-[#6b7280]">
+    <main className="flex min-h-dvh items-center justify-center bg-surface px-4 py-8 text-ink">
+      <form
+        onSubmit={onSubmit}
+        className="w-full max-w-md space-y-4 rounded-2xl border border-line bg-card p-6 shadow-lg"
+      >
+        <h1 className="text-xl font-bold text-ink">{recover ? "Use a backup code" : "Authenticator code"}</h1>
+        <p className="text-[13px] text-muted">
           {recover
             ? "Enter one of the backup codes you saved when you set up 2FA."
             : "Open Google Authenticator and enter the current 6-digit code."}
@@ -75,7 +78,7 @@ export default function VerifyTwoFactorPage() {
           <input
             value={backup}
             onChange={(e) => setBackup(e.target.value.toUpperCase())}
-            className="w-full rounded-full border border-[#d7ddd9] px-4 py-3 text-center font-mono tracking-wide"
+            className={`${inputClass} tracking-wide`}
             placeholder="XXXX-XXXX-XXXX"
             required
           />
@@ -85,19 +88,26 @@ export default function VerifyTwoFactorPage() {
             onChange={(e) => setCode(e.target.value.replace(/[^\d]/g, "").slice(0, 6))}
             inputMode="numeric"
             autoComplete="one-time-code"
-            className="w-full rounded-full border border-[#d7ddd9] px-4 py-3 text-center font-mono text-lg tracking-[0.3em]"
+            className={`${inputClass} text-lg tracking-[0.3em]`}
             placeholder="000000"
             required
           />
         )}
-        {error ? <p className="text-center text-[12px] text-[#c62828]">{error}</p> : null}
-        <button disabled={busy} className="w-full rounded-full bg-[#1B7D2C] py-3 text-sm font-semibold text-white disabled:opacity-60">
+        {error ? <p className="text-center text-[12px] text-red">{error}</p> : null}
+        <button
+          disabled={busy}
+          className="w-full rounded-full bg-brand py-3 text-sm font-semibold text-white disabled:opacity-60"
+        >
           {busy ? "Checking…" : recover ? "Reset authenticator" : "Verify & login"}
         </button>
-        <button type="button" className="w-full text-[12px] font-semibold text-[#1B7D2C]" onClick={() => setRecover((v) => !v)}>
+        <button
+          type="button"
+          className="w-full text-[12px] font-semibold text-brand hover:underline"
+          onClick={() => setRecover((v) => !v)}
+        >
           {recover ? "Use authenticator code instead" : "Lost your phone? Use a backup code"}
         </button>
-        <Link href="/admin/login" className="block text-center text-[12px] text-[#6b7280]">
+        <Link href="/admin/login" className="block text-center text-[12px] text-muted hover:text-ink">
           Back to sign in
         </Link>
       </form>

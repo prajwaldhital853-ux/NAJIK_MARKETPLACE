@@ -4,8 +4,15 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import { usePathname, useRouter } from "next/navigation";
 import type { Staff } from "./demo-data";
 import { ApiError } from "./api";
-import { clearStaffTokens } from "./auth";
-import { keepStaffSessionAlive, restoreStaffApiSession, staffApiLogin, staffApiVerifyLogin } from "./staff-api";
+import { clearStaffTokens, getStaffAccessToken, saveStaffTokens } from "./auth";
+import {
+  keepStaffSessionAlive,
+  mapApiStaff,
+  restoreStaffApiSession,
+  staffApiLogin,
+  staffApiVerifyLogin,
+  type StaffApiUser,
+} from "./staff-api";
 import { OPEN_INBOX_KEY } from "./live-inbox";
 
 const KEEP_ALIVE_MS = 10 * 60 * 1000;
@@ -25,6 +32,7 @@ const SessionCtx = createContext<{
   verifyLogin: (staffId: string, code: string) => Promise<Staff>;
   logout: () => void;
   refreshStaff: () => Promise<Staff | null>;
+  completeStaffLogin: (access: string, refresh: string, user: StaffApiUser) => Staff;
 } | null>(null);
 
 export function SessionProvider({ children }: { children: React.ReactNode }) {
@@ -99,7 +107,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       return;
     }
     if (!pathname.startsWith("/admin")) return;
-    if (!staff) router.replace("/admin/login");
+    if (!staff && !getStaffAccessToken()) router.replace("/admin/login");
   }, [ready, staff, pathname, router]);
 
   const login = useCallback(async (email: string, password: string) => {
@@ -159,9 +167,18 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     return null;
   }, [logout]);
 
+  const completeStaffLogin = useCallback((access: string, refresh: string, user: StaffApiUser) => {
+    saveStaffTokens(access, refresh);
+    const live = mapApiStaff(user);
+    sessionStorage.setItem(OPEN_INBOX_KEY, "1");
+    setStaff(live);
+    setApiSession(true);
+    return live;
+  }, []);
+
   const value = useMemo(
-    () => ({ staff, ready, apiSession, login, verifyLogin, logout, refreshStaff }),
-    [staff, ready, apiSession, login, verifyLogin, logout, refreshStaff],
+    () => ({ staff, ready, apiSession, login, verifyLogin, logout, refreshStaff, completeStaffLogin }),
+    [staff, ready, apiSession, login, verifyLogin, logout, refreshStaff, completeStaffLogin],
   );
 
   return <SessionCtx.Provider value={value}>{children}</SessionCtx.Provider>;

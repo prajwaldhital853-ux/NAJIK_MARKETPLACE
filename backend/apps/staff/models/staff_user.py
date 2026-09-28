@@ -160,8 +160,12 @@ class StaffUser(models.Model):
     def get_all_permissions(self) -> set:
         """Get set of all permission codes this staff has."""
         if self.is_super_admin:
+            from django.db.utils import DatabaseError, OperationalError, ProgrammingError
             from apps.staff.models.role import Permission
-            return set(Permission.objects.values_list("code", flat=True))
+            try:
+                return set(Permission.objects.values_list("code", flat=True))
+            except (DatabaseError, OperationalError, ProgrammingError):
+                return {"*"}
         
         permissions = set()
         

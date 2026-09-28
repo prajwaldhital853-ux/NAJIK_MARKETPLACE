@@ -1,8 +1,9 @@
 """
 Enhanced staff login with device verification and account lockout.
 """
-from django.core.mail import send_mail
 from django.conf import settings
+from django.core.mail import send_mail
+from django.db.utils import DatabaseError, OperationalError, ProgrammingError
 from django.utils import timezone
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
@@ -20,6 +21,7 @@ from apps.staff.serializers.auth import (
     get_client_ip,
     get_device_fingerprint,
 )
+from apps.staff.schema import staff_auth_tables_ready
 from apps.staff.throttles import StaffLoginRateThrottle
 
 
@@ -43,30 +45,31 @@ class StaffLoginView(APIView):
         device_fingerprint = serializer.validated_data.get("device_fingerprint", "")
 
         if requires_verification:
-            # Send verification email
-            # TODO: Use 1234 as code until email provider is configured
-            code = "1234"  # Hardcoded for now
-            verification = EmailVerificationCode.objects.create(
-                staff=user,
-                code=code,
-                device_fingerprint=device_fingerprint,
-                ip_address=request.META.get('REMOTE_ADDR'),
-                expires_at=timezone.now() + timezone.timedelta(minutes=10),
-            )
-
-            # Email sending disabled - use code 1234
-            # try:
-            #     send_mail(...)
-            # except Exception as e:
-            #     print(f"Failed to send verification email: {e}")
-
+            if staff_auth_tables_ready():
+                try:
+                    code = "1234"
+                    EmailVerificationCode.objects.create(
+                        staff=user,
+                        code=code,
+                        device_fingerprint=device_fingerprint,
+                        ip_address=request.META.get('REMOTE_ADDR'),
+                        expires_at=timezone.now() + timezone.timedelta(minutes=10),
+                    )
+                    return Response({
+                        "requires_verification": True,
+                        "staff_id": str(user.id),
+                        "email": user.email,
+                        "message": "Verification code: 1234 (use this code until email is configured)",
+                        "debug_code": "1234",
+                    }, status=status.HTTP_200_OK)
+                except (DatabaseError, OperationalError, ProgrammingError):
+                    pass
+            # Security tables unavailable — complete login without device verification.
+            tokens = StaffTokenSerializer.for_user(user)
             return Response({
-                "requires_verification": True,
-                "staff_id": str(user.id),
-                "email": user.email,
-                "message": f"Verification code: 1234 (use this code until email is configured)",
-                "debug_code": "1234",  # Remove in production
-            }, status=status.HTTP_200_OK)
+                "user": StaffPublicSerializer(user).data,
+                **tokens,
+            })
         
         # Device is trusted, complete login
         tokens = StaffTokenSerializer.for_user(user)

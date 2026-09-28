@@ -1,3 +1,5 @@
+from django.db import connection
+from django.db.migrations.executor import MigrationExecutor
 from django.utils import timezone
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
@@ -8,6 +10,14 @@ from apps.core.system_status import build_platform_status_checks
 from apps.staff.authentication import StaffJWTAuthentication
 from apps.staff.permissions import IsStaffUser
 from apps.staff.rbac import LISTING_PAGES, user_has_rbac
+from apps.staff.schema import staff_auth_tables_ready
+
+
+def _pending_migration_labels(limit: int = 8) -> list[str]:
+    executor = MigrationExecutor(connection)
+    plan = executor.migration_plan(executor.loader.graph.leaf_nodes())
+    labels = [f"{app_label}.{name}" for app_label, name in plan]
+    return labels[:limit]
 
 
 class HealthView(APIView):
@@ -16,7 +26,25 @@ class HealthView(APIView):
     throttle_classes = [AnonRateThrottle]
 
     def get(self, request):
-        return Response({"status": "ok", "service": "najik-api"})
+        pending = _pending_migration_labels()
+        staff_auth_ready = staff_auth_tables_ready()
+        payload = {
+            "status": "ok",
+            "service": "najik-api",
+            "staff_auth_ready": staff_auth_ready,
+            "pending_migrations": len(pending),
+        }
+        if pending:
+            payload["status"] = "degraded"
+            payload["pending_migration_samples"] = pending
+            payload["hint"] = (
+                "Run python manage.py migrate on the API host "
+                "(Render Start Command: bash scripts/render_start.sh)."
+            )
+        elif not staff_auth_ready:
+            payload["status"] = "degraded"
+            payload["hint"] = "Staff login security tables are missing — redeploy after migrate."
+        return Response(payload)
 
 
 def _staff_can_see_status_check(user, check: dict) -> bool:

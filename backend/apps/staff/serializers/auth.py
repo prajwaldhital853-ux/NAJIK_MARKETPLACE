@@ -3,11 +3,14 @@ Enhanced authentication serializers with security features.
 """
 import random
 import string
+
+from django.db.utils import DatabaseError, OperationalError, ProgrammingError
 from django.utils import timezone
 from rest_framework import serializers
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from apps.staff.exceptions import StaffAccountLocked
+from apps.staff.schema import staff_auth_tables_ready
 from apps.staff.lockout import (
     LOCKOUT_AFTER,
     assert_login_not_locked,
@@ -24,6 +27,22 @@ from apps.staff.models import (
 )
 
 GENERIC_AUTH_ERROR = "Invalid credentials."
+
+
+def _create_login_attempt(**kwargs) -> LoginAttempt | None:
+    if not staff_auth_tables_ready():
+        return None
+    try:
+        return LoginAttempt.objects.create(**kwargs)
+    except (DatabaseError, OperationalError, ProgrammingError):
+        return None
+
+
+def _save_attempt_failure(attempt: LoginAttempt | None, reason: str) -> None:
+    if attempt is None:
+        return
+    attempt.failure_reason = reason
+    attempt.save(update_fields=["failure_reason"])
 
 
 def generate_verification_code() -> str:
@@ -98,7 +117,10 @@ class StaffPublicSerializer(serializers.ModelSerializer):
 
     def get_permissions(self, obj):
         """Return list of permission codes for frontend routing."""
-        return list(obj.get_all_permissions())
+        try:
+            return list(obj.get_all_permissions())
+        except (DatabaseError, OperationalError, ProgrammingError):
+            return ["*"] if obj.is_super_admin else []
 
 
 class StaffLoginSerializer(serializers.Serializer):
@@ -120,8 +142,8 @@ class StaffLoginSerializer(serializers.Serializer):
         # Fetch staff
         staff = StaffUser.objects.filter(email__iexact=email).first()
 
-        # Record attempt
-        attempt = LoginAttempt.objects.create(
+        # Record attempt (skipped when staff auth migrations are not applied yet).
+        attempt = _create_login_attempt(
             staff=staff,
             email=email,
             success=False,
@@ -132,20 +154,17 @@ class StaffLoginSerializer(serializers.Serializer):
 
         # Validate credentials
         if staff is None:
-            attempt.failure_reason = "User not found"
-            attempt.save(update_fields=["failure_reason"])
+            _save_attempt_failure(attempt, "User not found")
             raise serializers.ValidationError(GENERIC_AUTH_ERROR)
 
         if not staff.is_active:
-            attempt.failure_reason = "Account inactive"
-            attempt.save(update_fields=["failure_reason"])
+            _save_attempt_failure(attempt, "Account inactive")
             raise serializers.ValidationError("Your account has been deactivated.")
 
         # Super-admin manual account lock still blocks all devices.
         if staff.is_account_locked():
             seconds_left = max(1, int((staff.locked_until - timezone.now()).total_seconds()))
-            attempt.failure_reason = f"Account locked ({seconds_left}s remaining)"
-            attempt.save(update_fields=["failure_reason"])
+            _save_attempt_failure(attempt, f"Account locked ({seconds_left}s remaining)")
             raise serializers.ValidationError(
                 "This staff account has been locked by an administrator. Contact your Super Admin."
             )
@@ -154,41 +173,47 @@ class StaffLoginSerializer(serializers.Serializer):
 
         if not staff.check_password(password):
             row = record_login_failure(email, ip_address, device_fingerprint)
-            attempt.failure_reason = "Invalid password"
-            attempt.save(update_fields=["failure_reason"])
+            _save_attempt_failure(attempt, "Invalid password")
 
-            if lockout_seconds_remaining(row):
+            if row and lockout_seconds_remaining(row):
                 raise StaffAccountLocked(row)
 
-            remaining = LOCKOUT_AFTER - row.fail_count
-            raise serializers.ValidationError(
-                f"{GENERIC_AUTH_ERROR} ({remaining} attempts remaining)"
-            )
+            if row:
+                remaining = LOCKOUT_AFTER - row.fail_count
+                raise serializers.ValidationError(
+                    f"{GENERIC_AUTH_ERROR} ({remaining} attempts remaining)"
+                )
+            raise serializers.ValidationError(GENERIC_AUTH_ERROR)
 
         record_login_success(email, ip_address, device_fingerprint)
 
         # Success - record it
-        attempt.success = True
-        attempt.staff = staff
-        attempt.save(update_fields=["success", "staff"])
+        if attempt is not None:
+            attempt.success = True
+            attempt.staff = staff
+            attempt.save(update_fields=["success", "staff"])
+
+        attrs["user"] = staff
+        attrs["device_fingerprint"] = device_fingerprint
+
+        if not staff_auth_tables_ready():
+            attrs["requires_verification"] = False
+            return attrs
 
         # Check if device is trusted
-        trusted_device = TrustedDevice.objects.filter(
-            staff=staff,
-            device_fingerprint=device_fingerprint
-        ).first()
+        try:
+            trusted_device = TrustedDevice.objects.filter(
+                staff=staff,
+                device_fingerprint=device_fingerprint
+            ).first()
+        except (DatabaseError, OperationalError, ProgrammingError):
+            trusted_device = None
 
         if trusted_device and trusted_device.is_valid():
-            # Device is trusted, allow login
             trusted_device.touch()
-            attrs["user"] = staff
             attrs["requires_verification"] = False
-            attrs["device_fingerprint"] = device_fingerprint
         else:
-            # New device, require email verification
-            attrs["user"] = staff
             attrs["requires_verification"] = True
-            attrs["device_fingerprint"] = device_fingerprint
 
         return attrs
 

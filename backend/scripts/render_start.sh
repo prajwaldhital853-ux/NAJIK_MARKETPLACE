@@ -2,9 +2,12 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+echo "[najik] Applying database migrations..."
 python manage.py migrate --noinput
+python manage.py showmigrations staff | tail -n 6
 
 # Seed default RBAC roles + 72 page permissions (idempotent — safe on every deploy).
+echo "[najik] Ensuring RBAC + default staff accounts..."
 python manage.py setup_page_rbac
 
 # Remove any demo sellers left from old auto-seed deploys (idempotent, fast when empty).

@@ -142,6 +142,9 @@ export default function StaffLoginPage() {
       if (err.status === 429) {
         return "Too many login attempts. Wait a minute and try again.";
       }
+      if (err.status >= 500) {
+        return "Backend error (500). The API database may need migrations — on Render set Start Command to: bash scripts/render_start.sh, then redeploy.";
+      }
       return err.message || "Login failed.";
     }
     if (err instanceof Error && err.message) {
@@ -190,38 +193,38 @@ export default function StaffLoginPage() {
   }
 
   return (
-    <main className="relative min-h-dvh overflow-hidden bg-[#f4f7f5]">
-      <div className="relative mx-auto flex min-h-dvh w-full max-w-6xl items-center justify-center p-4 sm:p-6 lg:p-8">
-        <div className="relative grid w-full overflow-hidden rounded-[28px] bg-white shadow-[0_24px_80px_rgba(27,125,44,0.12)] lg:grid-cols-2">
+    <main className="relative min-h-dvh overflow-x-hidden overflow-y-auto bg-[#f4f7f5] supports-[padding:max(0px)]:pt-[max(env(safe-area-inset-top),0px)] supports-[padding:max(0px)]:pb-[max(env(safe-area-inset-bottom),0px)]">
+      <div className="relative mx-auto flex min-h-dvh w-full max-w-6xl items-center justify-center px-3 py-4 sm:px-6 sm:py-6 lg:px-8 lg:py-8">
+        <div className="relative grid w-full max-w-[1120px] overflow-hidden rounded-2xl bg-white shadow-[0_24px_80px_rgba(27,125,44,0.12)] sm:rounded-[28px] lg:min-h-[min(720px,90dvh)] lg:grid-cols-2">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={CORNER}
             alt=""
             aria-hidden
-            className="pointer-events-none absolute right-0 top-0 z-20 h-16 w-16 object-contain sm:h-20 sm:w-20 lg:h-24 lg:w-24"
+            className="pointer-events-none absolute right-0 top-0 z-20 h-12 w-12 object-contain sm:h-20 sm:w-20 lg:h-24 lg:w-24"
           />
 
-          <div className="relative hidden min-h-[560px] bg-[#eef5f0] lg:block">
+          <div className="relative hidden min-h-[420px] bg-[#eef5f0] lg:block lg:min-h-[560px]">
             <div className="absolute left-0 top-0 h-full w-3 bg-[#1B7D2C]" />
             <div className="absolute bottom-0 left-0 h-16 w-40 rounded-tr-[80px] bg-[#1B7D2C]/90" />
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={HERO}
               alt="NAJIK admin"
-              className="absolute inset-0 h-full w-full object-contain object-center p-8"
+              className="absolute inset-0 h-full w-full object-contain object-center p-6 xl:p-8"
             />
           </div>
 
-          <div className="relative flex flex-col justify-center px-6 py-10 sm:px-10 lg:px-14">
-            <div className="mb-6 overflow-hidden rounded-2xl bg-[#eef5f0] lg:hidden">
+          <div className="relative flex flex-col justify-center px-4 py-8 sm:px-8 sm:py-10 lg:px-12 xl:px-14">
+            <div className="mb-5 overflow-hidden rounded-2xl bg-[#eef5f0] sm:mb-6 lg:hidden">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={HERO} alt="" className="mx-auto h-44 w-full object-contain object-center p-3" />
+              <img src={HERO} alt="" className="mx-auto h-32 w-full object-contain object-center p-3 sm:h-44" />
             </div>
 
             <div className="mx-auto w-full max-w-[400px]">
-              <div className="mb-7 flex flex-col items-center text-center">
-                <div className="mb-4 flex h-[72px] w-[72px] items-center justify-center rounded-[22px] bg-[#1B7D2C] shadow-[0_10px_24px_rgba(27,125,44,0.28)]">
-                  <svg viewBox="0 0 24 24" className="h-9 w-9 text-white" fill="none" aria-hidden>
+              <div className="mb-6 flex flex-col items-center text-center sm:mb-7">
+                <div className="mb-3 flex h-16 w-16 items-center justify-center rounded-[20px] bg-[#1B7D2C] shadow-[0_10px_24px_rgba(27,125,44,0.28)] sm:mb-4 sm:h-[72px] sm:w-[72px] sm:rounded-[22px]">
+                  <svg viewBox="0 0 24 24" className="h-8 w-8 text-white sm:h-9 sm:w-9" fill="none" aria-hidden>
                     <path
                       d="M12 3l7 3v5c0 5-3.2 8.6-7 10-3.8-1.4-7-5-7-10V6l7-3z"
                       fill="currentColor"
@@ -231,16 +234,18 @@ export default function StaffLoginPage() {
                     <path d="M8.8 16.2c1.1-1.4 2.1-2 3.2-2s2.1.6 3.2 2" stroke="#1B7D2C" strokeWidth="1.6" strokeLinecap="round" />
                   </svg>
                 </div>
-                <h1 className="text-[28px] font-bold leading-tight tracking-tight text-[#111827]">Admin Panel Login</h1>
-                <p className="mt-2 max-w-[320px] text-[14px] leading-relaxed text-[#6b7280]">
+                <h1 className="text-2xl font-bold leading-tight tracking-tight text-[#111827] sm:text-[28px]">
+                  Admin Panel Login
+                </h1>
+                <p className="mt-2 max-w-[320px] text-[13px] leading-relaxed text-[#6b7280] sm:text-[14px]">
                   Welcome back! Please login to your Admin Panel account.
                 </p>
-                <p className="mt-2 text-[11px] text-[#9aa19c]">
+                <p className="mt-2 text-[10px] text-[#9aa19c] sm:text-[11px]">
                   {isProductionApiUrl() ? "Connected to live API" : "Connected to local API"}
                 </p>
               </div>
 
-              <form onSubmit={onSubmit} className="space-y-3.5">
+              <form onSubmit={onSubmit} className="space-y-3 sm:space-y-3.5">
                 {verifyStep ? (
                   <>
                     <div className="rounded-2xl border border-[#d7ddd9] bg-[#f8fbf9] px-4 py-3 text-left">
@@ -351,12 +356,14 @@ export default function StaffLoginPage() {
                   </>
                 )}
 
-                {error && !lockedOut ? <p className="text-center text-[12px] font-medium text-[#c62828]">{error}</p> : null}
+                {error && !lockedOut ? (
+                  <p className="text-center text-[11px] font-medium leading-relaxed text-[#c62828] sm:text-[12px]">{error}</p>
+                ) : null}
 
                 <button
                   type="submit"
                   disabled={busy || lockedOut}
-                  className="mt-1 flex w-full items-center justify-center gap-2 rounded-full bg-[#1B7D2C] py-[14px] text-[15px] font-semibold text-white transition hover:bg-[#166826] disabled:cursor-not-allowed disabled:opacity-50"
+                  className="mt-1 flex w-full items-center justify-center gap-2 rounded-full bg-[#1B7D2C] py-3.5 text-[14px] font-semibold text-white transition hover:bg-[#166826] disabled:cursor-not-allowed disabled:opacity-50 sm:py-[14px] sm:text-[15px]"
                 >
                   {busy
                     ? verifyStep

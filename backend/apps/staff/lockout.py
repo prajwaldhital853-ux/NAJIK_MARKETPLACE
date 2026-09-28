@@ -1,9 +1,11 @@
 """Staff login lockout scoped to client IP + email (blocks all browsers on that network for that user)."""
 from datetime import timedelta
 
+from django.db.utils import DatabaseError, OperationalError, ProgrammingError
 from django.utils import timezone
 
 from apps.staff.models import StaffLoginLockout
+from apps.staff.schema import staff_auth_tables_ready
 
 LOCKOUT_AFTER = 3
 LOCKOUT_MINUTES = 10
@@ -42,8 +44,13 @@ def lockout_payload(row: StaffLoginLockout) -> dict:
 
 
 def get_lockout_row(email: str, ip_address: str | None, device_fingerprint: str = "") -> StaffLoginLockout | None:
+    if not staff_auth_tables_ready():
+        return None
     key = staff_lock_key(email, ip_address, device_fingerprint)
-    return StaffLoginLockout.objects.filter(lock_key=key).first()
+    try:
+        return StaffLoginLockout.objects.filter(lock_key=key).first()
+    except (DatabaseError, OperationalError, ProgrammingError):
+        return None
 
 
 def assert_login_not_locked(email: str, ip_address: str | None, device_fingerprint: str = "") -> None:
@@ -54,36 +61,46 @@ def assert_login_not_locked(email: str, ip_address: str | None, device_fingerpri
         raise StaffAccountLocked(row)
 
 
-def record_login_failure(email: str, ip_address: str | None, device_fingerprint: str = "") -> StaffLoginLockout:
+def record_login_failure(email: str, ip_address: str | None, device_fingerprint: str = "") -> StaffLoginLockout | None:
+    if not staff_auth_tables_ready():
+        return None
     key = staff_lock_key(email, ip_address, device_fingerprint)
-    row, _ = StaffLoginLockout.objects.get_or_create(
-        lock_key=key,
-        defaults={
-            "email": email.strip().lower(),
-            "ip_address": ip_address or None,
-            "device_fingerprint": (device_fingerprint or "")[:255],
-        },
-    )
-    now = timezone.now()
-    if row.locked_until and row.locked_until <= now:
-        row.fail_count = 0
-        row.locked_until = None
-    row.fail_count += 1
-    row.last_failed_at = now
-    if row.fail_count >= LOCKOUT_AFTER:
-        row.locked_until = now + timedelta(minutes=LOCKOUT_MINUTES)
-        row.fail_count = 0
-    update_fields = ["fail_count", "last_failed_at", "locked_until"]
-    if device_fingerprint and row.device_fingerprint != device_fingerprint[:255]:
-        row.device_fingerprint = device_fingerprint[:255]
-        update_fields.append("device_fingerprint")
-    if ip_address and row.ip_address != ip_address:
-        row.ip_address = ip_address
-        update_fields.append("ip_address")
-    row.save(update_fields=update_fields)
-    return row
+    try:
+        row, _ = StaffLoginLockout.objects.get_or_create(
+            lock_key=key,
+            defaults={
+                "email": email.strip().lower(),
+                "ip_address": ip_address or None,
+                "device_fingerprint": (device_fingerprint or "")[:255],
+            },
+        )
+        now = timezone.now()
+        if row.locked_until and row.locked_until <= now:
+            row.fail_count = 0
+            row.locked_until = None
+        row.fail_count += 1
+        row.last_failed_at = now
+        if row.fail_count >= LOCKOUT_AFTER:
+            row.locked_until = now + timedelta(minutes=LOCKOUT_MINUTES)
+            row.fail_count = 0
+        update_fields = ["fail_count", "last_failed_at", "locked_until"]
+        if device_fingerprint and row.device_fingerprint != device_fingerprint[:255]:
+            row.device_fingerprint = device_fingerprint[:255]
+            update_fields.append("device_fingerprint")
+        if ip_address and row.ip_address != ip_address:
+            row.ip_address = ip_address
+            update_fields.append("ip_address")
+        row.save(update_fields=update_fields)
+        return row
+    except (DatabaseError, OperationalError, ProgrammingError):
+        return None
 
 
 def record_login_success(email: str, ip_address: str | None, device_fingerprint: str = "") -> None:
+    if not staff_auth_tables_ready():
+        return
     key = staff_lock_key(email, ip_address, device_fingerprint)
-    StaffLoginLockout.objects.filter(lock_key=key).delete()
+    try:
+        StaffLoginLockout.objects.filter(lock_key=key).delete()
+    except (DatabaseError, OperationalError, ProgrammingError):
+        return

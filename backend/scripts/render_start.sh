@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
+# Render START command — database is reachable here (not during build).
 set -euo pipefail
 cd "$(dirname "$0")/.."
+
+python scripts/wait_for_db.py
 
 echo "[najik] Applying database migrations..."
 python manage.py migrate --noinput

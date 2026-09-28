@@ -1,5 +1,6 @@
 from django.db import connection
 from django.db.migrations.executor import MigrationExecutor
+from django.db.utils import DatabaseError, OperationalError, ProgrammingError
 from django.utils import timezone
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
@@ -13,11 +14,15 @@ from apps.staff.rbac import LISTING_PAGES, user_has_rbac
 from apps.staff.schema import staff_auth_tables_ready
 
 
-def _pending_migration_labels(limit: int = 8) -> list[str]:
-    executor = MigrationExecutor(connection)
-    plan = executor.migration_plan(executor.loader.graph.leaf_nodes())
-    labels = [f"{app_label}.{name}" for app_label, name in plan]
-    return labels[:limit]
+def _pending_migration_labels(limit: int = 8) -> list[str] | None:
+    try:
+        connection.ensure_connection()
+        executor = MigrationExecutor(connection)
+        plan = executor.migration_plan(executor.loader.graph.leaf_nodes())
+        labels = [f"{app_label}.{name}" for app_label, name in plan]
+        return labels[:limit]
+    except (DatabaseError, OperationalError, ProgrammingError):
+        return None
 
 
 class HealthView(APIView):
@@ -26,15 +31,29 @@ class HealthView(APIView):
     throttle_classes = [AnonRateThrottle]
 
     def get(self, request):
+        payload = {"status": "ok", "service": "najik-api"}
+
+        try:
+            connection.ensure_connection()
+        except (DatabaseError, OperationalError, ProgrammingError) as exc:
+            payload["status"] = "degraded"
+            payload["database"] = "unreachable"
+            payload["hint"] = (
+                "DATABASE_URL host is wrong or Postgres is down. "
+                "On Render: Postgres → Internal Database URL → Web Service → DATABASE_URL."
+            )
+            payload["detail"] = str(exc)
+            return Response(payload)
+
         pending = _pending_migration_labels()
         staff_auth_ready = staff_auth_tables_ready()
-        payload = {
-            "status": "ok",
-            "service": "najik-api",
-            "staff_auth_ready": staff_auth_ready,
-            "pending_migrations": len(pending),
-        }
-        if pending:
+        payload["staff_auth_ready"] = staff_auth_ready
+        payload["pending_migrations"] = len(pending) if pending is not None else -1
+
+        if pending is None:
+            payload["status"] = "degraded"
+            payload["hint"] = "Could not read migration state — check DATABASE_URL."
+        elif pending:
             payload["status"] = "degraded"
             payload["pending_migration_samples"] = pending
             payload["hint"] = (

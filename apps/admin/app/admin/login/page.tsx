@@ -193,38 +193,38 @@ export default function StaffLoginPage() {
   }
 
   return (
-    <main className="relative min-h-dvh overflow-x-hidden overflow-y-auto bg-[#f4f7f5] supports-[padding:max(0px)]:pt-[max(env(safe-area-inset-top),0px)] supports-[padding:max(0px)]:pb-[max(env(safe-area-inset-bottom),0px)]">
-      <div className="relative mx-auto flex min-h-dvh w-full max-w-6xl items-center justify-center px-3 py-4 sm:px-6 sm:py-6 lg:px-8 lg:py-8">
-        <div className="relative grid w-full max-w-[1120px] overflow-hidden rounded-2xl bg-white shadow-[0_24px_80px_rgba(27,125,44,0.12)] sm:rounded-[28px] lg:min-h-[min(720px,90dvh)] lg:grid-cols-2">
+    <main className="relative min-h-dvh overflow-x-hidden overflow-y-auto bg-[#f4f7f5] text-[13px] supports-[padding:max(0px)]:pt-[max(env(safe-area-inset-top),0px)] supports-[padding:max(0px)]:pb-[max(env(safe-area-inset-bottom),0px)]">
+      <div className="relative mx-auto flex min-h-dvh w-full max-w-5xl items-center justify-center px-3 py-3 sm:px-5 sm:py-5 lg:px-6 lg:py-6">
+        <div className="relative grid w-full max-w-[900px] overflow-hidden rounded-xl bg-white shadow-[0_18px_60px_rgba(27,125,44,0.12)] sm:rounded-2xl lg:min-h-[min(600px,85dvh)] lg:grid-cols-2">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={CORNER}
             alt=""
             aria-hidden
-            className="pointer-events-none absolute right-0 top-0 z-20 h-12 w-12 object-contain sm:h-20 sm:w-20 lg:h-24 lg:w-24"
+            className="pointer-events-none absolute right-0 top-0 z-20 h-10 w-10 object-contain sm:h-16 sm:w-16 lg:h-[68px] lg:w-[68px]"
           />
 
-          <div className="relative hidden min-h-[420px] bg-[#eef5f0] lg:block lg:min-h-[560px]">
-            <div className="absolute left-0 top-0 h-full w-3 bg-[#1B7D2C]" />
-            <div className="absolute bottom-0 left-0 h-16 w-40 rounded-tr-[80px] bg-[#1B7D2C]/90" />
+          <div className="relative hidden min-h-[360px] bg-[#eef5f0] lg:block lg:min-h-[480px]">
+            <div className="absolute left-0 top-0 h-full w-2.5 bg-[#1B7D2C]" />
+            <div className="absolute bottom-0 left-0 h-14 w-32 rounded-tr-[68px] bg-[#1B7D2C]/90" />
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={HERO}
               alt="NAJIK admin"
-              className="absolute inset-0 h-full w-full object-contain object-center p-6 xl:p-8"
+              className="absolute inset-0 h-full w-full object-contain object-center p-5 xl:p-6"
             />
           </div>
 
-          <div className="relative flex flex-col justify-center px-4 py-8 sm:px-8 sm:py-10 lg:px-12 xl:px-14">
-            <div className="mb-5 overflow-hidden rounded-2xl bg-[#eef5f0] sm:mb-6 lg:hidden">
+          <div className="relative flex flex-col justify-center px-4 py-6 sm:px-6 sm:py-8 lg:px-9 lg:py-9 xl:px-11">
+            <div className="mb-4 overflow-hidden rounded-xl bg-[#eef5f0] sm:mb-5 lg:hidden">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={HERO} alt="" className="mx-auto h-32 w-full object-contain object-center p-3 sm:h-44" />
+              <img src={HERO} alt="" className="mx-auto h-28 w-full object-contain object-center p-2.5 sm:h-36" />
             </div>
 
-            <div className="mx-auto w-full max-w-[400px]">
-              <div className="mb-6 flex flex-col items-center text-center sm:mb-7">
-                <div className="mb-3 flex h-16 w-16 items-center justify-center rounded-[20px] bg-[#1B7D2C] shadow-[0_10px_24px_rgba(27,125,44,0.28)] sm:mb-4 sm:h-[72px] sm:w-[72px] sm:rounded-[22px]">
-                  <svg viewBox="0 0 24 24" className="h-8 w-8 text-white sm:h-9 sm:w-9" fill="none" aria-hidden>
+            <div className="mx-auto w-full max-w-[340px]">
+              <div className="mb-5 flex flex-col items-center text-center sm:mb-6">
+                <div className="mb-2.5 flex h-14 w-14 items-center justify-center rounded-[18px] bg-[#1B7D2C] shadow-[0_8px_20px_rgba(27,125,44,0.28)] sm:mb-3 sm:h-[60px] sm:w-[60px] sm:rounded-[20px]">
+                  <svg viewBox="0 0 24 24" className="h-7 w-7 text-white sm:h-8 sm:w-8" fill="none" aria-hidden>
                     <path
                       d="M12 3l7 3v5c0 5-3.2 8.6-7 10-3.8-1.4-7-5-7-10V6l7-3z"
                       fill="currentColor"
@@ -234,36 +234,36 @@ export default function StaffLoginPage() {
                     <path d="M8.8 16.2c1.1-1.4 2.1-2 3.2-2s2.1.6 3.2 2" stroke="#1B7D2C" strokeWidth="1.6" strokeLinecap="round" />
                   </svg>
                 </div>
-                <h1 className="text-2xl font-bold leading-tight tracking-tight text-[#111827] sm:text-[28px]">
+                <h1 className="text-xl font-bold leading-tight tracking-tight text-[#111827] sm:text-2xl">
                   Admin Panel Login
                 </h1>
-                <p className="mt-2 max-w-[320px] text-[13px] leading-relaxed text-[#6b7280] sm:text-[14px]">
+                <p className="mt-1.5 max-w-[280px] text-[12px] leading-relaxed text-[#6b7280] sm:text-[13px]">
                   Welcome back! Please login to your Admin Panel account.
                 </p>
-                <p className="mt-2 text-[10px] text-[#9aa19c] sm:text-[11px]">
+                <p className="mt-1.5 text-[10px] text-[#9aa19c]">
                   {isProductionApiUrl() ? "Connected to live API" : "Connected to local API"}
                 </p>
               </div>
 
-              <form onSubmit={onSubmit} className="space-y-3 sm:space-y-3.5">
+              <form onSubmit={onSubmit} className="space-y-2.5 sm:space-y-3">
                 {verifyStep ? (
                   <>
-                    <div className="rounded-2xl border border-[#d7ddd9] bg-[#f8fbf9] px-4 py-3 text-left">
-                      <p className="text-[13px] font-semibold text-[#111827]">Verify this device</p>
-                      <p className="mt-1 text-[12px] leading-relaxed text-[#6b7280]">
+                    <div className="rounded-xl border border-[#d7ddd9] bg-[#f8fbf9] px-3.5 py-2.5 text-left">
+                      <p className="text-[12px] font-semibold text-[#111827]">Verify this device</p>
+                      <p className="mt-1 text-[11px] leading-relaxed text-[#6b7280]">
                         {verifyStep.message || `Enter the verification code sent to ${verifyStep.email}.`}
                       </p>
-                      <p className="mt-2 text-[11px] font-medium text-[#1B7D2C]">
+                      <p className="mt-1.5 text-[10px] font-medium text-[#1B7D2C]">
                         For now, use code <span className="font-bold">1234</span>.
                       </p>
                     </div>
 
                     <label className="block">
                       <span className="sr-only">Verification code</span>
-                      <div className="flex items-center gap-2.5 rounded-full border border-[#d7ddd9] bg-white px-4 py-[13px] transition focus-within:border-[#1B7D2C] focus-within:ring-4 focus-within:ring-[#1B7D2C]/12">
-                        <Lock className="h-[18px] w-[18px] shrink-0 text-[#9aa19c]" />
+                      <div className="flex items-center gap-2 rounded-full border border-[#d7ddd9] bg-white px-3.5 py-[11px] transition focus-within:border-[#1B7D2C] focus-within:ring-[3px] focus-within:ring-[#1B7D2C]/12">
+                        <Lock className="h-4 w-4 shrink-0 text-[#9aa19c]" />
                         <input
-                          className="w-full bg-transparent text-[14px] text-[#111827] outline-none placeholder:text-[#9aa19c]"
+                          className="w-full bg-transparent text-[13px] text-[#111827] outline-none placeholder:text-[#9aa19c]"
                           type="text"
                           name="verification_code"
                           inputMode="numeric"
@@ -283,7 +283,7 @@ export default function StaffLoginPage() {
                         setVerificationCode("1234");
                         setError("");
                       }}
-                      className="w-full text-[13px] font-semibold text-[#6b7280] hover:text-[#111827]"
+                      className="w-full text-[12px] font-semibold text-[#6b7280] hover:text-[#111827]"
                     >
                       Back to login
                     </button>
@@ -291,12 +291,12 @@ export default function StaffLoginPage() {
                 ) : (
                   <>
                     {lockedOut ? (
-                      <div className="rounded-2xl border border-[#f59e0b] bg-[#fffbeb] px-4 py-3 text-left">
-                        <div className="flex items-start gap-2.5">
-                          <ShieldAlert className="mt-0.5 h-[18px] w-[18px] shrink-0 text-[#d97706]" />
+                      <div className="rounded-xl border border-[#f59e0b] bg-[#fffbeb] px-3.5 py-2.5 text-left">
+                        <div className="flex items-start gap-2">
+                          <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-[#d97706]" />
                           <div>
-                            <p className="text-[13px] font-semibold text-[#92400e]">Account temporarily locked</p>
-                            <p className="mt-1 text-[12px] leading-relaxed text-[#b45309]">
+                            <p className="text-[12px] font-semibold text-[#92400e]">Account temporarily locked</p>
+                            <p className="mt-1 text-[11px] leading-relaxed text-[#b45309]">
                               Too many failed login attempts from this device and network. You can try again in{" "}
                               <span className="font-bold tabular-nums">{formatLockoutCountdown(lockoutSecondsLeft)}</span>{" "}
                               (minutes:seconds).
@@ -308,10 +308,10 @@ export default function StaffLoginPage() {
 
                     <label className="block">
                       <span className="sr-only">Email</span>
-                      <div className="flex items-center gap-2.5 rounded-full border border-[#d7ddd9] bg-white px-4 py-[13px] transition focus-within:border-[#1B7D2C] focus-within:ring-4 focus-within:ring-[#1B7D2C]/12">
-                        <User className="h-[18px] w-[18px] shrink-0 text-[#9aa19c]" />
+                      <div className="flex items-center gap-2 rounded-full border border-[#d7ddd9] bg-white px-3.5 py-[11px] transition focus-within:border-[#1B7D2C] focus-within:ring-[3px] focus-within:ring-[#1B7D2C]/12">
+                        <User className="h-4 w-4 shrink-0 text-[#9aa19c]" />
                         <input
-                          className="w-full bg-transparent text-[14px] text-[#111827] outline-none placeholder:text-[#9aa19c]"
+                          className="w-full bg-transparent text-[13px] text-[#111827] outline-none placeholder:text-[#9aa19c]"
                           type="text"
                           name="email"
                           autoComplete="username"
@@ -321,16 +321,16 @@ export default function StaffLoginPage() {
                           onChange={(e) => setEmail(e.target.value)}
                           required
                         />
-                        <Mail className="h-[18px] w-[18px] shrink-0 text-[#9aa19c]" />
+                        <Mail className="h-4 w-4 shrink-0 text-[#9aa19c]" />
                       </div>
                     </label>
 
                     <label className="block">
                       <span className="sr-only">Password</span>
-                      <div className="flex items-center gap-2.5 rounded-full border border-[#d7ddd9] bg-white px-4 py-[13px] transition focus-within:border-[#1B7D2C] focus-within:ring-4 focus-within:ring-[#1B7D2C]/12">
-                        <Lock className="h-[18px] w-[18px] shrink-0 text-[#9aa19c]" />
+                      <div className="flex items-center gap-2 rounded-full border border-[#d7ddd9] bg-white px-3.5 py-[11px] transition focus-within:border-[#1B7D2C] focus-within:ring-[3px] focus-within:ring-[#1B7D2C]/12">
+                        <Lock className="h-4 w-4 shrink-0 text-[#9aa19c]" />
                         <input
-                          className="w-full bg-transparent text-[14px] text-[#111827] outline-none placeholder:text-[#9aa19c]"
+                          className="w-full bg-transparent text-[13px] text-[#111827] outline-none placeholder:text-[#9aa19c]"
                           type={showPassword ? "text" : "password"}
                           name="password"
                           autoComplete="current-password"
@@ -345,25 +345,25 @@ export default function StaffLoginPage() {
                           className="shrink-0 text-[#9aa19c] hover:text-[#1B7D2C]"
                           aria-label={showPassword ? "Hide password" : "Show password"}
                         >
-                          {showPassword ? <EyeOff className="h-[18px] w-[18px]" /> : <Eye className="h-[18px] w-[18px]" />}
+                          {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                         </button>
                       </div>
                     </label>
 
                     <div className="flex justify-end pt-0.5">
-                      <span className="cursor-default text-[13px] font-semibold text-[#1B7D2C]/70">Forgot Password?</span>
+                      <span className="cursor-default text-[12px] font-semibold text-[#1B7D2C]/70">Forgot Password?</span>
                     </div>
                   </>
                 )}
 
                 {error && !lockedOut ? (
-                  <p className="text-center text-[11px] font-medium leading-relaxed text-[#c62828] sm:text-[12px]">{error}</p>
+                  <p className="text-center text-[10px] font-medium leading-relaxed text-[#c62828] sm:text-[11px]">{error}</p>
                 ) : null}
 
                 <button
                   type="submit"
                   disabled={busy || lockedOut}
-                  className="mt-1 flex w-full items-center justify-center gap-2 rounded-full bg-[#1B7D2C] py-3.5 text-[14px] font-semibold text-white transition hover:bg-[#166826] disabled:cursor-not-allowed disabled:opacity-50 sm:py-[14px] sm:text-[15px]"
+                  className="mt-0.5 flex w-full items-center justify-center gap-1.5 rounded-full bg-[#1B7D2C] py-[11px] text-[13px] font-semibold text-white transition hover:bg-[#166826] disabled:cursor-not-allowed disabled:opacity-50 sm:py-3 sm:text-sm"
                 >
                   {busy
                     ? verifyStep
@@ -374,15 +374,15 @@ export default function StaffLoginPage() {
                       : verifyStep
                         ? "Verify & Login"
                         : "Login"}
-                  {!busy && !lockedOut ? <LogIn className="h-4 w-4" /> : null}
+                  {!busy && !lockedOut ? <LogIn className="h-3.5 w-3.5" /> : null}
                 </button>
               </form>
 
               {!verifyStep ? (
                 <>
-                  <div className="my-5 flex items-center gap-3">
+                  <div className="my-4 flex items-center gap-2.5">
                     <div className="h-px flex-1 bg-[#e5e7eb]" />
-                    <span className="text-[12px] font-semibold tracking-wide text-[#9ca3af]">OR</span>
+                    <span className="text-[11px] font-semibold tracking-wide text-[#9ca3af]">OR</span>
                     <div className="h-px flex-1 bg-[#e5e7eb]" />
                   </div>
 
@@ -392,9 +392,9 @@ export default function StaffLoginPage() {
                       const el = document.querySelector<HTMLInputElement>('input[name="email"]');
                       el?.focus();
                     }}
-                    className="flex w-full items-center justify-center gap-2 rounded-full border-2 border-[#1B7D2C] bg-white py-[13px] text-[14px] font-semibold text-[#1B7D2C] transition hover:bg-[#eef8f0]"
+                    className="flex w-full items-center justify-center gap-1.5 rounded-full border-2 border-[#1B7D2C] bg-white py-[11px] text-[13px] font-semibold text-[#1B7D2C] transition hover:bg-[#eef8f0] sm:text-sm"
                   >
-                    <Mail className="h-4 w-4" />
+                    <Mail className="h-3.5 w-3.5" />
                     Login with Email
                   </button>
                 </>

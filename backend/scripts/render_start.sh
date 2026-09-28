@@ -3,7 +3,14 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+echo "========================================"
+echo "[najik] START: database + migrate + gunicorn"
+echo "========================================"
+
 python scripts/wait_for_db.py
+
+echo "[najik] Collecting static files..."
+python manage.py collectstatic --noinput
 
 echo "[najik] Applying database migrations..."
 python manage.py migrate --noinput

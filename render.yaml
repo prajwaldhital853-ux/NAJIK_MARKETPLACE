@@ -6,7 +6,8 @@ services:
     name: najik-api
     runtime: python
     rootDir: backend
-    buildCommand: bash scripts/render_build.sh
+    # Build must NOT run migrate — only pip install.
+    buildCommand: pip install -r requirements.txt
     startCommand: bash scripts/render_start.sh
     envVars:
       - key: PYTHON_VERSION

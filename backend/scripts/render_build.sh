@@ -1,13 +1,10 @@
 #!/usr/bin/env bash
-# Render BUILD command only — no database access (internal DB hostnames are not available here).
+# Render BUILD — pip install ONLY. No manage.py (no DB, no migrate, no collectstatic).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-echo "[najik] Installing Python dependencies..."
+echo "========================================"
+echo "[najik] BUILD: pip install only"
+echo "========================================"
 pip install -r requirements.txt
-
-echo "[najik] Collecting static files (no DB required)..."
-python manage.py collectstatic --noinput
-
-echo "[najik] Build complete."
-echo "[najik] Migrations run at START via scripts/render_start.sh — do not add migrate to Build Command."
+echo "[najik] BUILD complete — migrate runs at START in render_start.sh"

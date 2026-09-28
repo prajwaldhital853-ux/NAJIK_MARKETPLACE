@@ -7,6 +7,7 @@ import { useTheme } from "@/lib/theme";
 import { useAdmin } from "@/lib/store";
 import { ReadOnlyBanner, usePageRbac } from "@/lib/use-page-rbac";
 import { useSession } from "@/lib/session";
+import { DemoSeedPanel } from "@/components/admin/demo-seed-panel";
 import { fetchBranding, fetchStaffImage, uploadSignatory } from "@/lib/staff-api";
 
 async function fileToDataUri(file: File) {
@@ -162,6 +163,8 @@ export default function SettingsPage() {
           </Btn>
           ) : null}
         </section>
+
+        <DemoSeedPanel />
 
         <section className="card-glow space-y-3 rounded-2xl border border-line bg-card p-5 lg:col-span-2">
           <h2 className="text-sm font-semibold text-ink">ID card authorized signatory</h2>

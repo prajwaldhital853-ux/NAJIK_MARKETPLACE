@@ -14,6 +14,8 @@ env = environ.Env(
 environ.Env.read_env(BASE_DIR / ".env")
 
 DEBUG = env("DEBUG")
+# Allow super-admin demo seed API (admin panel button). Enable on Render when needed.
+DEMO_SEED_ENABLED = env.bool("DEMO_SEED_ENABLED", default=DEBUG)
 SECRET_KEY = env("DJANGO_SECRET_KEY")
 ALLOWED_HOSTS = env.list("ALLOWED_HOSTS", default=["localhost", "127.0.0.1"])
 

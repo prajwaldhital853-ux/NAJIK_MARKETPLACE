@@ -21,6 +21,7 @@ urlpatterns = [
     path("api/admin/verification/", include("apps.verification.staff_urls")),
     path("api/cards/", include("apps.verification.card_urls")),
     path("api/admin/users/", include("apps.accounts.staff_urls")),
+    path("api/admin/demo/", include("apps.accounts.demo_urls")),
     path("api/listings/", include("apps.listings.urls")),
     path("api/admin/listings/", include("apps.listings.staff_urls")),
     path("api/chat/", include("apps.chat.urls")),

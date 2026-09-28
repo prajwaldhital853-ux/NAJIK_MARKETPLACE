@@ -29,7 +29,9 @@ if [[ -n "${STAFF_BOOTSTRAP_EMAIL:-}" && -n "${STAFF_BOOTSTRAP_PASSWORD:-}" ]]; 
     --skip-default-staff
 fi
 
-# Remove any demo sellers left from old auto-seed deploys (idempotent, fast when empty).
-python manage.py purge_demo_sellers
+# Remove demo sellers on deploy unless demo seeding is intentionally enabled.
+if [[ "${DEMO_SEED_ENABLED:-false}" != "true" ]]; then
+  python manage.py purge_demo_sellers
+fi
 
 exec gunicorn config.wsgi:application --bind "0.0.0.0:${PORT:-8000}" --workers 2 --timeout 120

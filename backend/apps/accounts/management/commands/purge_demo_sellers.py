@@ -1,14 +1,8 @@
 """Remove demo seller accounts seeded for testing (safe, idempotent)."""
 
 from django.core.management.base import BaseCommand
-from django.db.models import Q
 
-from apps.accounts.demo_catalog import PHONE_BASE, PHONE_MAX_SELLERS
-from apps.accounts.models import AppUser
-from apps.listings.models import Listing
-from apps.verification.models import ProviderApplication
-
-PHONE_MAX = PHONE_BASE + PHONE_MAX_SELLERS - 1
+from apps.accounts.demo_seed_service import purge_demo_sellers
 
 
 class Command(BaseCommand):
@@ -22,34 +16,33 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
-        dry_run = bool(options.get("dry_run"))
+        if options.get("dry_run"):
+            from django.db.models import Q
 
-        demo_app_owner_ids = ProviderApplication.objects.filter(
-            profile_data__demo_seed=True,
-        ).values_list("owner_id", flat=True)
+            from apps.accounts.demo_catalog import PHONE_BASE, PHONE_MAX_SELLERS
+            from apps.accounts.models import AppUser
+            from apps.listings.models import Listing
+            from apps.verification.models import ProviderApplication
 
-        demo_phones = [f"+{n}" for n in range(PHONE_BASE, PHONE_MAX + 1)]
-        demo_listing_owner_ids = Listing.objects.filter(
-            extras__demo_seed=True,
-        ).values_list("owner_id", flat=True)
-
-        qs = AppUser.objects.filter(
-            Q(email__iendswith="@najik-demo.com")
-            | Q(phone__in=demo_phones)
-            | Q(id__in=demo_app_owner_ids)
-            | Q(id__in=demo_listing_owner_ids)
-        ).distinct()
-
-        count = qs.count()
-        if count == 0:
-            self.stdout.write("No demo sellers to remove.")
-            return
-
-        if dry_run:
+            phone_max = PHONE_BASE + PHONE_MAX_SELLERS - 1
+            demo_phones = [f"+{n}" for n in range(PHONE_BASE, phone_max + 1)]
+            demo_app_owner_ids = ProviderApplication.objects.filter(
+                profile_data__demo_seed=True,
+            ).values_list("owner_id", flat=True)
+            demo_listing_owner_ids = Listing.objects.filter(
+                extras__demo_seed=True,
+            ).values_list("owner_id", flat=True)
+            count = AppUser.objects.filter(
+                Q(email__iendswith="@najik-demo.com")
+                | Q(phone__in=demo_phones)
+                | Q(id__in=demo_app_owner_ids)
+                | Q(id__in=demo_listing_owner_ids)
+            ).distinct().count()
             self.stdout.write(f"Would delete {count} demo seller account(s).")
             return
 
-        deleted, detail = qs.delete()
-        self.stdout.write(
-            self.style.SUCCESS(f"Removed {count} demo seller account(s). Cascade: {detail}")
-        )
+        removed = purge_demo_sellers()
+        if removed == 0:
+            self.stdout.write("No demo sellers to remove.")
+            return
+        self.stdout.write(self.style.SUCCESS(f"Removed {removed} demo seller account(s)."))

@@ -1533,3 +1533,78 @@ export async function downloadAppUserDataPdf(userId: string, fallbackName?: stri
     URL.revokeObjectURL(url);
   }
 }
+
+export type DemoSeedInfo = {
+  enabled: boolean;
+  max_sellers_per_request: number;
+  default_sellers: number;
+  default_listings_per_seller: number;
+  hint?: string;
+};
+
+export type DemoSeedBatchResult = {
+  ok: boolean;
+  sellers_processed: number;
+  created_users: number;
+  created_listings: number;
+  photos_added: number;
+  total_demo_sellers: number;
+  total_demo_listings: number;
+  next_seller_offset: number | null;
+  done: boolean;
+  errors?: string[];
+};
+
+export async function fetchDemoSeedInfo() {
+  return staffRequest<DemoSeedInfo>("/api/admin/demo/seed/");
+}
+
+export async function runDemoSeedBatch(opts: {
+  seller_offset?: number;
+  seller_count?: number;
+  listings_per_seller?: number;
+  skip_photos?: boolean;
+}) {
+  return staffRequest<DemoSeedBatchResult>("/api/admin/demo/seed/", {
+    method: "POST",
+    body: JSON.stringify({
+      seller_offset: opts.seller_offset ?? 0,
+      seller_count: opts.seller_count ?? 40,
+      listings_per_seller: opts.listings_per_seller ?? 5,
+      skip_photos: opts.skip_photos ?? true,
+    }),
+  });
+}
+
+export async function purgeDemoSeedData() {
+  return staffRequest<{ ok: boolean; removed_sellers: number }>("/api/admin/demo/seed/", {
+    method: "DELETE",
+  });
+}
+
+/** Seed ~1000 listings in batches (no shell). Returns final totals. */
+export async function seedDemoMarketplace(
+  onProgress?: (msg: string) => void,
+  opts?: { totalSellers?: number; listingsPerSeller?: number; skipPhotos?: boolean },
+) {
+  const totalSellers = opts?.totalSellers ?? 200;
+  const listingsPerSeller = opts?.listingsPerSeller ?? 5;
+  const batchSize = 40;
+  let offset = 0;
+  let last: DemoSeedBatchResult | null = null;
+
+  while (offset < totalSellers) {
+    const count = Math.min(batchSize, totalSellers - offset);
+    onProgress?.(`Seeding sellers ${offset + 1}–${offset + count} of ${totalSellers}…`);
+    last = await runDemoSeedBatch({
+      seller_offset: offset,
+      seller_count: count,
+      listings_per_seller: listingsPerSeller,
+      skip_photos: opts?.skipPhotos ?? true,
+    });
+    if (last.next_seller_offset == null) break;
+    offset = last.next_seller_offset;
+  }
+
+  return last;
+}

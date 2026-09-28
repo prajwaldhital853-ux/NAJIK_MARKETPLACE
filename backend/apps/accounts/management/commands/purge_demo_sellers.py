@@ -3,12 +3,12 @@
 from django.core.management.base import BaseCommand
 from django.db.models import Q
 
+from apps.accounts.demo_catalog import PHONE_BASE, PHONE_MAX_SELLERS
 from apps.accounts.models import AppUser
+from apps.listings.models import Listing
 from apps.verification.models import ProviderApplication
 
-# Must match seed_demo_sellers.py if that command is ever used locally.
-PHONE_BASE = 9779841234501
-PHONE_MAX = PHONE_BASE + 499
+PHONE_MAX = PHONE_BASE + PHONE_MAX_SELLERS - 1
 
 
 class Command(BaseCommand):
@@ -29,11 +29,15 @@ class Command(BaseCommand):
         ).values_list("owner_id", flat=True)
 
         demo_phones = [f"+{n}" for n in range(PHONE_BASE, PHONE_MAX + 1)]
+        demo_listing_owner_ids = Listing.objects.filter(
+            extras__demo_seed=True,
+        ).values_list("owner_id", flat=True)
 
         qs = AppUser.objects.filter(
             Q(email__iendswith="@najik-demo.com")
             | Q(phone__in=demo_phones)
             | Q(id__in=demo_app_owner_ids)
+            | Q(id__in=demo_listing_owner_ids)
         ).distinct()
 
         count = qs.count()

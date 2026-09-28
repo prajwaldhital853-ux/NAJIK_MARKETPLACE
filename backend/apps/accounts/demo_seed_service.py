@@ -228,6 +228,7 @@ def run_demo_seed(
     listings_per_seller: int = DEFAULT_LISTINGS_PER_SELLER,
     password: str = "demo123",
     skip_photos: bool = False,
+    attach_photos: bool = True,
     bump_cache: bool = True,
 ) -> DemoSeedResult:
     seller_count = max(1, min(seller_count, PHONE_MAX_SELLERS))
